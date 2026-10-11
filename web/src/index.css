@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface-variant: #d3e4fe;
+  --color-tertiary-container: #007bb9;
+  --color-on-tertiary-fixed-variant: #004b73;
+  --color-tertiary: #006194;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-fixed: #cce5ff;
+  --color-tertiary-fixed-dim: #93ccff;
+  --color-on-surface-variant: #5a4138;
+  --color-on-primary-fixed-variant: #7f2b00;
+  --color-error-container: #ffdad6;
+  --color-surface-container-high: #dce9ff;
+  --color-on-tertiary-fixed: #001d31;
+  --color-primary-container: #cc4900;
+  --color-on-tertiary-container: #fdfcff;
+  --color-secondary-container: #dae2fd;
+  --color-inverse-on-surface: #eaf1ff;
+  --color-secondary: #565e74;
+  --color-surface-container: #e5eeff;
+  --color-on-primary-container: #fffbff;
+  --color-secondary-fixed: #dae2fd;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-dim: #cbdbf5;
+  --color-inverse-primary: #ffb599;
+  --color-surface-container-low: #eff4ff;
+  --color-surface-container-highest: #d3e4fe;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-fixed-variant: #3f465c;
+  --color-on-secondary-container: #5c647a;
+  --color-surface-bright: #f8f9ff;
+  --color-background: #f8f9ff;
+  --color-on-secondary-fixed: #131b2e;
+  --color-error: #ba1a1a;
+  --color-outline: #8e7166;
+  --color-primary-fixed-dim: #ffb599;
+  --color-on-primary-fixed: #370e00;
+  --color-on-error-container: #93000a;
+  --color-primary-fixed: #ffdbce;
+  --color-outline-variant: #e2bfb2;
+  --color-on-background: #0b1c30;
+  --color-secondary-fixed-dim: #bec6e0;
+  --color-inverse-surface: #213145;
+  --color-on-primary: #ffffff;
+  --color-on-surface: #0b1c30;
+  --color-on-error: #ffffff;
+  --color-surface-tint: #a73a00;
+  --color-surface: #f8f9ff;
+  --color-primary: #a33900;
+
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 0.75rem;
+  --spacing-space-lg: 1rem;
+  --spacing-space-xl: 1.5rem;
+  --spacing-gutter: 0.75rem;
+  --spacing-gutter-desktop: 1rem;
+  --spacing-margin: 1rem;
+  --spacing-margin-desktop: 1.5rem;
+
+  --font-data-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  body {
+    overscroll-behavior: none;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* Custom scrollbar and utilities */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

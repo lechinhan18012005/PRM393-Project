@@ -1,0 +1,6 @@
+{
+  "name": "RESCUEOPS • Cứu Hộ Ngập Lụt",
+  "description": "Hệ thống điều phối, quản trị khẩn cấp cứu hộ xe máy ngập lụt, đối soát PayOS và giám sát SLA mạng lưới gara tại TP.HCM",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

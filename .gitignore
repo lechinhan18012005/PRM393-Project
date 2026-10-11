@@ -1,0 +1,32 @@
+# Editors and local configuration
+.idea/
+.vscode/
+*.iml
+.env
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Java / Maven
+backend/target/
+
+# Node / Vite
+web/node_modules/
+web/dist/
+
+# Flutter / Dart
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins-dependencies
+mobile/android/local.properties
+mobile/ios/Flutter/ephemeral/
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/macos/Flutter/ephemeral/
+mobile/linux/flutter/ephemeral/
+mobile/windows/flutter/ephemeral/
+
+# OS and logs
+.DS_Store
+Thumbs.db
+*.log
