@@ -10,16 +10,18 @@ web/      React portal, auth API client, role navigation, demo views
 mobile/   Flutter app, auth API client, demo screens
 ```
 
-## Chạy bản demo cục bộ
+## Chạy cục bộ
 
 Yêu cầu JDK 21, Maven, Node.js và Flutter SDK phù hợp với `mobile/pubspec.yaml`.
 
 ```powershell
 cd backend
-mvn spring-boot:run -Dspring-boot.run.profiles=demo
+Copy-Item .env.example .env
+# Cấu hình database và JWT trong .env trước khi chạy.
+mvn spring-boot:run
 ```
 
-Profile `demo` dùng H2 trong bộ nhớ, tạo năm tài khoản mẫu (mật khẩu `Password@123`) và chỉ dùng cho phát triển. API mặc định tại `http://localhost:8080/api/v1/auth`.
+Backend dùng database được cấu hình trong `.env`, không tự tạo tài khoản mẫu. API mặc định tại `http://localhost:8080/api/v1/auth`. H2 chỉ dùng cho bài test với profile `test`.
 
 ```powershell
 cd web
@@ -41,17 +43,28 @@ Mobile có nhãn `UI DEMO` trên giao diện. Nút đăng nhập nhanh chỉ hi�
 
 ## Tài khoản và phân quyền
 
-Đăng ký công khai chỉ tạo tài khoản `CUSTOMER`, kể cả khi request cố gửi vai trò khác. Tài khoản `ADMIN`, `STAFF`, `GARAGE_OWNER`, `FIELD_MECHANIC` chỉ được cấp qua quy trình quản trị riêng. Quy trình cấp tài khoản đối tác/nhân viên chưa được triển khai; bản demo dùng tài khoản seed của profile `demo`.
+Đăng ký công khai chỉ tạo tài khoản `CUSTOMER`, kể cả khi request cố gửi vai trò khác. Tài khoản `ADMIN`, `STAFF`, `GARAGE_OWNER`, `FIELD_MECHANIC` chỉ được cấp qua quy trình quản trị riêng. Quy trình cấp tài khoản đối tác/nhân viên chưa được triển khai.
 
 Web chỉ hiển thị phân hệ đúng vai trò: `ADMIN` quản trị tài chính, `STAFF` vận hành, `GARAGE_OWNER` quản trị gara. `CUSTOMER` và `FIELD_MECHANIC` dùng mobile. Mọi API nghiệp vụ bổ sung sau này phải kiểm tra quyền ở backend, không dựa vào việc ẩn nút trên web.
 
-## Cấu hình ngoài demo
+## Cấu hình backend
+
+Backend đọc `backend/.env` khi chạy từ thư mục gốc dự án (IntelliJ) và `.env` khi chạy từ thư mục `backend`.
 
 Sao chép `backend/.env.example` thành `backend/.env` rồi đặt URL, username, password PostgreSQL và khóa JWT riêng. Không commit `.env`. `JWT_SECRET` phải là khóa ngẫu nhiên Base64 có ít nhất 32 byte. Backend mặc định không seed tài khoản và chỉ chấp nhận CORS origins trong `CORS_ALLOWED_ORIGINS`.
 
 Flyway tạo schema mới qua `V1__create_users.sql`; Hibernate chỉ kiểm tra schema (`ddl-auto: validate`). Nếu đang dùng database cũ do Hibernate `update` tạo, cần sao lưu và baseline schema theo quy trình Flyway trước khi chạy phiên bản mới.
 
 ## Kiểm tra
+
+### Thử API bằng Swagger
+
+Sau khi chạy backend, mở http://localhost:8080/swagger-ui/index.html. OpenAPI JSON tại http://localhost:8080/v3/api-docs.
+
+1. Mở `POST /api/v1/auth/register` hoặc `POST /api/v1/auth/login`, chọn **Try it out**, nhập dữ liệu và chọn **Execute**.
+2. Sao chép `data.accessToken` từ phản hồi.
+3. Chọn **Authorize**, dán access token (không thêm tiền tố `Bearer`) rồi xác nhận.
+4. Thử `GET /api/v1/auth/me`. Với `POST /api/v1/auth/refresh`, gửi `refreshToken` trong body.
 
 ```powershell
 cd backend; mvn test

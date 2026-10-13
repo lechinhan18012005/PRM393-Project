@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:floodrescue-test;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+jwt:
+  secret: dGVzdC1vbmx5LW5ldmVyLXVzZS1pbi1wcm9kdWN0aW9uLWtleS0yMDI2
+
+app:
+  demo:
+    seed-users: false
