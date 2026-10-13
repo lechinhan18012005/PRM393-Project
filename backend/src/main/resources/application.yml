@@ -5,7 +5,9 @@ spring:
   application:
     name: motorbike-flood-rescue-backend
   config:
-    import: optional:file:.env[.properties]
+    import:
+      - optional:file:backend/.env[.properties]
+      - optional:file:.env[.properties]
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
