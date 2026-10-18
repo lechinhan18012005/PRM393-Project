@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/constants/app_colors.dart';
 
 class RescueHistoryScreen extends StatelessWidget {
@@ -9,9 +10,12 @@ class RescueHistoryScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Lịch Sử Cứu Hộ & Bảo Hành', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Lịch sử cứu hộ',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -68,32 +72,66 @@ class RescueHistoryScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x05000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
             children: [
-              Text(orderId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text(date, style: const TextStyle(fontSize: 11, color: AppColors.secondary)),
+              Text(
+                orderId,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              Text(
+                date,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.secondary,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(service, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.onSurface)),
+          Text(
+            service,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: AppColors.onSurface,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text('Thực hiện: $mechanic • $garage', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+          Text(
+            'Thực hiện: $mechanic • $garage',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
           const SizedBox(height: 8),
           const Divider(),
           const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: warrantyActive ? Colors.green.shade50 : Colors.grey.shade100,
+                  color: warrantyActive
+                      ? Colors.green.shade50
+                      : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -101,11 +139,20 @@ class RescueHistoryScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: warrantyActive ? Colors.green.shade800 : Colors.grey.shade600,
+                    color: warrantyActive
+                        ? Colors.green.shade800
+                        : Colors.grey.shade600,
                   ),
                 ),
               ),
-              Text(price, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primaryOrange)),
+              Text(
+                price,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryOrange,
+                ),
+              ),
             ],
           ),
         ],

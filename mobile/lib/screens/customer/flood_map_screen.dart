@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/constants/app_colors.dart';
 import 'community_flood_report_screen.dart';
 
@@ -18,7 +19,8 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
       'depth': '45cm - 50cm',
       'level': 'Nguy hiểm (Đỏ)',
       'color': Colors.red,
-      'desc': 'Triều cường đạt đỉnh 1.72m, nhiều xe chết máy tại ngã 3 Tân Hưng.',
+      'desc':
+          'Triều cường đạt đỉnh 1.72m, nhiều xe chết máy tại ngã 3 Tân Hưng.',
       'stations': '2 Đội thợ cơ động đang túc trực',
     },
     {
@@ -44,9 +46,12 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Bản Đồ Cảnh Báo Ngập Lụt', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Bản đồ ngập',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
       ),
       body: Column(
         children: [
@@ -61,10 +66,27 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.map, size: 54, color: AppColors.secondary),
+                      const Icon(
+                        Icons.map,
+                        size: 54,
+                        color: AppColors.secondary,
+                      ),
                       const SizedBox(height: 6),
-                      Text('BẢN ĐỒ NHIỆT GIS TP. HỒ CHÍ MINH', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey.shade800)),
-                      const Text('14 Điểm ngập hoạt động • Dữ liệu cập nhật 5 phút trước', style: TextStyle(fontSize: 11, color: AppColors.secondary)),
+                      Text(
+                        'Điểm ngập tại TP. Hồ Chí Minh',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.blueGrey.shade800,
+                        ),
+                      ),
+                      const Text(
+                        '14 Điểm ngập hoạt động • Dữ liệu cập nhật 5 phút trước',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.secondary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -77,12 +99,20 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
                 const Positioned(
                   bottom: 60,
                   right: 80,
-                  child: Icon(Icons.location_on, color: Colors.orange, size: 32),
+                  child: Icon(
+                    Icons.location_on,
+                    color: Colors.orange,
+                    size: 32,
+                  ),
                 ),
                 const Positioned(
                   top: 90,
                   right: 120,
-                  child: Icon(Icons.local_shipping, color: AppColors.primaryOrange, size: 28),
+                  child: Icon(
+                    Icons.local_shipping,
+                    color: AppColors.primaryOrange,
+                    size: 28,
+                  ),
                 ),
               ],
             ),
@@ -121,7 +151,13 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
-                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x05000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,25 +166,72 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Text(pt['title'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            child: Text(
+                              pt['title'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(color: (pt['color'] as Color).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-                            child: Text(pt['level'], style: TextStyle(color: pt['color'], fontSize: 10, fontWeight: FontWeight.bold)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (pt['color'] as Color).withValues(
+                                alpha: 0.1,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              pt['level'],
+                              style: TextStyle(
+                                color: pt['color'],
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text('Mức nước: ${pt['depth']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: pt['color'])),
+                      Text(
+                        'Mức nước: ${pt['depth']}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: pt['color'],
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text(pt['desc'], style: const TextStyle(fontSize: 11, color: AppColors.secondary)),
+                      Text(
+                        pt['desc'],
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.secondary,
+                        ),
+                      ),
                       const SizedBox(height: 6),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          const Icon(Icons.shield, size: 14, color: AppColors.tertiary),
+                          const Icon(
+                            Icons.shield,
+                            size: 14,
+                            color: AppColors.tertiary,
+                          ),
                           const SizedBox(width: 4),
-                          Text(pt['stations'], style: const TextStyle(fontSize: 11, color: AppColors.tertiary, fontWeight: FontWeight.bold)),
+                          Text(
+                            pt['stations'],
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.tertiary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -162,12 +245,17 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const CommunityFloodReportScreen()),
+            MaterialPageRoute(
+              builder: (_) => const CommunityFloodReportScreen(),
+            ),
           );
         },
         backgroundColor: AppColors.primaryOrange,
         icon: const Icon(Icons.add_location_alt, color: Colors.white),
-        label: const Text('Báo Điểm Ngập', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        label: const Text(
+          'Báo Điểm Ngập',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
@@ -179,7 +267,9 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.secondary : AppColors.surfaceContainerLow,
+          color: isSelected
+              ? AppColors.secondary
+              : AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(

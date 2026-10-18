@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../core/constants/app_colors.dart';
-import '../home/customer_home_screen.dart';
+import 'stitch_hydro_rescue_screen.dart';
 
 class RatingReviewScreen extends StatefulWidget {
   const RatingReviewScreen({super.key});
@@ -33,9 +34,12 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Đánh Giá & Nhận Xét', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Đánh giá cứu hộ',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -48,19 +52,35 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))],
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x05000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 children: [
                   const CircleAvatar(
                     radius: 36,
                     backgroundColor: AppColors.surfaceContainerHigh,
-                    child: Icon(Icons.engineering, size: 44, color: AppColors.primaryOrange),
+                    child: Icon(
+                      Icons.engineering,
+                      size: 44,
+                      color: AppColors.primaryOrange,
+                    ),
                   ),
                   const SizedBox(height: 10),
-                  const Text('Thợ Phạm Tuấn Anh', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Thợ Phạm Tuấn Anh',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 2),
-                  const Text('Đội cứu hộ cơ động • Gara Toàn Thắng (Q.7)', style: TextStyle(fontSize: 12, color: AppColors.secondary)),
+                  const Text(
+                    'Đội cứu hộ cơ động • Gara Toàn Thắng (Q.7)',
+                    style: TextStyle(fontSize: 12, color: AppColors.secondary),
+                  ),
                   const SizedBox(height: 14),
 
                   // Interactive 5 Stars
@@ -82,15 +102,28 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
                     }),
                   ),
                   Text(
-                    _stars == 5 ? 'Cứu hộ xuất sắc! Rất hài lòng' : '$_stars Sao',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.secondary),
+                    _stars == 5
+                        ? 'Cứu hộ xuất sắc! Rất hài lòng'
+                        : '$_stars Sao',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.secondary,
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
 
-            const Text('ĐIỂM NỔI BẬT CỦA THỢ:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.outline)),
+            const Text(
+              'ĐIỂM NỔI BẬT CỦA THỢ:',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppColors.outline,
+              ),
+            ),
             const SizedBox(height: 8),
 
             // Tag chips
@@ -100,7 +133,13 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
               children: _tags.map((tag) {
                 final isSelected = _selectedTags.contains(tag);
                 return FilterChip(
-                  label: Text(tag, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppColors.onSurface)),
+                  label: Text(
+                    tag,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isSelected ? Colors.white : AppColors.onSurface,
+                    ),
+                  ),
                   selected: isSelected,
                   selectedColor: AppColors.primaryOrange,
                   backgroundColor: Colors.white,
@@ -124,10 +163,12 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
               controller: _commentController,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'Viết nhận xét chi tiết để giúp cộng đồng và tăng uy tín thợ...',
+                hintText: 'Chia sẻ trải nghiệm của bạn...',
                 filled: true,
                 fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -135,10 +176,16 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
             ElevatedButton(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Cảm ơn bạn đã gửi đánh giá! Điểm uy tín của thợ đã được cập nhật.')),
+                  const SnackBar(
+                    content: Text(
+                      'Cảm ơn bạn đã gửi đánh giá! Điểm uy tín của thợ đã được cập nhật.',
+                    ),
+                  ),
                 );
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const StitchHydroRescueScreen(),
+                  ),
                   (route) => false,
                 );
               },
@@ -146,9 +193,14 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
                 backgroundColor: AppColors.primaryOrange,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text('Gửi Đánh Giá Cứu Hộ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              child: const Text(
+                'Gửi Đánh Giá Cứu Hộ',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
             ),
           ],
         ),

@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { ScreenId } from '../../types';
 
@@ -156,23 +157,15 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
   });
 
   return (
-    <div className="p-margin-desktop space-y-space-xl">
+    <div className="space-y-space-xl">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md border-b border-surface-container pb-space-md">
         <div>
-          <div className="flex items-center gap-space-xs font-label-md text-label-md text-secondary">
-            <span className="hover:text-primary cursor-pointer" onClick={() => onSelectScreen('dashboard')}>
-              MODULE B: STAFF VẬN HÀNH
-            </span>
-            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="text-on-surface font-semibold">GIÁM SÁT SLA & CHẤT LƯỢNG MẠNG LƯỚI GARA</span>
-          </div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">
-            Bảng Điều Khiển SLA, Tuân Thủ & Đánh Giá Gara Cứu Hộ
-          </h1>
-          <p className="font-body-md text-body-md text-secondary">
+
+          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">Chất lượng dịch vụ</h1>
+          <ViewGuide><p className="font-body-md text-body-md text-secondary">
             Kiểm soát thời gian phản hồi ca ngập, chống ép giá khách hàng, và duy trì chỉ số CSAT &gt; 4.8 sao toàn hệ thống.
-          </p>
+          </p></ViewGuide>
         </div>
 
         <div className="flex items-center gap-space-sm">
@@ -181,7 +174,7 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
             className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all"
           >
             <span className="material-symbols-outlined text-[18px]">verified</span>
-            <span>Hồ Sơ Gara Mới</span>
+            <span>Hồ sơ mới</span>
           </button>
           <button
             onClick={() => onShowToast('Xuất Báo Cáo SLA', 'Đã tải bảng xếp hạng SLA mạng lưới Gara tháng 11/2023')}

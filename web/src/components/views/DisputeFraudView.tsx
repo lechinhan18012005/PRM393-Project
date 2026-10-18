@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { DisputeCase, ScreenId } from '../../types';
 
@@ -30,23 +31,15 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
   };
 
   return (
-    <div className="p-margin-desktop space-y-space-xl">
+    <div className="space-y-space-xl">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md border-b border-surface-container pb-space-md">
         <div>
-          <div className="flex items-center gap-space-xs font-label-md text-label-md text-secondary">
-            <span className="hover:text-primary cursor-pointer" onClick={() => onSelectScreen('dashboard')}>
-              MODULE B: STAFF VẬN HÀNH
-            </span>
-            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="text-on-surface font-semibold">XỬ LÝ TRANH CHẤP & PHÒNG CHỐNG GIAN LẬN</span>
-          </div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">
-            Trung Tâm Thẩm Tra & Trọng Tài Tranh Chấp Ca Cứu Hộ
-          </h1>
-          <p className="font-body-md text-body-md text-secondary">
+
+          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">Xử lý tranh chấp</h1>
+          <ViewGuide><p className="font-body-md text-body-md text-secondary">
             Đối soát bằng chứng hóa đơn, tệp ghi âm hotline, và xử lý vi phạm đội giá mùa nước ngập.
-          </p>
+          </p></ViewGuide>
         </div>
 
         <div className="flex items-center gap-space-sm">
@@ -93,7 +86,7 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
         <div className="lg:col-span-5 space-y-space-md">
           <div className="flex items-center justify-between">
             <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-              Danh Sách Hồ Sơ Khiếu Nại
+              Hồ sơ khiếu nại
             </h2>
             <span className="text-label-sm text-secondary font-data-mono">Tổng {disputes.length} ca</span>
           </div>
@@ -186,7 +179,7 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
               {/* Discrepancy Breakdown Table */}
               <div>
                 <h3 className="font-label-sm uppercase font-bold text-secondary mb-2">
-                  So Sánh Chi Phí Niêm Yết vs Thực Tế Thu
+                  Đối chiếu chi phí
                 </h3>
                 <div className="border border-surface-container rounded-lg overflow-hidden">
                   <table className="w-full text-left text-body-sm">
@@ -224,7 +217,7 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
               {/* Evidence Inspection: Photos and Audio */}
               <div className="space-y-space-sm">
                 <h3 className="font-label-sm uppercase font-bold text-secondary">
-                  Bằng Chứng Hiện Trường & Tệp Ghi Âm Đối Chất
+                  Bằng chứng
                 </h3>
                 <div className="grid grid-cols-2 gap-space-md">
                   <div className="border border-surface-container rounded-lg p-3 bg-surface">

@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { ScreenId } from '../../types';
 
@@ -96,29 +97,21 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
   ];
 
   return (
-    <div className="p-margin-desktop space-y-space-xl">
+    <div className="space-y-space-xl">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md border-b border-surface-container pb-space-md">
         <div>
-          <div className="flex items-center gap-space-xs font-label-md text-label-md text-secondary">
-            <span className="hover:text-primary cursor-pointer" onClick={() => onSelectScreen('owner-dashboard')}>
-              MODULE C: CHỦ GARA ĐỐI TÁC
-            </span>
-            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="text-on-surface font-semibold">TỔNG QUAN HỆ THỐNG GARA AN PHÚ</span>
-          </div>
+
           <div className="flex items-center gap-3 mt-1">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold">
-              Gara An Phú (Q.8 & Bình Tân)
-            </h1>
+            <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold">Quản lý gara</h1>
             <span className="px-2.5 py-0.5 rounded-full text-label-xs font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
               <span className="material-symbols-outlined text-[14px]">verified</span>
               ĐỐI TÁC VÀNG RESCUEOPS
             </span>
           </div>
-          <p className="font-body-md text-body-md text-secondary">
+          <ViewGuide><p className="font-body-md text-body-md text-secondary">
             Chủ cơ sở: Lê Tuấn Hưng • Hotline: 0903.118.291 • Mã Gara: GAR-Q8-8821
-          </p>
+          </p></ViewGuide>
         </div>
 
         <div className="flex items-center gap-space-sm flex-wrap">
@@ -127,14 +120,14 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
             className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all"
           >
             <span className="material-symbols-outlined text-[18px]">price_change</span>
-            <span>Bảng Giá Niêm Yết</span>
+            <span>Bảng giá</span>
           </button>
           <button
             onClick={() => onSelectScreen('payouts')}
             className="flex items-center gap-1.5 px-space-md py-2 bg-primary text-on-primary rounded font-label-md font-semibold hover:bg-primary/90 transition-all shadow-xs"
           >
             <span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>
-            <span>Yêu Cầu Rút Tiền Về PayOS</span>
+            <span>Yêu cầu rút tiền</span>
           </button>
         </div>
       </div>
@@ -143,7 +136,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-space-lg">
         <div className="p-space-lg rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
           <div className="flex items-center justify-between text-secondary mb-2">
-            <span className="font-label-md text-label-md uppercase font-bold tracking-wider">Doanh Thu Ca Ngập Hôm Nay</span>
+            <span className="font-label-md text-label-md uppercase font-bold tracking-wider">Doanh thu hôm nay</span>
             <span className="material-symbols-outlined text-primary text-[20px]">payments</span>
           </div>
           <div className="font-headline-lg text-headline-lg font-bold text-on-surface font-data-mono">
@@ -156,7 +149,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
 
         <div className="p-space-lg rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
           <div className="flex items-center justify-between text-secondary mb-2">
-            <span className="font-label-md text-label-md uppercase font-bold tracking-wider">Tổng Ca Cứu Hộ Đã Làm</span>
+            <span className="font-label-md text-label-md uppercase font-bold tracking-wider">Ca cứu hộ hoàn tất</span>
             <span className="material-symbols-outlined text-tertiary-container text-[20px]">two_wheeler</span>
           </div>
           <div className="font-headline-lg text-headline-lg font-bold text-tertiary-container font-data-mono">
@@ -169,7 +162,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
 
         <div className="p-space-lg rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
           <div className="flex items-center justify-between text-secondary mb-2">
-            <span className="font-label-md text-label-md uppercase font-bold tracking-wider">Đội Ngũ Kỹ Thuật Viên</span>
+            <span className="font-label-md text-label-md uppercase font-bold tracking-wider">Kỹ thuật viên</span>
             <span className="material-symbols-outlined text-blue-600 text-[20px]">engineering</span>
           </div>
           <div className="font-headline-lg text-headline-lg font-bold text-blue-700 font-data-mono">
@@ -182,7 +175,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
 
         <div className="p-space-lg rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
           <div className="flex items-center justify-between text-secondary mb-2">
-            <span className="font-label-md text-label-md uppercase font-bold tracking-wider">Chỉ Số Đánh Giá (CSAT)</span>
+            <span className="font-label-md text-label-md uppercase font-bold tracking-wider">Đánh giá dịch vụ</span>
             <span className="material-symbols-outlined text-amber-500 text-[20px]">star</span>
           </div>
           <div className="font-headline-lg text-headline-lg font-bold text-on-surface flex items-center gap-1 font-data-mono">
@@ -205,7 +198,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
           }`}
         >
           <span className="material-symbols-outlined text-[18px]">store</span>
-          <span>Chi Nhánh & Trạm Cứu Hộ ({branches.length})</span>
+          <span>Chi nhánh ({branches.length})</span>
         </button>
 
         <button
@@ -217,7 +210,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
           }`}
         >
           <span className="material-symbols-outlined text-[18px]">badge</span>
-          <span>Đội Kỹ Thuật Viên Cơ Động ({technicians.length})</span>
+          <span>Kỹ thuật viên ({technicians.length})</span>
         </button>
 
         <button
@@ -229,7 +222,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
           }`}
         >
           <span className="material-symbols-outlined text-[18px]">account_balance</span>
-          <span>Ví Tiền & Đối Soát PayOS</span>
+          <span>Ví & đối soát</span>
         </button>
       </div>
 
@@ -238,14 +231,14 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
         <div className="space-y-space-md">
           <div className="flex items-center justify-between">
             <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-              Mạng Lưới Chi Nhánh Tiếp Nhận & Phân Tuyến
+              Danh sách chi nhánh
             </h2>
             <button
               onClick={() => onShowToast('Thêm Chi Nhánh', 'Vui lòng nộp hồ sơ giấy phép kinh doanh để thêm chi nhánh mới')}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container text-on-surface rounded text-label-sm font-semibold hover:bg-surface-container-high transition-all"
             >
               <span className="material-symbols-outlined text-[16px]">add</span>
-              <span>Đăng Ký Thêm Chi Nhánh</span>
+              <span>Thêm chi nhánh</span>
             </button>
           </div>
 
@@ -288,7 +281,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
                     onClick={() => onShowToast('Điều Phối Trạm', `Đã chuyển đổi ca trực chiến tại ${b.name}`)}
                     className="w-full py-1.5 bg-surface-container text-on-surface rounded font-label-sm font-bold hover:bg-surface-container-high transition-all"
                   >
-                    Xem Bản Đồ & Trực Chiến
+                    Xem vị trí
                   </button>
                 </div>
               </div>
@@ -302,7 +295,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
         <div className="space-y-space-md">
           <div className="flex items-center justify-between">
             <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-              Danh Sách Kỹ Thuật Viên Cơ Động
+              Kỹ thuật viên
             </h2>
             <button
               onClick={() => onShowToast('Thêm KTV', 'Đã mở mẫu đăng ký eKYC thợ kỹ thuật mới')}
@@ -369,7 +362,7 @@ export const GarageOwnerDashboardView: React.FC<GarageOwnerDashboardViewProps> =
           <div className="flex items-center justify-between border-b border-surface-container pb-3">
             <div>
               <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-                Ví Doanh Thu & Cổng Thanh Toán PayOS NAPAS 24/7
+                Ví doanh thu
               </h2>
               <span className="text-body-sm text-secondary">
                 Tài khoản thụ hưởng: Vietcombank - 1029482991 (LÊ TUẤN HƯNG) • Đã xác thực eKYC

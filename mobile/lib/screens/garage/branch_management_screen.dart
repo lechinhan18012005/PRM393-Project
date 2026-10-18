@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/constants/app_colors.dart';
 
 class BranchManagementScreen extends StatelessWidget {
@@ -9,16 +10,26 @@ class BranchManagementScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Quản Lý Đa Chi Nhánh Gara', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Chi nhánh',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('HỆ THỐNG CHI NHÁNH GARA TOÀN THẮNG', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.outline)),
+            const Text(
+              'Danh sách chi nhánh',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppColors.outline,
+              ),
+            ),
             const SizedBox(height: 10),
 
             _buildBranchCard(
@@ -54,16 +65,25 @@ class BranchManagementScreen extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mở form đăng ký địa điểm chi nhánh mới & tọa độ GPS')),
+                  const SnackBar(
+                    content: Text(
+                      'Mở form đăng ký địa điểm chi nhánh mới & tọa độ GPS',
+                    ),
+                  ),
                 );
               },
               icon: const Icon(Icons.add_business, size: 20),
-              label: const Text('+ Thêm Chi Nhánh Mới', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              label: const Text(
+                '+ Thêm Chi Nhánh Mới',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryOrange,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -85,7 +105,13 @@ class BranchManagementScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x05000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,22 +120,48 @@ class BranchManagementScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(6)),
-                child: Text(isActive ? 'Đang hoạt động' : 'Tạm đóng', style: TextStyle(color: Colors.green.shade800, fontSize: 10, fontWeight: FontWeight.bold)),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isActive ? 'Đang hoạt động' : 'Tạm đóng',
+                  style: TextStyle(
+                    color: Colors.green.shade800,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Row(
             children: [
-              const Icon(Icons.location_on, size: 14, color: AppColors.secondary),
+              const Icon(
+                Icons.location_on,
+                size: 14,
+                color: AppColors.secondary,
+              ),
               const SizedBox(width: 4),
               Expanded(
-                child: Text(address, style: const TextStyle(fontSize: 12, color: AppColors.secondary)),
+                child: Text(
+                  address,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.secondary,
+                  ),
+                ),
               ),
             ],
           ),
@@ -118,17 +170,37 @@ class BranchManagementScreen extends StatelessWidget {
             children: [
               const Icon(Icons.phone, size: 14, color: AppColors.secondary),
               const SizedBox(width: 4),
-              Text('Hotline: $hotline', style: const TextStyle(fontSize: 12, color: AppColors.secondary)),
+              Text(
+                'Hotline: $hotline',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.secondary,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
           const Divider(),
           const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
             children: [
-              Text('Nhân sự: $mechanicsCount', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              Text('Phương tiện: $vehicles', style: const TextStyle(fontSize: 11, color: AppColors.secondary)),
+              Text(
+                'Nhân sự: $mechanicsCount',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                'Phương tiện: $vehicles',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.secondary,
+                ),
+              ),
             ],
           ),
         ],

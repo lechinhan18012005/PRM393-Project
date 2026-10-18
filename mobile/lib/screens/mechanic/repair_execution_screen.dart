@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../customer/vietqr_payment_screen.dart';
 
@@ -23,9 +24,12 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Thực Hiện Sửa Chữa & Nghiệm Thu', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Sửa chữa & bàn giao',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -35,18 +39,37 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
             // Order status pill
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(10)),
-              child: const Row(
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   Icon(Icons.check_circle, color: Colors.green, size: 18),
                   SizedBox(width: 8),
-                  Text('Khách đã duyệt báo giá #QUO-8924-V2 (290.000 đ)', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                  Text(
+                    'Khách đã duyệt báo giá #QUO-8924-V2 (290.000 đ)',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
-            const Text('CHECKLIST QUY TRÌNH KỸ THUẬT XỬ LÝ NGẬP NƯỚC', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.outline)),
+            const Text(
+              'Các bước sửa chữa',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppColors.outline,
+              ),
+            ),
             const SizedBox(height: 8),
 
             // Checklist Card
@@ -54,19 +77,34 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x05000000),
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 children: _checklist.keys.map((task) {
-                  return CheckboxListTile(
-                    title: Text(task, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                    value: _checklist[task],
-                    activeColor: Colors.green,
-                    onChanged: (val) {
-                      setState(() {
-                        _checklist[task] = val ?? false;
-                      });
-                    },
+                  return Material(
+                    color: Colors.transparent,
+                    child: CheckboxListTile(
+                      title: Text(
+                        task,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      value: _checklist[task],
+                      activeColor: Colors.green,
+                      onChanged: (val) {
+                        setState(() {
+                          _checklist[task] = val ?? false;
+                        });
+                      },
+                    ),
                   );
                 }).toList(),
               ),
@@ -74,7 +112,14 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
             const SizedBox(height: 20),
 
             // Photos of Completed Repair
-            const Text('ẢNH NGHIỆM THU HIỆN TRƯỜNG *', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.outline)),
+            const Text(
+              'ẢNH NGHIỆM THU HIỆN TRƯỜNG *',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppColors.outline,
+              ),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -90,16 +135,23 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const VietQRPaymentScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const VietQRPaymentScreen(),
+                  ),
                 );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryOrange,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text('HOÀN TẤT • MỞ MÃ VIETQR THU TIỀN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              child: const Text(
+                'Hoàn tất & thanh toán',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ),
           ],
         ),
@@ -114,14 +166,27 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
         decoration: BoxDecoration(
           color: exists ? Colors.green.shade50 : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: exists ? Colors.green : Colors.grey.shade300),
+          border: Border.all(
+            color: exists ? Colors.green : Colors.grey.shade300,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(exists ? Icons.check_circle : Icons.camera_alt, color: exists ? Colors.green : Colors.grey, size: 22),
+            Icon(
+              exists ? Icons.check_circle : Icons.camera_alt,
+              color: exists ? Colors.green : Colors.grey,
+              size: 22,
+            ),
             const SizedBox(height: 4),
-            Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: exists ? Colors.green : Colors.grey.shade700)),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 9,
+                color: exists ? Colors.green : Colors.grey.shade700,
+              ),
+            ),
           ],
         ),
       ),

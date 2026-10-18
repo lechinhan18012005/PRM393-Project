@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
-import '../home/customer_home_screen.dart';
+import '../customer/stitch_hydro_rescue_screen.dart';
 import '../home/mechanic_home_screen.dart';
 import '../home/garage_home_screen.dart';
 
@@ -41,7 +42,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } else if (role == 'GARAGE_OWNER') {
       target = const GarageHomeScreen();
     } else {
-      target = const CustomerHomeScreen();
+      target = const StitchHydroRescueScreen();
     }
 
     Navigator.of(context).pushAndRemoveUntil(
@@ -58,7 +59,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
 
-    if (fullName.isEmpty || username.isEmpty || email.isEmpty || password.isEmpty) {
+    if (fullName.isEmpty ||
+        username.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Vui lòng điền đầy đủ các thông tin bắt buộc (*)'),
@@ -225,7 +229,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                     ),
                     onPressed: () {
                       setState(() {
@@ -290,10 +296,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 16),
 
               // Back to Login
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
                 children: [
-                  const Text('Đã có tài khoản? ', style: TextStyle(color: AppColors.secondary)),
+                  const Text(
+                    'Đã có tài khoản? ',
+                    style: TextStyle(color: AppColors.secondary),
+                  ),
                   GestureDetector(
                     onTap: () {
                       Navigator.of(context).pop();
@@ -314,5 +325,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
-
 }

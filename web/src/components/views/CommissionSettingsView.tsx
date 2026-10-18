@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 
 interface CommissionSettingsViewProps {
@@ -55,21 +56,15 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
       {/* Command Header */}
       <div className="bg-surface-container-lowest p-space-lg rounded shadow-sm flex flex-col xl:flex-row xl:items-center xl:justify-between gap-space-md border border-surface-container">
         <div className="flex flex-col space-y-space-xs">
-          <div className="flex items-center gap-space-xs text-secondary font-label-sm text-label-sm tracking-wider uppercase">
-            <span>TÀI CHÍNH & KẾ TOÁN</span>
-            <span className="material-symbols-outlined text-[12px]">chevron_right</span>
-            <span className="text-primary font-bold">THIẾT LẬP HOA HỒNG & PHÍ SÀN</span>
-          </div>
+
           <div className="flex flex-wrap items-center gap-space-sm pt-0.5">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              Cấu Hình Tỷ Lệ Chiết Khấu, Phí Dịch Vụ & Trợ Cấp Cứu Hộ
-            </h1>
+            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">Phí & chiết khấu</h1>
             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-low text-tertiary font-data-mono text-data-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-tertiary-container animate-pulse"></span>
-              <span>Phiên bản áp dụng: v2.4 (Kích hoạt từ 01/10/2024)</span>
+              <span>Áp dụng từ 01/10/2024</span>
             </div>
             <span className="px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm uppercase font-semibold">
-              SLA Engine 08-REV
+              Quy tắc v2.4
             </span>
           </div>
         </div>
@@ -103,14 +98,14 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
               <div className="flex items-center gap-space-xs">
                 <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
                 <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">
-                  Tỷ Lệ Hoa Hồng Nền Tảng (Platform Commission Rate)
+                  Hoa hồng nền tảng
                 </h2>
               </div>
               <span className="font-data-mono text-data-mono text-secondary">MOD_CODE: COM-PLT-2024</span>
             </div>
-            <p className="font-body-md text-body-md text-on-surface-variant">
+            <ViewGuide><p className="font-body-md text-body-md text-on-surface-variant">
               Khấu trừ trực tiếp trên ví Escrow của đơn vị Gara cứu hộ sau khi dịch vụ hoàn tất. Đã bảo hộ rủi ro bão lũ đô thị và hạ tầng GPS trực tuyến.
-            </p>
+            </p></ViewGuide>
 
             {/* Master Global Commission Slider */}
             <div className="bg-surface-container-low p-space-md rounded flex flex-col space-y-space-xs">
@@ -263,7 +258,7 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
               <div className="flex items-center gap-space-xs">
                 <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
                 <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">
-                  Chia Sẻ Chi Phí Vượt Ngập Ghép & Trợ Cấp Bão Lũ
+                  Chi phí đi ghép & trợ cấp
                 </h2>
               </div>
               <span className="px-2 py-0.5 rounded bg-surface-container text-tertiary font-label-sm text-label-sm uppercase font-bold">
@@ -371,7 +366,7 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
               <div className="flex items-center gap-space-xs">
                 <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span>
                 <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">
-                  Cấu Hình Phí Khởi Tạo & Hệ Số Ngập Sâu (K)
+                  Phí cơ bản & hệ số ngập
                 </h2>
               </div>
               <span className="font-data-mono text-data-mono text-secondary">DISPATCH_STD_GEO</span>
@@ -467,7 +462,7 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
             <div className="flex items-center justify-between pb-space-xs border-b border-surface-container">
               <div className="flex items-center gap-space-xs">
                 <span className="material-symbols-outlined text-primary text-[20px]">calculate</span>
-                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">Mô Phỏng Tác Động Đơn Hàng</h2>
+                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">Ước tính chi phí</h2>
               </div>
               <span className="px-2 py-0.5 rounded bg-surface-container-low text-secondary font-label-sm text-label-sm font-bold uppercase">
                 LIVE SIMULATOR
@@ -598,7 +593,7 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
               <div className="flex items-center gap-space-xs">
                 <span className="material-symbols-outlined text-secondary text-[20px]">history_edu</span>
                 <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">
-                  Nhật Ký Lịch Sử Thay Đổi (Audit Trail)
+                  Lịch sử thay đổi
                 </h2>
               </div>
               <span className="font-data-mono text-data-mono text-secondary">4 BẢN GHI GẦN NHẤT</span>

@@ -15,10 +15,8 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: validate
-    show-sql: false
-  flyway:
-    enabled: true
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:true}
 
 jwt:
   secret: ${JWT_SECRET}
@@ -30,4 +28,4 @@ app:
     seed-users: false
 
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:*,http://127.0.0.1:*}

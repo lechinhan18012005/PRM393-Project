@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
@@ -29,16 +30,19 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text(
-          'Quản Lý Gara & Chi Nhánh',
+          'Quản lý gara',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
         foregroundColor: AppColors.onSurface,
         actions: [
           IconButton(
-            icon: const Icon(Icons.grid_view_rounded, color: AppColors.primaryOrange),
-            tooltip: 'Danh sách 22 màn hình',
+            icon: const Icon(
+              Icons.grid_view_rounded,
+              color: AppColors.primaryOrange,
+            ),
+            tooltip: 'Khám phá ứng dụng',
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const DemoCatalogScreen()),
@@ -71,7 +75,11 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2)),
+                  BoxShadow(
+                    color: Color(0x05000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
                 ],
               ),
               child: Column(
@@ -82,7 +90,11 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                       const CircleAvatar(
                         radius: 24,
                         backgroundColor: AppColors.surfaceContainerHigh,
-                        child: Icon(Icons.store, color: AppColors.primary, size: 28),
+                        child: Icon(
+                          Icons.store,
+                          color: AppColors.primary,
+                          size: 28,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -91,12 +103,18 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                           children: [
                             Text(
                               user?.fullName ?? 'Gara Cứu Hộ Toàn Thắng',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             const Text(
                               'Đối tác cứu hộ Hạng 1 • 3 Chi nhánh hoạt động',
-                              style: TextStyle(fontSize: 12, color: AppColors.secondary),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.secondary,
+                              ),
                             ),
                           ],
                         ),
@@ -109,14 +127,22 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
 
                   // Branch selector
                   const Text(
-                    'ĐANG CHỌN CHI NHÁNH ĐIỀU PHỐI:',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.outline),
+                    'Chi nhánh đang chọn',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.outline,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: _selectedBranch,
                     decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       filled: true,
                       fillColor: AppColors.surfaceContainerLow,
                       border: OutlineInputBorder(
@@ -127,15 +153,24 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                     items: const [
                       DropdownMenuItem(
                         value: 'Chi nhánh 1 (Q.7 - Huỳnh Tấn Phát)',
-                        child: Text('Chi nhánh 1 (Q.7 - Huỳnh Tấn Phát)'),
+                        child: Text(
+                          'Q.7 · Huỳnh Tấn Phát',
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       DropdownMenuItem(
                         value: 'Chi nhánh 2 (Q.8 - Phạm Thế Hiển)',
-                        child: Text('Chi nhánh 2 (Q.8 - Phạm Thế Hiển)'),
+                        child: Text(
+                          'Q.8 · Phạm Thế Hiển',
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       DropdownMenuItem(
                         value: 'Chi nhánh 3 (Bình Thạnh - Ung Văn Khiêm)',
-                        child: Text('Chi nhánh 3 (Bình Thạnh - Ung Văn Khiêm)'),
+                        child: Text(
+                          'Bình Thạnh · Ung Văn Khiêm',
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                     onChanged: (val) {
@@ -151,42 +186,13 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
             ),
             const SizedBox(height: 14),
 
-            // Demo Shortcut Banner
-            GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const DemoCatalogScreen()),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryOrange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.primaryOrange),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.widgets, color: AppColors.primaryOrange, size: 22),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Xem trọn bộ 22 màn hình nghiệp vụ tĩnh (Catalog Demo)',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryOrange),
-                      ),
-                    ),
-                    Icon(Icons.arrow_forward, color: AppColors.primaryOrange, size: 16),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-
             // Revenue and Balance Card
             GestureDetector(
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const GarageRevenueScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const GarageRevenueScreen(),
+                  ),
                 );
               },
               child: Container(
@@ -199,7 +205,11 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                   ),
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: const [
-                    BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: Column(
@@ -212,39 +222,57 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                     const SizedBox(height: 4),
                     const Text(
                       '24.850.000 đ',
-                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 14),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         ElevatedButton.icon(
                           onPressed: () {
                             Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const GarageWalletPayoutScreen()),
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const GarageWalletPayoutScreen(),
+                              ),
                             );
                           },
-                          icon: const Icon(Icons.account_balance_wallet, size: 16),
+                          icon: const Icon(
+                            Icons.account_balance_wallet,
+                            size: 16,
+                          ),
                           label: const Text('Rút tiền PayOS'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: AppColors.tertiary,
                             elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         OutlinedButton(
                           onPressed: () {
                             Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const GarageRevenueScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const GarageRevenueScreen(),
+                              ),
                             );
                           },
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white,
                             side: const BorderSide(color: Colors.white54),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
-                          child: const Text('Xem Doanh Thu'),
+                          child: const Text('Xem doanh thu'),
                         ),
                       ],
                     ),
@@ -256,7 +284,11 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
 
             const Text(
               'QUẢN LÝ ĐỘI THỢ & DỊCH VỤ GARA',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.outline),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.outline,
+              ),
             ),
             const SizedBox(height: 10),
 
@@ -267,7 +299,9 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                   child: GestureDetector(
                     onTap: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const TeamAllocationScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const TeamAllocationScreen(),
+                        ),
                       );
                     },
                     child: Container(
@@ -279,9 +313,22 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                       child: const Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Thợ Trực Tuyến', style: TextStyle(fontSize: 12, color: AppColors.secondary)),
+                          Text(
+                            'Thợ Trực Tuyến',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.secondary,
+                            ),
+                          ),
                           SizedBox(height: 4),
-                          Text('7 Thợ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.tertiary)),
+                          Text(
+                            '7 Thợ',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.tertiary,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -292,7 +339,9 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                   child: GestureDetector(
                     onTap: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const BatchTransportManageScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const BatchTransportManageScreen(),
+                        ),
                       );
                     },
                     child: Container(
@@ -304,9 +353,22 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                       child: const Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Xe Gom Vượt Ngập', style: TextStyle(fontSize: 12, color: AppColors.secondary)),
+                          Text(
+                            'Xe Gom Vượt Ngập',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.secondary,
+                            ),
+                          ),
                           SizedBox(height: 4),
-                          Text('2 Chuyến', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryOrange)),
+                          Text(
+                            '2 Chuyến',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryOrange,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -319,14 +381,18 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
             // Branch Management Tile
             ListTile(
               tileColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               leading: const Icon(Icons.business, color: Colors.blue),
-              title: const Text('Quản Lý Danh Sách Chi Nhánh'),
+              title: const Text('Chi nhánh'),
               subtitle: const Text('3 Chi nhánh (Q.7, Q.8, Bình Thạnh)'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 14),
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const BranchManagementScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const BranchManagementScreen(),
+                  ),
                 );
               },
             ),
@@ -335,14 +401,21 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
             // Batch Transport Management Tile
             ListTile(
               tileColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              leading: const Icon(Icons.fire_truck, color: AppColors.primaryOrange),
-              title: const Text('Quản Lý Đội Xe Gom Vượt Ngập'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              leading: const Icon(
+                Icons.fire_truck,
+                color: AppColors.primaryOrange,
+              ),
+              title: const Text('Chuyến chở xe'),
               subtitle: const Text('Xe tải nhẹ, xe ba gác máy nâng chở 4-6 xe'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 14),
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const BatchTransportManageScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const BatchTransportManageScreen(),
+                  ),
                 );
               },
             ),

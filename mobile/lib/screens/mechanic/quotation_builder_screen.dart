@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/constants/app_colors.dart';
 import 'repair_execution_screen.dart';
 
@@ -24,9 +25,12 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Lập Báo Giá Hiện Trường', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Lập báo giá',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -36,7 +40,10 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
             // Version toggle
             Container(
               padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: AppColors.surfaceContainer, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -45,10 +52,22 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _selectedVersion == 0 ? Colors.white : Colors.transparent,
+                          color: _selectedVersion == 0
+                              ? Colors.white
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Text('Phiên bản V1 (Ước tính sơ bộ)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _selectedVersion == 0 ? AppColors.primaryOrange : AppColors.secondary)),
+                        child: Text(
+                          'V1 · Ước tính',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            color: _selectedVersion == 0
+                                ? AppColors.primaryOrange
+                                : AppColors.secondary,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -58,10 +77,22 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _selectedVersion == 1 ? Colors.white : Colors.transparent,
+                          color: _selectedVersion == 1
+                              ? Colors.white
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Text('Phiên bản V2 (Sau tháo khám xe)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _selectedVersion == 1 ? AppColors.primaryOrange : AppColors.secondary)),
+                        child: Text(
+                          'V2 · Sau kiểm tra',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            color: _selectedVersion == 1
+                                ? AppColors.primaryOrange
+                                : AppColors.secondary,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -70,7 +101,14 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
             ),
             const SizedBox(height: 16),
 
-            const Text('DANH MỤC DỊCH VỤ NIÊM YẾT GARA TOÀN THẮNG', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.outline)),
+            const Text(
+              'Dịch vụ & phụ tùng',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppColors.outline,
+              ),
+            ),
             const SizedBox(height: 8),
 
             // Items Checkbox List Card
@@ -78,19 +116,34 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x05000000),
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 children: _items.keys.map((key) {
-                  return CheckboxListTile(
-                    title: Text(key, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                    value: _items[key],
-                    activeColor: AppColors.primaryOrange,
-                    onChanged: (val) {
-                      setState(() {
-                        _items[key] = val ?? false;
-                      });
-                    },
+                  return Material(
+                    color: Colors.transparent,
+                    child: CheckboxListTile(
+                      title: Text(
+                        key,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      value: _items[key],
+                      activeColor: AppColors.primaryOrange,
+                      onChanged: (val) {
+                        setState(() {
+                          _items[key] = val ?? false;
+                        });
+                      },
+                    ),
                   );
                 }).toList(),
               ),
@@ -105,11 +158,23 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: AppColors.primaryContainer),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: const Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
-                  Text('TỔNG BÁO GIÁ V2:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  Text('290.000 đ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primaryOrange)),
+                  Text(
+                    'TỔNG BÁO GIÁ V2:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  Text(
+                    '290.000 đ',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: AppColors.primaryOrange,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -118,19 +183,30 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
             ElevatedButton(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Đã gửi báo giá số V2 sang máy khách hàng. Đang chờ khách bấm duyệt...')),
+                  const SnackBar(
+                    content: Text(
+                      'Đã gửi báo giá số V2 sang máy khách hàng. Đang chờ khách bấm duyệt...',
+                    ),
+                  ),
                 );
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const RepairExecutionScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const RepairExecutionScreen(),
+                  ),
                 );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryOrange,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text('GỬI BÁO GIÁ CHO KHÁCH DUYỆT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              child: const Text(
+                'Gửi báo giá',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ),
           ],
         ),

@@ -121,10 +121,6 @@ function MainDashboard() {
     return <div className="min-h-screen p-8 bg-slate-950 text-white">Tài khoản này chưa có quyền truy cập web portal. Vui lòng dùng ứng dụng mobile hoặc liên hệ quản trị viên. <button className="underline ml-2" onClick={logout}>Đăng xuất</button></div>;
   }
 
-  if (!DEMO_MODE) {
-    return <div className="min-h-screen p-8 bg-slate-950 text-white">Đã đăng nhập. Các phân hệ nghiệp vụ trên web đang ở chế độ demo vì backend mới hỗ trợ xác thực. <button className="underline ml-2" onClick={logout}>Đăng xuất</button></div>;
-  }
-
   const urgentAlerts = [
     {
       id: 'ALT-01',
@@ -151,7 +147,6 @@ function MainDashboard() {
 
   return (
     <div className="min-h-screen bg-surface font-body-md text-on-surface flex flex-col antialiased selection:bg-primary-container selection:text-on-primary-container">
-      <div className="fixed top-16 right-4 z-50 bg-amber-100 border border-amber-500 text-amber-950 px-3 py-1 rounded shadow">BẢN DEMO — Dữ liệu và thao tác nghiệp vụ chưa kết nối backend</div>
       {/* Top Application Header */}
       <Header
         currentModule={currentModule}
@@ -167,12 +162,12 @@ function MainDashboard() {
       />
 
       {/* Main Layout Container */}
-      <div className="flex pt-16 flex-1">
+      <div className="app-layout">
         {/* Left Fixed Navigation Sidebar */}
         <Sidebar currentScreen={currentScreen} onSelectScreen={handleSelectScreen} allowedModule={currentModule} />
 
         {/* Primary Content View Area */}
-        <main className="flex-1 ml-64 min-h-[calc(100vh-4rem)] bg-surface pb-16 overflow-x-hidden">
+        <main className="app-main">
           {/* Module A Views */}
           {currentScreen === 'overview' && (
             <OverviewGMVView onSelectScreen={handleSelectScreen} onShowToast={showToast} />

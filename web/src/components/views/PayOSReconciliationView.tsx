@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { PayOSTransaction, ScreenId } from '../../types';
 
@@ -61,18 +62,16 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md bg-surface-container-lowest p-space-lg rounded shadow-sm border border-surface-container">
         <div className="flex flex-col gap-space-xs">
           <div className="flex items-center gap-space-sm flex-wrap">
-            <span className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              Đối Soát & Dòng Tiền Thời Gian Thực PayOS
-            </span>
+            <h1>Đối soát PayOS</h1>
             <span className="inline-flex items-center gap-1.5 px-space-sm py-0.5 rounded bg-surface-container text-tertiary font-label-md text-label-md">
               <span className="w-2 h-2 rounded-full bg-tertiary animate-ping"></span>
-              <span>Webhook PayOS: Hoạt động bình thường</span>
-              <span className="font-data-mono text-data-mono text-secondary">(Độ trễ: 120ms)</span>
+              <span>PayOS hoạt động</span>
+              <span className="font-data-mono text-data-mono text-secondary">120 ms</span>
             </span>
           </div>
-          <p className="font-body-md text-body-md text-secondary">
+          <ViewGuide><p className="font-body-md text-body-md text-secondary">
             Giám sát cổng thanh toán VietQR PayOS tự động, phân bổ ví kỹ thuật viên cứu hộ ngập lụt đô thị và trích xuất phí điều phối theo thời gian thực.
-          </p>
+          </p></ViewGuide>
         </div>
 
         {/* Quick Action Controls */}
@@ -85,14 +84,14 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
             <span className={`material-symbols-outlined text-[18px] ${isReconciling ? 'animate-spin' : ''}`}>
               sync
             </span>
-            <span>{isReconciling ? 'Đang Đối Soát...' : 'Đối Soát Tự Động (Auto-Reconcile)'}</span>
+            <span>{isReconciling ? 'Đang Đối Soát...' : 'Đối soát ngay'}</span>
           </button>
           <button
             onClick={() => onShowToast('Xuất Tệp Excel', 'Đã xuất file đối soát PayOS_Reconciliation_T10.xlsx')}
             className="flex items-center gap-space-xs px-space-md py-2 rounded bg-surface-container-high text-on-surface hover:bg-surface-variant transition-colors font-label-lg text-label-lg cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px]">download</span>
-            <span>Xuất Đối Soát (Excel / CSV)</span>
+            <span>Xuất báo cáo</span>
           </button>
         </div>
       </div>
@@ -101,7 +100,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
       <div className="grid grid-cols-1 md:grid-cols-4 gap-space-md">
         <div className="p-space-md rounded bg-surface-container-lowest shadow-sm flex flex-col justify-between border border-surface-container">
           <div className="flex items-center justify-between text-secondary">
-            <span className="font-label-sm text-label-sm uppercase tracking-wider font-semibold">Tổng Doanh Thu PayOS (24h)</span>
+            <span className="font-label-sm text-label-sm uppercase tracking-wider font-semibold">Thu qua PayOS</span>
             <span className="material-symbols-outlined text-[18px] text-tertiary">account_balance_wallet</span>
           </div>
           <div className="mt-space-sm flex items-baseline justify-between">
@@ -116,7 +115,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
 
         <div className="p-space-md rounded bg-surface-container-lowest shadow-sm flex flex-col justify-between border border-surface-container">
           <div className="flex items-center justify-between text-secondary">
-            <span className="font-label-sm text-label-sm uppercase tracking-wider font-semibold">Phí Sàn Trích Lại (12.5%)</span>
+            <span className="font-label-sm text-label-sm uppercase tracking-wider font-semibold">Phí nền tảng · 12,5%</span>
             <span className="material-symbols-outlined text-[18px] text-primary">percent</span>
           </div>
           <div className="mt-space-sm flex items-baseline justify-between">
@@ -130,7 +129,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
 
         <div className="p-space-md rounded bg-surface-container-lowest shadow-sm flex flex-col justify-between border border-surface-container">
           <div className="flex items-center justify-between text-secondary">
-            <span className="font-label-sm text-label-sm uppercase tracking-wider font-semibold">Thực Chuyển Gara (Net Payout)</span>
+            <span className="font-label-sm text-label-sm uppercase tracking-wider font-semibold">Chuyển cho gara</span>
             <span className="material-symbols-outlined text-[18px] text-tertiary-container">storefront</span>
           </div>
           <div className="mt-space-sm flex items-baseline justify-between">
@@ -144,7 +143,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
 
         <div className="p-space-md rounded bg-surface-container-lowest shadow-sm flex flex-col justify-between border border-surface-container">
           <div className="flex items-center justify-between text-secondary">
-            <span className="font-label-sm text-label-sm uppercase tracking-wider font-semibold">Tính Toàn Vẹn Checksum</span>
+            <span className="font-label-sm text-label-sm uppercase tracking-wider font-semibold">Xác thực giao dịch</span>
             <span className="material-symbols-outlined text-[18px] text-tertiary">shield_lock</span>
           </div>
           <div className="mt-space-sm flex items-baseline justify-between">
@@ -246,7 +245,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
         <div className="xl:col-span-8 flex flex-col bg-surface-container-lowest rounded shadow-sm overflow-hidden border border-surface-container">
           <div className="px-space-md py-space-sm bg-surface-container-low flex items-center justify-between">
             <div className="flex items-center gap-space-xs">
-              <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">Nhật Ký Giao Dịch Đối Soát</span>
+              <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">Danh sách giao dịch</span>
               <span className="font-data-mono text-data-mono px-1.5 py-0.5 rounded bg-surface-container-highest text-secondary">
                 {filteredTransactions.length} bản ghi hiển thị
               </span>
@@ -388,7 +387,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
             <div className="p-space-md bg-surface-container-low flex items-center justify-between border-b border-surface-container">
               <div className="flex items-center gap-space-xs">
                 <span className="material-symbols-outlined text-[20px] text-tertiary">receipt_long</span>
-                <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">Chi Tiết Giao Dịch & Webhook</span>
+                <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">Chi tiết giao dịch</span>
               </div>
               <span className="font-data-mono text-data-mono px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-bold">
                 #{selectedTx.id}
@@ -455,6 +454,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
                 </div>
               </div>
 
+              <details className="technical-details"><summary>Dữ liệu kỹ thuật PayOS</summary>
               {/* PayOS Raw Webhook Payload Inspect */}
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
@@ -481,6 +481,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
                 </div>
               </div>
 
+              </details>
               {/* Field Technician Evidence Card */}
               <div className="relative overflow-hidden rounded bg-surface-container-low p-space-sm flex items-center gap-space-sm border border-surface-container">
                 <img
@@ -504,7 +505,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
                   className="w-full flex items-center justify-center gap-space-xs py-2 rounded bg-surface-container-high text-on-surface hover:bg-surface-variant font-label-lg text-label-lg transition-colors cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[18px]">receipt</span>
-                  <span>Tải Hóa Đơn Điện Tử (VAT)</span>
+                  <span>Tải hóa đơn</span>
                 </button>
                 <button
                   onClick={() => {
@@ -514,7 +515,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
                   className="w-full flex items-center justify-center gap-space-xs py-2 rounded bg-error-container text-on-error-container hover:bg-error hover:text-on-error font-label-lg text-label-lg transition-colors cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[18px]">support_agent</span>
-                  <span>Chuyển Khiếu Nại Cho Staff Vận Hành</span>
+                  <span>Chuyển xử lý tranh chấp</span>
                 </button>
               </div>
             </div>

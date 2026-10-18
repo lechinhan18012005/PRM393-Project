@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { ScreenId } from '../../types';
 
@@ -126,23 +127,15 @@ export const GarageServicesPricingView: React.FC<GarageServicesPricingViewProps>
   });
 
   return (
-    <div className="p-margin-desktop space-y-space-xl">
+    <div className="space-y-space-xl">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md border-b border-surface-container pb-space-md">
         <div>
-          <div className="flex items-center gap-space-xs font-label-md text-label-md text-secondary">
-            <span className="hover:text-primary cursor-pointer" onClick={() => onSelectScreen('owner-dashboard')}>
-              MODULE C: CHỦ GARA ĐỐI TÁC
-            </span>
-            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="text-on-surface font-semibold">BẢNG GIÁ DỊCH VỤ & DANH MỤC CỨU HỘ</span>
-          </div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">
-            Bảng Giá Niêm Yết Theo Chuẩn Sàn RescueOps
-          </h1>
-          <p className="font-body-md text-body-md text-secondary">
+
+          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">Dịch vụ & bảng giá</h1>
+          <ViewGuide><p className="font-body-md text-body-md text-secondary">
             Mức giá minh bạch bảo vệ khách hàng, tránh khiếu nại tranh chấp và đảm bảo tiêu chuẩn chất lượng.
-          </p>
+          </p></ViewGuide>
         </div>
 
         <div className="flex items-center gap-space-sm">

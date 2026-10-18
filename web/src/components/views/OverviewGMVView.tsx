@@ -105,22 +105,15 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
   return (
     <div className="flex flex-col w-full space-y-space-md">
       {/* Breadcrumb & Tactical Utility Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md bg-surface-container-lowest p-space-md rounded-lg shadow-sm border border-surface-container">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 mb-2">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1.5 text-secondary font-label-md text-label-md tracking-wider uppercase mb-0.5">
-            <span className="hover:text-primary transition-colors cursor-pointer" onClick={() => onSelectScreen('reports')}>
-              Tài Chính & Kế Toán
-            </span>
-            <span className="material-symbols-outlined text-[13px]">chevron_right</span>
-            <span className="text-on-surface font-semibold">Tổng Quan Dòng Tiền & GMV</span>
-          </div>
           <div className="flex items-center gap-space-sm">
             <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              Giám Sát Thanh Khoản & GMV Cứu Hộ
+              Tổng quan tài chính
             </h1>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-data-mono text-data-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-tertiary-container animate-pulse"></span>
-              LIVE FEED
+              Đang cập nhật
             </span>
           </div>
         </div>
@@ -150,7 +143,7 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
                 periodFilter === 'storm' ? 'bg-surface-container-lowest text-primary-container font-bold shadow-sm' : 'text-secondary hover:text-on-surface'
               }`}
             >
-              Bão lụt #3 (Hiện tại)
+              Đợt ngập #3
             </button>
             <button
               onClick={() => setPeriodFilter('custom')}
@@ -168,7 +161,7 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-low hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg rounded shadow-sm transition-all cursor-pointer"
           >
             <span className="material-symbols-outlined text-[16px] text-tertiary">download</span>
-            <span>Xuất File Excel/PDF</span>
+            <span>Xuất báo cáo</span>
           </button>
           <button
             onClick={handlePayosSync}
@@ -178,64 +171,31 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
             <span className={`material-symbols-outlined text-[16px] ${isSyncing ? 'animate-spin' : ''}`}>
               sync
             </span>
-            <span>{isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ PayOS tức thì'}</span>
+            <span>{isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ PayOS'}</span>
           </button>
         </div>
       </div>
 
-      {/* Operational Weather & Financial Advisory Banner */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-md">
-        <div className="lg:col-span-12 bg-surface-container-low p-space-md rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md shadow-sm border border-surface-container">
-          <div className="flex items-center gap-space-md">
-            <div className="w-9 h-9 rounded bg-primary-container/15 flex items-center justify-center text-primary-container shrink-0">
-              <span className="material-symbols-outlined text-[20px]">flood</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                  Cảnh Báo Đỉnh Triều Cường Bán Đảo Thủ Thiêm & Bình Thạnh
-                </span>
-                <span className="px-2 py-0.5 rounded bg-error-container text-on-error-container font-label-sm text-label-sm uppercase tracking-wide font-bold">
-                  Cấp Độ 3 - Ngập Nặng
-                </span>
-              </div>
-              <p className="font-body-sm text-body-sm text-secondary mt-0.5">
-                Dự báo triều cường đạt 1.72m lúc 17h30 - 19h45. Tỷ lệ thanh toán chuẩn bị chạm mốc cao điểm 1.200 đơn/giờ qua hạ tầng QR Napas/PayOS.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-space-lg shrink-0">
-            <div className="text-right">
-              <div className="font-label-sm text-label-sm uppercase text-secondary">PayOS Gateway Latency</div>
-              <div className="font-data-mono text-data-mono font-bold text-tertiary">38ms • SLA 99.99%</div>
-            </div>
-            <div className="h-8 w-px bg-surface-container"></div>
-            <div className="text-right">
-              <div className="font-label-sm text-label-sm uppercase text-secondary">Hạn mức ký quỹ PayOS</div>
-              <div className="font-data-mono text-data-mono font-bold text-on-surface">5.000.000.000 ₫</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div className="overview-alert"><span className="material-symbols-outlined">flood</span><strong>Ngập nặng tại Thủ Thiêm & Bình Thạnh</strong><details><summary>Chi tiết cảnh báo</summary><p>Triều cường 1,72 m · 17:30–19:45. Dự kiến 1.200 đơn/giờ. PayOS: 38 ms · SLA 99,99%. Hạn mức ký quỹ: 5 tỷ ₫.</p></details></div>
 
       {/* 5 High-Density Financial KPI Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-space-md">
+      <div className="overview-kpis">
         {/* KPI 1 */}
         <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container">
           <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Tổng GMV Nền Tảng</span>
+            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Tổng giao dịch</span>
             <span className="p-1.5 rounded bg-surface-container-low text-primary-container">
               <span className="material-symbols-outlined text-[18px]">currency_exchange</span>
             </span>
           </div>
           <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              1.482.500.000 <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
+            <div className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold" title="1.482.500.000 ₫" aria-label="1.482.500.000 ₫">
+              1,48 tỷ <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
             </div>
             <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-primary">
               <span className="material-symbols-outlined text-[15px] font-bold">trending_up</span>
               <span className="font-semibold">+28.4%</span>
-              <span className="text-secondary text-label-sm font-label-sm">(Triều cường tăng)</span>
+              <span className="text-secondary text-label-sm font-label-sm">so với kỳ trước</span>
             </div>
           </div>
           <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden mt-1">
@@ -246,19 +206,19 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
         {/* KPI 2 */}
         <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container">
           <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Thu Qua Cổng PayOS</span>
+            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Thu qua PayOS</span>
             <span className="p-1.5 rounded bg-tertiary-fixed text-on-tertiary-fixed">
               <span className="material-symbols-outlined text-[18px]">qr_code_scanner</span>
             </span>
           </div>
           <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-tertiary tracking-tight font-bold">
-              1.345.200.000 <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
+            <div className="font-headline-lg text-headline-lg text-tertiary tracking-tight font-bold" title="1.345.200.000 ₫" aria-label="1.345.200.000 ₫">
+              1,35 tỷ <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
             </div>
             <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-tertiary">
               <span className="material-symbols-outlined text-[15px]">verified_user</span>
               <span className="font-semibold">90.7%</span>
-              <span className="text-secondary text-label-sm font-label-sm">qua QR VietQR tự động</span>
+              <span className="text-secondary text-label-sm font-label-sm">giao dịch QR</span>
             </div>
           </div>
           <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden mt-1">
@@ -269,19 +229,19 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
         {/* KPI 3 */}
         <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container">
           <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Doanh Thu Phí Sàn</span>
+            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Phí nền tảng</span>
             <span className="p-1.5 rounded bg-surface-container text-on-surface">
               <span className="material-symbols-outlined text-[18px]">percent</span>
             </span>
           </div>
           <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              178.650.000 <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
+            <div className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold" title="178.650.000 ₫" aria-label="178.650.000 ₫">
+              178,65 tr <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
             </div>
             <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-secondary">
               <span className="material-symbols-outlined text-[15px]">pie_chart</span>
               <span className="font-semibold text-on-surface">12.05%</span>
-              <span className="text-secondary text-label-sm font-label-sm">phí sàn chiết khấu</span>
+              <span className="text-secondary text-label-sm font-label-sm">tỷ lệ phí</span>
             </div>
           </div>
           <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden mt-1">
@@ -295,14 +255,14 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
           className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container cursor-pointer hover:border-error transition-colors"
         >
           <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Rút Tiền Chờ Duyệt</span>
+            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Chờ rút tiền</span>
             <span className="p-1.5 rounded bg-error-container text-on-error-container">
               <span className="material-symbols-outlined text-[18px]">pending_actions</span>
             </span>
           </div>
           <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-error tracking-tight font-bold">
-              42.800.000 <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
+            <div className="font-headline-lg text-headline-lg text-error tracking-tight font-bold" title="42.800.000 ₫" aria-label="42.800.000 ₫">
+              42,8 tr <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
             </div>
             <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-error">
               <span className="material-symbols-outlined text-[15px]">storefront</span>
@@ -318,19 +278,19 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
         {/* KPI 5 */}
         <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container">
           <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Quỹ Bảo Hiểm Dự Phòng</span>
+            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Quỹ dự phòng</span>
             <span className="p-1.5 rounded bg-secondary-container text-on-secondary-container">
               <span className="material-symbols-outlined text-[18px]">shield</span>
             </span>
           </div>
           <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              95.000.000 <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
+            <div className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold" title="95.000.000 ₫" aria-label="95.000.000 ₫">
+              95 tr <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
             </div>
             <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-tertiary">
               <span className="material-symbols-outlined text-[15px]">check_circle</span>
               <span className="font-semibold">100%</span>
-              <span className="text-secondary text-label-sm font-label-sm">Bảo chứng hoàn tiền</span>
+              <span className="text-secondary text-label-sm font-label-sm">bảo chứng</span>
             </div>
           </div>
           <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden mt-1">
@@ -340,6 +300,7 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
       </div>
 
       {/* Operational Field Context / Image Mosaics */}
+      <details className="overview-secondary"><summary>Hoạt động hiện trường & hạ tầng thanh toán</summary>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
         <div className="bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex items-center gap-space-md border border-surface-container">
           <img
@@ -381,6 +342,8 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
         </div>
       </div>
 
+      </details>
+
       {/* Charts & Analytics Grid (2 Columns) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-md">
         {/* Left Column: Trend Area Chart */}
@@ -388,23 +351,23 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-space-md gap-space-sm">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">Dòng Tiền Cứu Hộ & Doanh Thu Theo Giờ</h2>
+                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">Dòng tiền theo giờ</h2>
                 <span className="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold">
-                  Cao Điểm Triều Cường
+                  Giờ cao điểm
                 </span>
               </div>
               <p className="font-body-sm text-body-sm text-secondary">
-                So sánh tổng khối lượng giao dịch cứu hộ thực thu và tỷ lệ hoa hồng nền tảng (06:00 - 24:00)
+                Giá trị giao dịch và phí nền tảng · 06:00–24:00
               </p>
             </div>
             <div className="flex items-center gap-space-md font-label-sm text-label-sm">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded bg-primary-container"></span>
-                <span className="text-on-surface font-medium">GMV Cứu Hộ</span>
+                <span className="text-on-surface font-medium">Giao dịch</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded bg-tertiary-container"></span>
-                <span className="text-on-surface font-medium">Phí Sàn Khấu Trừ</span>
+                <span className="text-on-surface font-medium">Phí nền tảng</span>
               </div>
             </div>
           </div>
@@ -499,10 +462,10 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
         <div className="lg:col-span-4 bg-surface-container-lowest p-space-lg rounded-lg shadow-sm flex flex-col justify-between space-y-space-md border border-surface-container">
           <div>
             <div className="flex items-center justify-between">
-              <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">Phân Bổ Dòng Tiền Dịch Vụ</h2>
+              <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">Cơ cấu dịch vụ</h2>
               <span className="material-symbols-outlined text-secondary text-[20px]">donut_large</span>
             </div>
-            <p className="font-body-sm text-body-sm text-secondary mt-0.5">Cơ cấu doanh thu theo tính chất cứu hộ hiện trường</p>
+            <p className="font-body-sm text-body-sm text-secondary mt-0.5">Tỷ trọng giá trị giao dịch</p>
           </div>
 
           <div className="space-y-space-sm">
@@ -561,12 +524,12 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
           {/* Payment Split */}
           <div className="bg-surface-container-low p-space-md rounded">
             <span className="font-label-sm text-label-sm uppercase text-secondary tracking-wider block mb-2 font-bold">
-              Kênh Thu Tiền Nền Tảng
+              Kênh thanh toán
             </span>
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-tertiary text-[18px]">qr_code</span>
-                <span className="font-body-sm text-body-sm text-on-surface font-semibold">Cổng PayOS (VietQR Chuẩn)</span>
+                <span className="font-body-sm text-body-sm text-on-surface font-semibold">PayOS · VietQR</span>
               </div>
               <span className="font-data-mono text-data-mono font-bold text-tertiary">91% (1.345M ₫)</span>
             </div>
@@ -591,7 +554,7 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-tertiary"></span>
             </span>
             <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-              Luồng Giao Dịch Cứu Hộ Hoàn Tất Thời Gian Thực (PayOS Instant Hook)
+              Giao dịch gần đây
             </h3>
           </div>
           <div className="flex items-center gap-space-sm text-secondary font-label-md text-label-md">

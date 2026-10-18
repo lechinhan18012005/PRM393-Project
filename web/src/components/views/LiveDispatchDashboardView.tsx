@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { ScreenId } from '../../types';
 
@@ -151,29 +152,21 @@ export const LiveDispatchDashboardView: React.FC<LiveDispatchDashboardViewProps>
   });
 
   return (
-    <div className="p-margin-desktop space-y-space-xl">
+    <div className="space-y-space-xl">
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md border-b border-surface-container pb-space-md">
         <div>
-          <div className="flex items-center gap-space-xs font-label-md text-label-md text-secondary">
-            <span className="hover:text-primary cursor-pointer" onClick={() => onSelectScreen('dashboard')}>
-              MODULE B: STAFF VẬN HÀNH
-            </span>
-            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="text-on-surface font-semibold">TRUNG TÂM GIÁM SÁT & ĐIỀU PHỐI KHẨN CẤP</span>
-          </div>
+
           <div className="flex items-center gap-3 mt-1">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold">
-              Điều Phối Cứu Hộ Trực Tiếp (Live Command Center)
-            </h1>
+            <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold">Điều phối cứu hộ</h1>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-label-sm font-bold bg-red-100 text-red-700 animate-pulse">
               <span className="h-2 w-2 rounded-full bg-red-600"></span>
-              LIVE RADAR
+              Trực tiếp
             </span>
           </div>
-          <p className="font-body-md text-body-md text-secondary">
+          <ViewGuide><p className="font-body-md text-body-md text-secondary">
             Giám sát đơn kêu cứu realtime, phân bổ trạm gara gần nhất và theo dõi lộ trình kỹ thuật viên di chuyển vùng ngập.
-          </p>
+          </p></ViewGuide>
         </div>
 
         <div className="flex items-center gap-space-sm flex-wrap">
@@ -182,7 +175,7 @@ export const LiveDispatchDashboardView: React.FC<LiveDispatchDashboardViewProps>
             className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all"
           >
             <span className="material-symbols-outlined text-[18px]">flood</span>
-            <span>Xem GIS Map Vùng Ngập</span>
+            <span>Bản đồ ngập</span>
           </button>
           <button
             onClick={() => onShowToast('Cảnh Báo Khẩn', 'Đã phát tín hiệu cảnh báo đỉnh triều cường 1.72m tới toàn bộ tài xế')}
@@ -288,7 +281,7 @@ export const LiveDispatchDashboardView: React.FC<LiveDispatchDashboardViewProps>
         <div className="lg:col-span-8 space-y-space-md">
           <div className="flex items-center justify-between">
             <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-              Danh Sách Ca Cứu Hộ Thời Gian Thực ({filteredOrders.length})
+              Ca cứu hộ ({filteredOrders.length})
             </h2>
             <span className="text-label-sm text-secondary">Cập nhật 5 giây trước</span>
           </div>

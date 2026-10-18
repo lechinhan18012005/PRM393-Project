@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { ScreenId } from '../../types';
 
@@ -41,23 +42,15 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
   ];
 
   return (
-    <div className="p-margin-desktop space-y-space-xl">
+    <div className="space-y-space-xl">
       {/* Breadcrumb & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md border-b border-surface-container pb-space-md">
         <div>
-          <div className="flex items-center gap-space-xs font-label-md text-label-md text-secondary">
-            <span className="hover:text-primary cursor-pointer" onClick={() => onSelectScreen('overview')}>
-              MODULE A: ADMIN TÀI CHÍNH
-            </span>
-            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="text-on-surface font-semibold">BÁO CÁO TÀI CHÍNH & P&L SÀN</span>
-          </div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">
-            Báo Cáo Doanh Thu, Chiết Khấu & Lợi Nhuận Thuần
-          </h1>
-          <p className="font-body-md text-body-md text-secondary">
+
+          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">Báo cáo tài chính</h1>
+          <ViewGuide><p className="font-body-md text-body-md text-secondary">
             Đối soát tổng hợp GMV toàn hệ thống, khấu trừ cổng PayOS NAPAS 24/7 và quỹ bảo hiểm cứu hộ.
-          </p>
+          </p></ViewGuide>
         </div>
 
         <div className="flex items-center gap-space-sm flex-wrap">
@@ -175,7 +168,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
           <div className="flex items-center justify-between mb-space-md border-b border-surface-container pb-space-sm">
             <div>
               <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-                Bảng Báo Cáo Kết Quả Hoạt Động (P&L Breakdown)
+                Kết quả kinh doanh
               </h2>
               <span className="font-body-sm text-body-sm text-secondary">
                 Dữ liệu đồng bộ trực tiếp từ cổng PayOS NAPAS 24/7 & hệ thống lệnh cứu hộ
@@ -249,7 +242,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
         <div className="lg:col-span-5 space-y-space-lg">
           <div className="bg-surface-container-lowest rounded-xl border border-surface-container p-space-lg shadow-xs">
             <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface mb-1">
-              Phân Bổ Doanh Thu Theo Dịch Vụ
+              Doanh thu theo dịch vụ
             </h3>
             <p className="font-body-sm text-body-sm text-secondary mb-4">
               Dịch vụ cơ động xử lý bugi tại chỗ chiếm tỷ trọng cao nhất trong mùa triều cường
@@ -276,7 +269,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
 
           <div className="bg-surface-container-lowest rounded-xl border border-surface-container p-space-lg shadow-xs">
             <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface mb-1">
-              Tăng Trưởng Qua Các Tháng Ngập
+              Tăng trưởng theo tháng
             </h3>
             <p className="font-body-sm text-body-sm text-secondary mb-3">
               Xu hướng tăng vọt vào tháng 10 & 11 khi triều cường Mễ Cốc, Trần Xuân Soạn đạt đỉnh

@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { GarageApplicant } from '../../types';
 
@@ -65,16 +66,14 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-space-sm">
-                <h1 className="font-headline-lg text-headline-lg text-on-surface uppercase tracking-tight font-bold">
-                  Xét Duyệt & Kích Hoạt Hồ Sơ Gara Cứu Hộ
-                </h1>
+                <h1 className="font-headline-lg text-headline-lg text-on-surface uppercase tracking-tight font-bold">Duyệt hồ sơ gara</h1>
                 <span className="px-space-sm py-0.5 rounded font-label-sm text-label-sm bg-error-container text-on-error-container font-bold animate-pulse">
-                  SLA THẨM ĐỊNH &lt; 30P
+                  Duyệt trong 30 phút
                 </span>
               </div>
-              <p className="font-body-sm text-body-sm text-secondary">
+              <ViewGuide><p className="font-body-sm text-body-sm text-secondary">
                 Thẩm định danh tính eKYC, chứng chỉ chuyên môn thủy kích, phạm vi chi nhánh và năng lực kéo xe ngập lụt đô thị.
-              </p>
+              </p></ViewGuide>
             </div>
           </div>
 
@@ -424,7 +423,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                   <div className="flex items-center gap-space-xs">
                     <span className="material-symbols-outlined text-primary text-[20px]">storefront</span>
                     <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                      Mạng Lưới Chi Nhánh Tiếp Nhận Xe Đăng Ký ({selectedApplicant.branches.length || 3} Điểm)
+                      Chi nhánh đăng ký ({selectedApplicant.branches.length || 3} Điểm)
                     </h3>
                   </div>
                   <p className="font-body-sm text-body-sm text-secondary">
@@ -480,7 +479,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                 <div className="flex items-center gap-space-xs">
                   <span className="material-symbols-outlined text-primary text-[20px]">local_shipping</span>
                   <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                    Trang Thiết Bị Cơ Động & Cứu Hộ Thủy Kích Khẩn Cấp
+                    Thiết bị cứu hộ
                   </h3>
                 </div>
                 <span className="font-data-mono text-data-mono text-secondary">4 Hạng mục thiết bị đạt chuẩn</span>

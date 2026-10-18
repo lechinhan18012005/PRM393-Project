@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
@@ -28,16 +29,19 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text(
-          'Thợ Cứu Hộ Cơ Động',
+          'Ca làm việc',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
         foregroundColor: AppColors.onSurface,
         actions: [
           IconButton(
-            icon: const Icon(Icons.grid_view_rounded, color: AppColors.primaryOrange),
-            tooltip: 'Danh sách 22 màn hình',
+            icon: const Icon(
+              Icons.grid_view_rounded,
+              color: AppColors.primaryOrange,
+            ),
+            tooltip: 'Khám phá ứng dụng',
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const DemoCatalogScreen()),
@@ -67,10 +71,14 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: _isOnline ? const Color(0xFFE8F5E9) : Colors.grey.shade100,
+                color: _isOnline
+                    ? const Color(0xFFE8F5E9)
+                    : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: _isOnline ? Colors.green.shade300 : Colors.grey.shade300,
+                  color: _isOnline
+                      ? Colors.green.shade300
+                      : Colors.grey.shade300,
                 ),
               ),
               child: Row(
@@ -88,11 +96,13 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        _isOnline ? 'ĐANG TRỰC CHIẾN (ONLINE)' : 'NGHỈ TẠM THỜI (OFFLINE)',
+                        _isOnline ? 'Đang nhận đơn' : 'Tạm nghỉ',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: _isOnline ? Colors.green.shade900 : Colors.grey.shade700,
+                          color: _isOnline
+                              ? Colors.green.shade900
+                              : Colors.grey.shade700,
                         ),
                       ),
                     ],
@@ -115,7 +125,9 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
             GestureDetector(
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const MechanicShiftScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const MechanicShiftScreen(),
+                  ),
                 );
               },
               child: Container(
@@ -124,7 +136,11 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: const [
-                    BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2)),
+                    BoxShadow(
+                      color: Color(0x05000000),
+                      blurRadius: 6,
+                      offset: Offset(0, 2),
+                    ),
                   ],
                 ),
                 child: Row(
@@ -132,7 +148,11 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
                     const CircleAvatar(
                       radius: 24,
                       backgroundColor: AppColors.surfaceContainerHigh,
-                      child: Icon(Icons.engineering, color: AppColors.primaryOrange, size: 28),
+                      child: Icon(
+                        Icons.engineering,
+                        color: AppColors.primaryOrange,
+                        size: 28,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -141,48 +161,27 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
                         children: [
                           Text(
                             user?.fullName ?? 'Phạm Thợ Cứu Hộ',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
                           ),
                           const SizedBox(height: 2),
                           const Text(
                             'Chi nhánh Q.7 • Gara Toàn Thắng • ⭐ 4.9 (128 đơn)',
-                            style: TextStyle(fontSize: 12, color: AppColors.secondary),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.secondary,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.secondary),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Demo Shortcut Banner
-            GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const DemoCatalogScreen()),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryOrange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.primaryOrange),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.widgets, color: AppColors.primaryOrange, size: 22),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Xem trọn bộ 22 màn hình nghiệp vụ tĩnh (Catalog Demo)',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryOrange),
-                      ),
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: AppColors.secondary,
                     ),
-                    Icon(Icons.arrow_forward, color: AppColors.primaryOrange, size: 16),
                   ],
                 ),
               ),
@@ -194,7 +193,9 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
               GestureDetector(
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const IncomingDispatchScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const IncomingDispatchScreen(),
+                    ),
                   );
                 },
                 child: Container(
@@ -202,26 +203,44 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.primaryOrange, width: 1.5),
+                    border: Border.all(
+                      color: AppColors.primaryOrange,
+                      width: 1.5,
+                    ),
                     boxShadow: const [
-                      BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4)),
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
                     ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.spaceBetween,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryOrange.withValues(alpha: 0.15),
+                              color: AppColors.primaryOrange.withValues(
+                                alpha: 0.15,
+                              ),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: const Row(
                               children: [
-                                Icon(Icons.timer, size: 14, color: AppColors.primaryOrange),
+                                Icon(
+                                  Icons.timer,
+                                  size: 14,
+                                  color: AppColors.primaryOrange,
+                                ),
                                 SizedBox(width: 4),
                                 Text(
                                   'Còn 42s phản hồi',
@@ -236,14 +255,21 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
                           ),
                           const Text(
                             'Cách bạn 1.1 km',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.secondary),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.secondary,
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
                       const Text(
                         'Yêu cầu cứu hộ khẩn cấp #SOS-8924',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       const Text(
@@ -253,22 +279,33 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
                       const SizedBox(height: 4),
                       const Text(
                         'Vị trí: Số 148 Trần Xuân Soạn, P. Tân Hưng, Q.7',
-                        style: TextStyle(fontSize: 12, color: AppColors.secondary, fontStyle: FontStyle.italic),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.secondary,
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
                       const SizedBox(height: 14),
                       ElevatedButton(
                         onPressed: () {
                           Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const IncomingDispatchScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const IncomingDispatchScreen(),
+                            ),
                           );
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryOrange,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
-                        child: const Text('Mở Chuông Nhận Đơn (45s)', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: const Text(
+                          'Xem yêu cầu',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ],
                   ),
@@ -279,34 +316,48 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
 
             // Quick Tool Shortcuts
             const Text(
-              'CÔNG CỤ THỢ TẠI HIỆN TRƯỜNG',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.outline),
+              'Công cụ',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.outline,
+              ),
             ),
             const SizedBox(height: 10),
             ListTile(
               tileColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               leading: const Icon(Icons.receipt_long, color: AppColors.primary),
               title: const Text('Lập Báo Giá Hiện Trường (V1/V2)'),
               subtitle: const Text('Chọn dịch vụ sấy bugi, xả nước, thay dầu'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 14),
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const QuotationBuilderScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const QuotationBuilderScreen(),
+                  ),
                 );
               },
             ),
             const SizedBox(height: 8),
             ListTile(
               tileColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               leading: const Icon(Icons.qr_code, color: AppColors.tertiary),
-              title: const Text('Thanh Toán PayOS VietQR'),
-              subtitle: const Text('Tạo mã VietQR động để khách quét thanh toán'),
+              title: const Text('Thanh toán'),
+              subtitle: const Text(
+                'Tạo mã VietQR động để khách quét thanh toán',
+              ),
               trailing: const Icon(Icons.arrow_forward_ios, size: 14),
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const VietQRPaymentScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const VietQRPaymentScreen(),
+                  ),
                 );
               },
             ),

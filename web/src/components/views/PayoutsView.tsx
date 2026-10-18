@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { PayoutItem } from '../../types';
 
@@ -79,17 +80,15 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ payouts, onShowToast }
             <span className="text-primary font-bold">QUẢN LÝ GIẢI NGÂN</span>
           </nav>
           <div className="flex items-center gap-space-md flex-wrap">
-            <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">
-              Xét Duyệt Yêu Cầu Rút Tiền Ví Gara & Đội Cứu Hộ
-            </h1>
+            <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">Yêu cầu rút tiền</h1>
             <span className="px-space-sm py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-bold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse"></span>
               7 LỆNH CHỜ DUYỆT
             </span>
           </div>
-          <p className="font-body-md text-body-md text-secondary">
+          <ViewGuide><p className="font-body-md text-body-md text-secondary">
             Thẩm định đối chiếu số dư ký quỹ bảo hành, hồ sơ pháp lý eKYC và kích hoạt lệnh chuyển khoản tự động Napas247.
-          </p>
+          </p></ViewGuide>
         </div>
 
         {/* Quick Metric Cards & Fast Actions */}

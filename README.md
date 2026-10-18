@@ -53,8 +53,6 @@ Backend đọc `backend/.env` khi chạy từ thư mục gốc dự án (Intelli
 
 Sao chép `backend/.env.example` thành `backend/.env` rồi đặt URL, username, password PostgreSQL và khóa JWT riêng. Không commit `.env`. `JWT_SECRET` phải là khóa ngẫu nhiên Base64 có ít nhất 32 byte. Backend mặc định không seed tài khoản và chỉ chấp nhận CORS origins trong `CORS_ALLOWED_ORIGINS`.
 
-Flyway tạo schema mới qua `V1__create_users.sql`; Hibernate chỉ kiểm tra schema (`ddl-auto: validate`). Nếu đang dùng database cũ do Hibernate `update` tạo, cần sao lưu và baseline schema theo quy trình Flyway trước khi chạy phiên bản mới.
-
 ## Kiểm tra
 
 ### Thử API bằng Swagger

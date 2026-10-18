@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/constants/app_colors.dart';
 
 class VehicleProfileScreen extends StatelessWidget {
@@ -9,16 +10,26 @@ class VehicleProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text('Hồ Sơ Phương Tiện Xe Máy', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Xe của tôi',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
-        elevation: 0.5,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('DANH SÁCH XE MÁY ĐÃ ĐĂNG KÝ (1 KHÁCH - N XE)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.outline)),
+            const Text(
+              'DANH SÁCH XE MÁY ĐÃ ĐĂNG KÝ (1 KHÁCH - N XE)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppColors.outline,
+              ),
+            ),
             const SizedBox(height: 10),
 
             // Bike 1: Default SH
@@ -54,14 +65,24 @@ class VehicleProfileScreen extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mở form đăng ký thêm xe máy mới')),
+                  const SnackBar(
+                    content: Text('Mở form đăng ký thêm xe máy mới'),
+                  ),
                 );
               },
               icon: const Icon(Icons.add, color: AppColors.primaryOrange),
-              label: const Text('+ Thêm Xe Máy Mới', style: TextStyle(color: AppColors.primaryOrange, fontWeight: FontWeight.bold)),
+              label: const Text(
+                '+ Thêm Xe Máy Mới',
+                style: TextStyle(
+                  color: AppColors.primaryOrange,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -82,38 +103,86 @@ class VehicleProfileScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDefault ? AppColors.primaryOrange : Colors.grey.shade300, width: isDefault ? 1.5 : 1),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+        border: Border.all(
+          color: isDefault ? AppColors.primaryOrange : Colors.grey.shade300,
+          width: isDefault ? 1.5 : 1,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x05000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
             children: [
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  const Icon(Icons.two_wheeler, color: AppColors.primaryOrange, size: 26),
+                  const Icon(
+                    Icons.two_wheeler,
+                    color: AppColors.primaryOrange,
+                    size: 26,
+                  ),
                   const SizedBox(width: 8),
-                  Text(brand, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(
+                    brand,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
                 ],
               ),
               if (isDefault)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: AppColors.primaryOrange, borderRadius: BorderRadius.circular(6)),
-                  child: const Text('Mặc định', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryOrange,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Mặc định',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: 8),
-          Text('Biển số: $plate • Loại: $type', style: const TextStyle(fontSize: 12, color: AppColors.secondary)),
+          Text(
+            'Biển số: $plate • Loại: $type',
+            style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+          ),
           const SizedBox(height: 4),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               const Icon(Icons.water, size: 14, color: Colors.blue),
               const SizedBox(width: 4),
-              Text(airIntakeHeight, style: const TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold)),
+              Text(
+                airIntakeHeight,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
         ],

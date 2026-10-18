@@ -18,7 +18,7 @@ export const screenModule: Record<ScreenId, ModuleType> = {
 };
 
 export const roleModules: Record<Role, ModuleType[]> = {
-  ADMIN: ['admin'],
+  ADMIN: ['admin', 'staff', 'owner'],
   STAFF: ['staff'],
   GARAGE_OWNER: ['owner'],
   FIELD_MECHANIC: [],
