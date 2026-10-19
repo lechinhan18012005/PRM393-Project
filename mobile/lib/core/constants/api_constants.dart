@@ -21,4 +21,23 @@ class ApiConstants {
   static String get registerUrl => '$baseUrl/auth/register';
   static String get refreshTokenUrl => '$baseUrl/auth/refresh';
   static String get currentUserUrl => '$baseUrl/auth/me';
+
+  // Garage & Branch Endpoints (Luồng 2)
+  static String get garageRegisterUrl => '$baseUrl/garages/register';
+  static String get myGarageUrl => '$baseUrl/garages/me';
+  static String get garageBranchesUrl => '$baseUrl/garages/branches';
+  static String get garageServicesUrl => '$baseUrl/garages/services';
+
+  // Mechanic Endpoints (Luồng 2)
+  static String get garageMechanicsUrl => '$baseUrl/garages/mechanics';
+  static String get mechanicProfileUrl => '$baseUrl/mechanics/me/profile';
+  static String get mechanicStatusUrl => '$baseUrl/mechanics/me/status';
+
+  // Flood Map Endpoints (Luồng 8)
+  static String get floodReportsUrl => '$baseUrl/flood-reports';
+  static String get activeFloodReportsUrl => '$baseUrl/flood-reports/active';
+
+  // Media Upload (Cloudinary)
+  static String get uploadImageUrl => '$baseUrl/upload/image';
 }
+

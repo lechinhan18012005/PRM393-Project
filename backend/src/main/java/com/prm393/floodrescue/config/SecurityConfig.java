@@ -52,6 +52,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/refresh",
+                                "/api/v1/flood-reports/active",
+                                "/api/v1/garages/*/services",
+                                "/api/v1/upload/**",
                                 "/favicon.ico",
                                 "/error"
                         ).permitAll()

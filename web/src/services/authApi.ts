@@ -1,6 +1,16 @@
 import { ApiResponse, AuthResponse, LoginPayload, RegisterPayload, User } from '../types/auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1/auth';
+const rawAuthUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080')
+  .trim()
+  .replace(/\/$/, '');
+
+const getAuthBaseUrl = () => {
+  if (rawAuthUrl.endsWith('/auth')) return rawAuthUrl;
+  if (rawAuthUrl.endsWith('/api/v1')) return `${rawAuthUrl}/auth`;
+  return `${rawAuthUrl}/api/v1/auth`;
+};
+
+const API_BASE_URL = getAuthBaseUrl();
 
 const TOKEN_KEY = 'floodrescue_access_token';
 const REFRESH_TOKEN_KEY = 'floodrescue_refresh_token';

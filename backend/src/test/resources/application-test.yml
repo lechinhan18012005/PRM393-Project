@@ -11,3 +11,9 @@ jwt:
 app:
   demo:
     seed-users: false
+
+cloudinary:
+  cloud-name: demo
+  api-key: demo
+  api-secret: demo
+
