@@ -1,6 +1,7 @@
 package com.prm393.floodrescue.features.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,4 +18,11 @@ public class LoginRequest {
 
     @NotBlank(message = "Password is required")
     private String password;
+
+    private ClientPlatform platform;
+
+    public enum ClientPlatform {
+        MOBILE,
+        WEB
+    }
 }

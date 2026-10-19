@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
+
 import '../core/models/user_model.dart';
 import '../core/services/auth_service.dart';
 
 class AuthProvider with ChangeNotifier {
-  final AuthService _authService = AuthService();
+  final AuthService _authService;
+  AuthProvider({AuthService? authService})
+    : _authService = authService ?? AuthService();
 
   UserModel? _user;
   bool _isLoading = false;
@@ -89,15 +92,6 @@ class AuthProvider with ChangeNotifier {
     }
     String identifier;
     switch (role) {
-      case 'ADMIN':
-        identifier = 'admin@floodrescue.vn';
-        break;
-      case 'STAFF':
-        identifier = 'staff@floodrescue.vn';
-        break;
-      case 'GARAGE_OWNER':
-        identifier = 'garage@floodrescue.vn';
-        break;
       case 'FIELD_MECHANIC':
         identifier = 'mechanic@floodrescue.vn';
         break;

@@ -2,6 +2,10 @@ import { ModuleType, ScreenId } from './types';
 import { Role } from './types/auth';
 
 export const screenModule: Record<ScreenId, ModuleType> = {
+  'staff-accounts': 'admin',
+  'garage-team': 'owner',
+  'garage-finance': 'owner',
+  'garage-transport': 'owner',
   overview: 'admin',
   'commission-settings': 'admin',
   'payos-reconciliation': 'admin',
@@ -14,15 +18,15 @@ export const screenModule: Record<ScreenId, ModuleType> = {
   disputes: 'staff',
   monitoring: 'staff',
   'owner-dashboard': 'owner',
-  services: 'owner',
+  services: 'owner'
 };
 
 export const roleModules: Record<Role, ModuleType[]> = {
-  ADMIN: ['admin', 'staff', 'owner'],
+  ADMIN: ['admin', 'staff'],
   STAFF: ['staff'],
   GARAGE_OWNER: ['owner'],
   FIELD_MECHANIC: [],
-  CUSTOMER: [],
+  CUSTOMER: []
 };
 
 export const canAccessModule = (role: Role, module: ModuleType) => roleModules[role].includes(module);

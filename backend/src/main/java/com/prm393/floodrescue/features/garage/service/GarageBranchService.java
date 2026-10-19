@@ -11,8 +11,10 @@ import com.prm393.floodrescue.features.garage.entity.GarageBranch;
 import com.prm393.floodrescue.features.garage.repository.GarageBranchRepository;
 import com.prm393.floodrescue.features.garage.repository.GarageRepository;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,8 +31,14 @@ public class GarageBranchService {
 
     @Transactional(readOnly = true)
     public List<GarageBranchResponse> getBranchesByCurrentUser(User user) {
-        Garage garage = garageRepository.findByOwnerId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(user.getId())
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Chưa tìm thấy garage của tài khoản này!"));
+        GarageAccess.requireApproved(garage);
         return branchRepository.findByGarageIdOrderByCreatedAtAsc(garage.getId()).stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -45,19 +53,29 @@ public class GarageBranchService {
 
     @Transactional
     public GarageBranchResponse createBranch(User user, CreateBranchRequest request) {
-        Garage garage = garageRepository.findByOwnerId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(user.getId())
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Chưa tìm thấy garage của tài khoản này!"));
+        GarageAccess.requireApproved(garage);
 
-        GarageBranch branch = GarageBranch.builder()
-                .garage(garage)
-                .branchName(request.getBranchName())
-                .address(request.getAddress())
-                .latitude(request.getLatitude())
-                .longitude(request.getLongitude())
-                .phoneNumber(request.getPhoneNumber() != null ? request.getPhoneNumber() : garage.getPhone())
-                .rescueVehicles(request.getRescueVehicles())
-                .operatingStatus(BranchStatus.OPEN)
-                .build();
+        GarageBranch branch =
+                GarageBranch.builder()
+                        .garage(garage)
+                        .branchName(request.getBranchName())
+                        .address(request.getAddress())
+                        .latitude(request.getLatitude())
+                        .longitude(request.getLongitude())
+                        .phoneNumber(
+                                request.getPhoneNumber() != null
+                                        ? request.getPhoneNumber()
+                                        : garage.getPhone())
+                        .rescueVehicles(request.getRescueVehicles())
+                        .operatingStatus(BranchStatus.OPEN)
+                        .build();
 
         branch = branchRepository.save(branch);
         log.info("New branch created with id: {} for garage: {}", branch.getId(), garage.getId());
@@ -65,15 +83,28 @@ public class GarageBranchService {
     }
 
     @Transactional
-    public GarageBranchResponse updateBranch(User user, Long branchId, UpdateBranchRequest request) {
-        Garage garage = garageRepository.findByOwnerId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+    public GarageBranchResponse updateBranch(
+            User user, Long branchId, UpdateBranchRequest request) {
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(user.getId())
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Chưa tìm thấy garage của tài khoản này!"));
+        GarageAccess.requireApproved(garage);
 
-        GarageBranch branch = branchRepository.findById(branchId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chi nhánh với id: " + branchId));
+        GarageBranch branch =
+                branchRepository
+                        .findById(branchId)
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Không tìm thấy chi nhánh với id: " + branchId));
 
         if (!branch.getGarage().getId().equals(garage.getId())) {
-            throw new ResourceNotFoundException("Chi nhánh không thuộc quyền quản lý của garage bạn!");
+            throw new ResourceNotFoundException(
+                    "Chi nhánh không thuộc quyền quản lý của garage bạn!");
         }
 
         if (request.getBranchName() != null) branch.setBranchName(request.getBranchName());
@@ -81,8 +112,10 @@ public class GarageBranchService {
         if (request.getLatitude() != null) branch.setLatitude(request.getLatitude());
         if (request.getLongitude() != null) branch.setLongitude(request.getLongitude());
         if (request.getPhoneNumber() != null) branch.setPhoneNumber(request.getPhoneNumber());
-        if (request.getRescueVehicles() != null) branch.setRescueVehicles(request.getRescueVehicles());
-        if (request.getOperatingStatus() != null) branch.setOperatingStatus(request.getOperatingStatus());
+        if (request.getRescueVehicles() != null)
+            branch.setRescueVehicles(request.getRescueVehicles());
+        if (request.getOperatingStatus() != null)
+            branch.setOperatingStatus(request.getOperatingStatus());
 
         branch = branchRepository.save(branch);
         return mapToResponse(branch);
@@ -90,14 +123,26 @@ public class GarageBranchService {
 
     @Transactional
     public GarageBranchResponse toggleBranchStatus(User user, Long branchId, BranchStatus status) {
-        Garage garage = garageRepository.findByOwnerId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(user.getId())
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Chưa tìm thấy garage của tài khoản này!"));
+        GarageAccess.requireApproved(garage);
 
-        GarageBranch branch = branchRepository.findById(branchId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chi nhánh với id: " + branchId));
+        GarageBranch branch =
+                branchRepository
+                        .findById(branchId)
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Không tìm thấy chi nhánh với id: " + branchId));
 
         if (!branch.getGarage().getId().equals(garage.getId())) {
-            throw new ResourceNotFoundException("Chi nhánh không thuộc quyền quản lý của garage bạn!");
+            throw new ResourceNotFoundException(
+                    "Chi nhánh không thuộc quyền quản lý của garage bạn!");
         }
 
         branch.setOperatingStatus(status);

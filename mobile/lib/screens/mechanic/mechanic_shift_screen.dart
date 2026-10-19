@@ -96,15 +96,22 @@ class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: isOnline ? Colors.green.shade50 : Colors.grey.shade100,
+                          color: isOnline
+                              ? Colors.green.shade50
+                              : Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           isOnline ? 'ONLINE' : 'OFFLINE',
                           style: TextStyle(
-                            color: isOnline ? Colors.green.shade800 : Colors.grey.shade700,
+                            color: isOnline
+                                ? Colors.green.shade800
+                                : Colors.grey.shade700,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
@@ -115,11 +122,17 @@ class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
                   const SizedBox(height: 6),
                   Text(
                     'Thợ phụ trách: ${profile?.fullName ?? "Phạm Tuấn Anh"} (Mã: #${profile?.username ?? "TECH-01"})',
-                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary,
+                    ),
                   ),
                   Text(
                     'Chi nhánh: ${profile?.branchName ?? "Chi nhánh Q.7"} • ${profile?.branchAddress ?? "Huỳnh Tấn Phát"}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -141,7 +154,12 @@ class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
               final s = entry.value;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: _buildShiftCard(idx, s['title']!, s['desc']!, s['team']!),
+                child: _buildShiftCard(
+                  idx,
+                  s['title']!,
+                  s['desc']!,
+                  s['team']!,
+                ),
               );
             }),
 
@@ -213,11 +231,11 @@ class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
               ElevatedButton.icon(
                 onPressed: () async {
                   final targetStatus = isOnline ? 'OFFLINE' : 'AVAILABLE';
-                  final success = await context.read<MechanicProvider>().toggleStatus(
-                        status: targetStatus,
-                        latitude: 10.7423,
-                        longitude: 106.7021,
-                      );
+                  await context.read<MechanicProvider>().toggleStatus(
+                    status: targetStatus,
+                    latitude: 10.7423,
+                    longitude: 106.7021,
+                  );
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -226,18 +244,27 @@ class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
                               ? 'Điểm danh vào ca trực chiến thành công! Vị trí GPS đã bật sẵn sàng nhận đơn.'
                               : 'Đã chuyển sang trạng thái Nghỉ trực (OFFLINE).',
                         ),
-                        backgroundColor: targetStatus == 'AVAILABLE' ? Colors.green : Colors.grey.shade800,
+                        backgroundColor: targetStatus == 'AVAILABLE'
+                            ? Colors.green
+                            : Colors.grey.shade800,
                       ),
                     );
                   }
                 },
-                icon: Icon(isOnline ? Icons.power_settings_new : Icons.radar, size: 20),
+                icon: Icon(
+                  isOnline ? Icons.power_settings_new : Icons.radar,
+                  size: 20,
+                ),
                 label: Text(
-                  isOnline ? 'KẾT THÚC CA TRỰC (TẮT ONLINE)' : 'ĐIỂM DANH VÀO CA TRỰC CHIẾN',
+                  isOnline
+                      ? 'KẾT THÚC CA TRỰC (TẮT ONLINE)'
+                      : 'ĐIỂM DANH VÀO CA TRỰC CHIẾN',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isOnline ? Colors.grey.shade800 : AppColors.primaryOrange,
+                  backgroundColor: isOnline
+                      ? Colors.grey.shade800
+                      : AppColors.primaryOrange,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
