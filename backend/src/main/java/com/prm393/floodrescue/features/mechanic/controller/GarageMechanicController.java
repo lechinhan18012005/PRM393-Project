@@ -6,6 +6,10 @@ import com.prm393.floodrescue.features.mechanic.dto.AllocateBranchRequest;
 import com.prm393.floodrescue.features.mechanic.dto.MechanicStaffResponse;
 import com.prm393.floodrescue.features.mechanic.service.MechanicStaffService;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
@@ -21,6 +25,10 @@ import java.util.List;
 @RequestMapping("/api/v1/garages/mechanics")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('GARAGE_OWNER')")
+@Tag(
+        name = "Garage Mechanic Management",
+        description = "Quản lý nhân viên thợ cứu hộ và phân bổ chi nhánh (Garage Owner)")
+@SecurityRequirement(name = "bearerAuth")
 public class GarageMechanicController {
 
     private final MechanicStaffService mechanicService;
@@ -36,6 +44,7 @@ public class GarageMechanicController {
     }
 
     @GetMapping
+    @Operation(summary = "UC-05: Lấy danh sách thợ sửa xe thuộc quyền quản lý của Garage")
     public ResponseEntity<ApiResponse<List<MechanicStaffResponse>>> getMyMechanics(
             @AuthenticationPrincipal User owner) {
         List<MechanicStaffResponse> list = mechanicService.getMechanicsByGarage(owner);
@@ -43,6 +52,7 @@ public class GarageMechanicController {
     }
 
     @PatchMapping("/{id}/allocate")
+    @Operation(summary = "UC-05: Phân bổ hoặc thay đổi chi nhánh làm việc cho thợ")
     public ResponseEntity<ApiResponse<MechanicStaffResponse>> allocateBranch(
             @AuthenticationPrincipal User owner,
             @PathVariable("id") Long id,

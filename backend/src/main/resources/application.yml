@@ -29,7 +29,7 @@ jwt:
 
 app:
   demo:
-    seed-users: false
+    seed-users: ${APP_DEMO_SEED_USERS:false}
 
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}

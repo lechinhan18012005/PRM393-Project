@@ -28,4 +28,5 @@ public class GarageResponse {
     private LocalDateTime createdAt;
     private int branchCount;
     private int mechanicCount;
+    private String address;
 }

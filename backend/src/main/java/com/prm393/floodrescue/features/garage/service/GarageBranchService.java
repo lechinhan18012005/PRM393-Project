@@ -145,7 +145,13 @@ public class GarageBranchService {
                     "Chi nhánh không thuộc quyền quản lý của garage bạn!");
         }
 
-        branch.setOperatingStatus(status);
+        BranchStatus targetStatus =
+                status != null
+                        ? status
+                        : (branch.getOperatingStatus() == BranchStatus.OPEN
+                                ? BranchStatus.CLOSED_MAINTENANCE
+                                : BranchStatus.OPEN);
+        branch.setOperatingStatus(targetStatus);
         branch = branchRepository.save(branch);
         return mapToResponse(branch);
     }

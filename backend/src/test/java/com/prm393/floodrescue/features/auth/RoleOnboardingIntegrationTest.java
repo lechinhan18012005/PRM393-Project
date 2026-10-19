@@ -328,4 +328,105 @@ class RoleOnboardingIntegrationTest {
         call(get("/api/v1/garages/branches").header("Authorization", ownerAuth), null, 403);
         call(get("/api/v1/admin/staff").header("Authorization", staffAuth), null, 403);
     }
+
+    @Test
+    void readingOwnerProfileNeverCreatesAnApprovedGarage() throws Exception {
+        User owner = user(Role.GARAGE_OWNER);
+        String auth = "Bearer " + token(owner);
+        long garageCount = garages.count(), branchCount = branches.count();
+        call(get("/api/v1/garages/me").header("Authorization", auth), null, 404);
+        call(get("/api/v1/garages/branches").header("Authorization", auth), null, 404);
+        assertEquals(garageCount, garages.count());
+        assertEquals(branchCount, branches.count());
+    }
+
+    @Test
+    void incomingBranchTogglePreservesApprovalAndOwnershipChecks() throws Exception {
+        User owner = user(Role.GARAGE_OWNER), other = user(Role.GARAGE_OWNER);
+        Garage garage = garage(owner, GarageStatus.APPROVED);
+        GarageBranch branch = branch(garage);
+        String ownerAuth = "Bearer " + token(owner);
+        JsonNode response =
+                call(
+                        patch("/api/v1/garages/branches/" + branch.getId() + "/status")
+                                .header("Authorization", ownerAuth),
+                        null,
+                        200);
+        assertEquals("CLOSED_MAINTENANCE", response.path("operatingStatus").asText());
+        response =
+                call(
+                        patch("/api/v1/garages/branches/" + branch.getId() + "/status?status=OPEN")
+                                .header("Authorization", ownerAuth),
+                        null,
+                        200);
+        assertEquals("OPEN", response.path("operatingStatus").asText());
+        garage(other, GarageStatus.APPROVED);
+        call(
+                patch("/api/v1/garages/branches/" + branch.getId() + "/status")
+                        .header("Authorization", "Bearer " + token(other)),
+                null,
+                404);
+        garage.setStatus(GarageStatus.PENDING);
+        garages.save(garage);
+        call(
+                patch("/api/v1/garages/branches/" + branch.getId() + "/status")
+                        .header("Authorization", ownerAuth),
+                null,
+                403);
+    }
+
+    @Test
+    void incomingStaffDetailApisRemainRestrictedAndPendingNotesWork() throws Exception {
+        User owner = user(Role.GARAGE_OWNER),
+                staff = user(Role.STAFF),
+                customer = user(Role.CUSTOMER);
+        Garage garage = garage(owner, GarageStatus.PENDING);
+        GarageBranch branch = branch(garage);
+        User mechanicUser = user(Role.FIELD_MECHANIC);
+        mechanics.save(
+                MechanicStaff.builder().user(mechanicUser).garage(garage).branch(branch).build());
+        String staffAuth = "Bearer " + token(staff);
+        JsonNode response =
+                call(
+                        get("/api/v1/staff/garages/" + garage.getId())
+                                .header("Authorization", staffAuth),
+                        null,
+                        200);
+        assertEquals(branch.getAddress(), response.path("address").asText());
+        response =
+                call(
+                        get("/api/v1/staff/garages/" + garage.getId() + "/branches")
+                                .header("Authorization", staffAuth),
+                        null,
+                        200);
+        assertEquals(branch.getId().longValue(), response.get(0).path("id").asLong());
+        response =
+                call(
+                        get("/api/v1/staff/garages/" + garage.getId() + "/mechanics")
+                                .header("Authorization", staffAuth),
+                        null,
+                        200);
+        assertEquals(mechanicUser.getId().longValue(), response.get(0).path("userId").asLong());
+        for (User denied : List.of(owner, customer)) {
+            String deniedAuth = "Bearer " + token(denied);
+            call(
+                    get("/api/v1/staff/garages/" + garage.getId() + "/branches")
+                            .header("Authorization", deniedAuth),
+                    null,
+                    403);
+            call(
+                    get("/api/v1/staff/garages/" + garage.getId() + "/mechanics")
+                            .header("Authorization", deniedAuth),
+                    null,
+                    403);
+        }
+        response =
+                call(
+                        patch("/api/v1/staff/garages/" + garage.getId() + "/moderate")
+                                .header("Authorization", staffAuth),
+                        Map.of("status", "PENDING", "note", "Review in progress"),
+                        200);
+        assertEquals("PENDING", response.path("status").asText());
+        assertEquals("Review in progress", response.path("rejectionReason").asText());
+    }
 }

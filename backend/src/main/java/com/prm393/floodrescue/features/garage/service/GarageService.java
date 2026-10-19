@@ -167,7 +167,8 @@ public class GarageService {
                                         new ResourceNotFoundException(
                                                 "Không tìm thấy garage với id: " + garageId));
 
-        if (request.getStatus() == GarageStatus.PENDING)
+        if (request.getStatus() == GarageStatus.PENDING
+                && garage.getStatus() != GarageStatus.PENDING)
             throw new BadRequestException("Dùng quy trình nộp lại hồ sơ để chuyển về chờ duyệt");
         if (request.getStatus() == GarageStatus.APPROVED
                 && (garage.getBusinessLicenseUrl() == null
@@ -191,7 +192,9 @@ public class GarageService {
     }
 
     public GarageResponse mapToResponse(Garage garage) {
-        int branchCount = branchRepository.findByGarageIdOrderByCreatedAtAsc(garage.getId()).size();
+        List<GarageBranch> branches =
+                branchRepository.findByGarageIdOrderByCreatedAtAsc(garage.getId());
+        int branchCount = branches.size();
         int mechanicCount = (int) mechanicRepository.countByGarageId(garage.getId());
 
         return GarageResponse.builder()
@@ -207,6 +210,7 @@ public class GarageService {
                 .walletBalance(garage.getWalletBalance())
                 .rejectionReason(garage.getRejectionReason())
                 .createdAt(garage.getCreatedAt())
+                .address(branches.isEmpty() ? null : branches.get(0).getAddress())
                 .branchCount(branchCount)
                 .mechanicCount(mechanicCount)
                 .build();
