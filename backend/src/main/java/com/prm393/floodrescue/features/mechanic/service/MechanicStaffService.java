@@ -93,6 +93,13 @@ public class MechanicStaffService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<MechanicStaffResponse> getMechanicsByGarageId(Long garageId) {
+        return mechanicRepository.findByGarageIdOrderByCreatedAtDesc(garageId).stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
     @Transactional
     public MechanicStaffResponse allocateBranch(User owner, Long staffId, AllocateBranchRequest request) {
         Garage garage = garageRepository.findByOwnerId(owner.getId())

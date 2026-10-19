@@ -27,78 +27,142 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
     final hotlineCtrl = TextEditingController();
     final vehiclesCtrl = TextEditingController(text: '1 Xe tải nhẹ + 2 Xe máy chuyên dụng');
     final formKey = GlobalKey<FormState>();
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Thêm Chi Nhánh Mới', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Tên chi nhánh *', hintText: 'VD: Chi nhánh 4 (Nhà Bè)'),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Vui lòng nhập tên chi nhánh' : null,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: addressCtrl,
-                  decoration: const InputDecoration(labelText: 'Địa chỉ cụ thể *', hintText: 'VD: 85 Huỳnh Tấn Phát, Nhà Bè'),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Vui lòng nhập địa chỉ' : null,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: hotlineCtrl,
-                  decoration: const InputDecoration(labelText: 'Hotline chi nhánh', hintText: '0903.111.222'),
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: vehiclesCtrl,
-                  decoration: const InputDecoration(labelText: 'Phương tiện cứu hộ', hintText: 'Xe bán tải, xe máy...'),
-                ),
-              ],
-            ),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.add_business, color: AppColors.primaryOrange, size: 22),
+              SizedBox(width: 8),
+              Text(
+                'Thêm Chi Nhánh Mới',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryOrange,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              if (formKey.currentState?.validate() ?? false) {
-                final success = await context.read<GarageProvider>().createBranch(
-                  branchName: nameCtrl.text.trim(),
-                  address: addressCtrl.text.trim(),
-                  latitude: 10.7380 + (0.01 * (nameCtrl.text.length % 5)),
-                  longitude: 106.7210 + (0.01 * (addressCtrl.text.length % 5)),
-                  phoneNumber: hotlineCtrl.text.trim(),
-                  rescueVehicles: vehiclesCtrl.text.trim(),
-                );
-                if (ctx.mounted) Navigator.of(ctx).pop();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(success ? 'Thêm chi nhánh thành công!' : 'Thêm chi nhánh thất bại'),
-                      backgroundColor: success ? Colors.green : Colors.red,
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Tên chi nhánh *',
+                      hintText: 'VD: Trạm Phản Ứng Nhanh Trần Xuân Soạn',
+                      prefixIcon: Icon(Icons.storefront, size: 20),
                     ),
-                  );
-                }
-              }
-            },
-            child: const Text('Lưu Chi Nhánh'),
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Vui lòng nhập tên chi nhánh' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: hotlineCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Hotline chi nhánh *',
+                      hintText: '0903.111.222',
+                      prefixIcon: Icon(Icons.phone, size: 20),
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Vui lòng nhập hotline' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: addressCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Địa chỉ cụ thể *',
+                      hintText: '120 Trần Xuân Soạn, Tân Hưng, Quận 7',
+                      prefixIcon: Icon(Icons.location_on, size: 20),
+                    ),
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Vui lòng nhập địa chỉ' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: vehiclesCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Phương tiện cứu hộ',
+                      hintText: '1 Xe tải nhẹ + 2 Xe máy chuyên dụng',
+                      prefixIcon: Icon(Icons.fire_truck, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Hủy'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryOrange,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (formKey.currentState?.validate() ?? false) {
+                        setDialogState(() {
+                          isSubmitting = true;
+                        });
+
+                        final branchName = nameCtrl.text.trim();
+                        final address = addressCtrl.text.trim();
+                        final phone = hotlineCtrl.text.trim();
+                        final vehicles = vehiclesCtrl.text.trim();
+
+                        final success = await context.read<GarageProvider>().createBranch(
+                              branchName: branchName,
+                              address: address,
+                              latitude: 10.7380 + (0.005 * (branchName.length % 7)),
+                              longitude: 106.7210 + (0.005 * (address.length % 7)),
+                              phoneNumber: phone,
+                              rescueVehicles: vehicles.isNotEmpty
+                                  ? vehicles
+                                  : '1 Xe tải nhẹ + 2 Xe máy chuyên dụng',
+                            );
+
+                        if (ctx.mounted) Navigator.of(ctx).pop();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                success
+                                    ? 'Thêm chi nhánh "$branchName" thành công!'
+                                    : 'Thêm chi nhánh thất bại',
+                              ),
+                              backgroundColor: success ? Colors.green : Colors.red,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text(
+                      'Lưu',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -112,14 +176,16 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text(
-          'Chi nhánh',
+          'Quản lý chi nhánh',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
+        foregroundColor: AppColors.onSurface,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Làm mới danh sách',
             onPressed: () => garageProvider.fetchBranches(),
           ),
         ],
@@ -139,35 +205,50 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                       children: [
                         const Expanded(
                           child: Text(
-                            'Danh sách chi nhánh',
+                            'Danh sách các chi nhánh của gara',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: AppColors.outline,
+                              letterSpacing: 0.3,
                             ),
                           ),
                         ),
-                        Text(
-                          '${branches.length} Chi nhánh',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.secondary),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryContainer.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${branches.length} Chi nhánh',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryOrange,
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
 
                     if (branches.isEmpty)
                       Container(
-                        padding: const EdgeInsets.all(24),
+                        padding: const EdgeInsets.all(28),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Column(
                           children: [
-                            const Icon(Icons.storefront, size: 48, color: Colors.grey),
-                            const SizedBox(height: 8),
-                            const Text('Chưa có chi nhánh nào được cấu hình.', style: TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 12),
+                            const Icon(Icons.storefront, size: 52, color: Colors.grey),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Chưa có chi nhánh nào được cấu hình.',
+                              style: TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                            const SizedBox(height: 14),
                             ElevatedButton.icon(
                               onPressed: () => _showAddBranchDialog(context),
                               icon: const Icon(Icons.add),
@@ -186,7 +267,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                             child: _buildBranchCard(context, b),
                           )),
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
                     ElevatedButton.icon(
                       onPressed: () => _showAddBranchDialog(context),
@@ -202,6 +283,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
+                        elevation: 2,
                       ),
                     ),
                   ],
@@ -212,6 +294,10 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
   }
 
   Widget _buildBranchCard(BuildContext context, BranchModel branch) {
+    final statusColor = branch.isOpen ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    final statusBg = branch.isOpen ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE);
+    final statusBorder = branch.isOpen ? const Color(0xFF81C784) : const Color(0xFFE57373);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -219,8 +305,8 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x05000000),
-            blurRadius: 4,
+            color: Color(0x0A000000),
+            blurRadius: 6,
             offset: Offset(0, 2),
           ),
         ],
@@ -229,6 +315,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
@@ -236,38 +323,57 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                   branch.branchName,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: 15,
+                    color: AppColors.onSurface,
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              // Instant reactive status chip
               InkWell(
-                onTap: () {
-                  context.read<GarageProvider>().toggleBranchStatus(branch.id, !branch.isOpen);
+                onTap: () async {
+                  final newStatus = !branch.isOpen;
+                  final ok = await context
+                      .read<GarageProvider>()
+                      .toggleBranchStatus(branch.id, newStatus);
+                  if (context.mounted && ok) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Đã chuyển "${branch.branchName}" sang: ${newStatus ? "Đang hoạt động" : "Tạm đóng"}',
+                        ),
+                        backgroundColor:
+                            newStatus ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
                 },
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                borderRadius: BorderRadius.circular(8),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: branch.isOpen ? Colors.green.shade50 : Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: branch.isOpen ? Colors.green.shade300 : Colors.red.shade300,
-                    ),
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: statusBorder, width: 1.2),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         branch.isOpen ? Icons.check_circle : Icons.pause_circle,
-                        size: 12,
-                        color: branch.isOpen ? Colors.green.shade800 : Colors.red.shade800,
+                        size: 14,
+                        color: statusColor,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         branch.isOpen ? 'Đang hoạt động' : 'Tạm đóng',
                         style: TextStyle(
-                          color: branch.isOpen ? Colors.green.shade800 : Colors.red.shade800,
-                          fontSize: 10,
+                          color: statusColor,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -277,12 +383,15 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
+
+          // Address
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(
                 Icons.location_on,
-                size: 14,
+                size: 15,
                 color: AppColors.secondary,
               ),
               const SizedBox(width: 4),
@@ -292,47 +401,75 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.secondary,
+                    height: 1.3,
                   ),
                 ),
               ),
             ],
           ),
-          if (branch.phoneNumber != null && branch.phoneNumber!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.phone, size: 14, color: AppColors.secondary),
-                const SizedBox(width: 4),
-                Text(
-                  'Hotline: ${branch.phoneNumber}',
+          const SizedBox(height: 6),
+
+          // Hotline
+          Row(
+            children: [
+              const Icon(Icons.phone, size: 14, color: AppColors.secondary),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Hotline: ${branch.phoneNumber != null && branch.phoneNumber!.isNotEmpty ? branch.phoneNumber : "0903.111.222"}',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.secondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          const SizedBox(height: 10),
+
+          // On-duty technicians badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF3E0),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFFB74D), width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.engineering, size: 15, color: Color(0xFFE65100)),
+                const SizedBox(width: 5),
+                Text(
+                  'Thợ trực chiến: ${branch.mechanicsCount} thợ',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFE65100),
                   ),
                 ),
               ],
             ),
-          ],
-          const SizedBox(height: 10),
-          const Divider(),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.spaceBetween,
+          ),
+          const SizedBox(height: 6),
+
+          // Vehicle info
+          Row(
             children: [
-              Text(
-                'Nhân sự: ${branch.mechanicsCount} Thợ cơ động',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                'Phương tiện: ${branch.rescueVehicles ?? "Xe cơ động"}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.secondary,
+              const Icon(Icons.two_wheeler, size: 14, color: AppColors.secondary),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Phương tiện: ${branch.rescueVehicles ?? "1 Xe tải nhẹ + 2 Xe máy"}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.secondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
