@@ -62,4 +62,34 @@ class BranchModel {
       'createdAt': createdAt,
     };
   }
+
+  BranchModel copyWith({
+    int? id,
+    int? garageId,
+    String? garageName,
+    String? branchName,
+    String? address,
+    double? latitude,
+    double? longitude,
+    String? phoneNumber,
+    String? rescueVehicles,
+    String? operatingStatus,
+    int? mechanicsCount,
+    String? createdAt,
+  }) {
+    return BranchModel(
+      id: id ?? this.id,
+      garageId: garageId ?? this.garageId,
+      garageName: garageName ?? this.garageName,
+      branchName: branchName ?? this.branchName,
+      address: address ?? this.address,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      rescueVehicles: rescueVehicles ?? this.rescueVehicles,
+      operatingStatus: operatingStatus ?? this.operatingStatus,
+      mechanicsCount: mechanicsCount ?? this.mechanicsCount,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 }

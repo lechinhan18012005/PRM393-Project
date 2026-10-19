@@ -56,34 +56,44 @@ export interface PayOSTransaction {
 
 export interface GarageApplicant {
   id: string;
+  numericId?: number;
   name: string;
   area: string;
   ownerName: string;
+  ownerEmail?: string;
   phone: string;
   branchesCount: number;
   mechanicsCount: number;
   timeAgo: string;
-  status: 'PENDING' | 'NEED_INFO' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'NEED_INFO' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
   badge?: string;
   taxCode: string;
   idCardNumber: string;
   address: string;
   ekycMatchRate: number;
+  idCardUrl?: string | null;
+  businessLicenseUrl?: string | null;
+  rejectionReason?: string | null;
+  createdAt?: string;
   branches: Array<{
+    id?: number;
     name: string;
     address: string;
-    warning: string;
-    coords: string;
-    capacity: number;
-    activeMechanics: number;
-    mapImage: string;
+    warning?: string;
+    coords?: string;
+    capacity?: number;
+    activeMechanics?: number;
+    mapImage?: string;
+    phoneNumber?: string;
+    operatingStatus?: string;
+    rescueVehicles?: string;
   }>;
   equipment: Array<{
     name: string;
     specs: string;
     plate: string;
     statusNote: string;
-    image: string;
+    image?: string;
   }>;
 }
 

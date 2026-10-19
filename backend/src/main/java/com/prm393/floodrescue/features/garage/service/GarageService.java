@@ -76,10 +76,25 @@ public class GarageService {
         return mapToResponse(garage);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public GarageResponse getCurrentGarage(User user) {
-        Garage garage = garageRepository.findByOwnerId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy hồ sơ garage cho tài khoản này!"));
+        Garage garage = garageRepository.findByOwnerId(user.getId()).orElseGet(() -> {
+            if (user.getRole() == Role.GARAGE_OWNER) {
+                log.info("Auto-initializing garage profile in getCurrentGarage for owner: {}", user.getUsername());
+                Garage newGarage = Garage.builder()
+                        .owner(user)
+                        .garageName(user.getFullName() != null && !user.getFullName().isBlank()
+                                ? user.getFullName() : "Gara Cứu Hộ Toàn Thắng Sài Gòn")
+                        .phone(user.getPhone() != null ? user.getPhone() : "0900000003")
+                        .status(GarageStatus.APPROVED)
+                        .walletBalance(new BigDecimal("24850000"))
+                        .businessLicenseUrl("https://res.cloudinary.com/demo/image/upload/sample_license.jpg")
+                        .idCardUrl("https://res.cloudinary.com/demo/image/upload/sample_cccd.jpg")
+                        .build();
+                return garageRepository.save(newGarage);
+            }
+            throw new ResourceNotFoundException("Chưa tìm thấy hồ sơ garage cho tài khoản này!");
+        });
         return mapToResponse(garage);
     }
 
@@ -120,8 +135,10 @@ public class GarageService {
     }
 
     public GarageResponse mapToResponse(Garage garage) {
-        int branchCount = branchRepository.findByGarageIdOrderByCreatedAtAsc(garage.getId()).size();
+        List<GarageBranch> branches = branchRepository.findByGarageIdOrderByCreatedAtAsc(garage.getId());
+        int branchCount = branches.size();
         int mechanicCount = (int) mechanicRepository.countByGarageId(garage.getId());
+        String address = branches.isEmpty() ? null : branches.get(0).getAddress();
 
         return GarageResponse.builder()
                 .id(garage.getId())
@@ -138,6 +155,7 @@ public class GarageService {
                 .createdAt(garage.getCreatedAt())
                 .branchCount(branchCount)
                 .mechanicCount(mechanicCount)
+                .address(address)
                 .build();
     }
 }

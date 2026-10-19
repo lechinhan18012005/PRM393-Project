@@ -385,8 +385,8 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               leading: const Icon(Icons.business, color: Colors.blue),
-              title: const Text('Chi nhánh'),
-              subtitle: const Text('3 Chi nhánh (Q.7, Q.8, Bình Thạnh)'),
+              title: const Text('Quản lý chi nhánh', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Danh sách trạm cứu hộ, hotline & thợ trực chiến'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 14),
               onTap: () {
                 Navigator.of(context).push(
