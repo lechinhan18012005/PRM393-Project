@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile/providers/auth_provider.dart';
+import 'package:mobile/providers/flood_report_provider.dart';
+import 'package:mobile/providers/garage_provider.dart';
+import 'package:mobile/providers/mechanic_provider.dart';
 import 'package:mobile/core/theme/app_theme.dart';
 import 'package:mobile/screens/customer/community_flood_report_screen.dart';
 import 'package:mobile/screens/customer/electronic_invoice_screen.dart';
@@ -74,8 +77,13 @@ void main() {
       FlutterError.onError = (details) => errors.add(details.toString());
       addTearDown(() => FlutterError.onError = previousHandler);
       await tester.pumpWidget(
-        ChangeNotifierProvider(
-          create: (_) => AuthProvider(),
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => AuthProvider()),
+            ChangeNotifierProvider(create: (_) => GarageProvider()),
+            ChangeNotifierProvider(create: (_) => MechanicProvider()),
+            ChangeNotifierProvider(create: (_) => FloodReportProvider()),
+          ],
           child: MaterialApp(theme: AppTheme.light, home: entry.value),
         ),
       );

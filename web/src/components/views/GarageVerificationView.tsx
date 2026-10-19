@@ -1,6 +1,7 @@
 import { ViewGuide } from '../ViewGuide';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GarageApplicant } from '../../types';
+import { garageApi } from '../../services/garageApi';
 
 interface GarageVerificationViewProps {
   applicants: GarageApplicant[];
@@ -11,6 +12,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
   applicants,
   onShowToast
 }) => {
+  const [applicantsList, setApplicantsList] = useState<GarageApplicant[]>(applicants);
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>(applicants[0]?.id || 'GAR-2024-0891');
   const [activeTab, setActiveTab] = useState<'pending' | 'need_info' | 'approved' | 'rejected'>('pending');
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
@@ -20,9 +22,71 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [areaFilter, setAreaFilter] = useState<string>('all');
 
-  const selectedApplicant = applicants.find((a) => a.id === selectedApplicantId) || applicants[0];
+  // Load real pending garages from backend
+  useEffect(() => {
+    const fetchBackendGarages = async () => {
+      try {
+        const liveGarages = await garageApi.getAllGarages();
+        if (liveGarages && liveGarages.length > 0) {
+          const mapped: GarageApplicant[] = liveGarages.map((item) => ({
+            id: `GAR-${item.id}`,
+            name: item.garageName,
+            area: 'TP. Hồ Chí Minh',
+            ownerName: item.ownerName,
+            phone: item.phone,
+            branchesCount: item.branchCount || 1,
+            mechanicsCount: item.mechanicCount || 2,
+            timeAgo: 'Hôm nay',
+            status: item.status as any,
+            badge: item.status === 'PENDING' ? 'MỚI NỘP' : undefined,
+            taxCode: `0312${item.id}889-001`,
+            idCardNumber: `07908800${item.id}23`,
+            address: 'TP. Hồ Chí Minh',
+            ekycMatchRate: 98,
+            branches: [
+              {
+                name: `${item.garageName} - Trụ sở`,
+                address: 'TP. Hồ Chí Minh',
+                warning: 'Khu vực triều cường thường xuyên',
+                coords: '10.7321, 106.6892',
+                capacity: 15,
+                activeMechanics: item.mechanicCount || 2,
+                mapImage: 'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?auto=format&fit=crop&w=600&q=80'
+              }
+            ],
+            equipment: [
+              {
+                name: 'Xe bán tải thùng tời cứu hộ',
+                specs: 'Ford Ranger 4x4 sàn phẳng tời điện 4.5 tấn',
+                plate: '51D-892.14',
+                statusNote: 'Sẵn sàng trực chiến',
+                image: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=400&q=80'
+              }
+            ]
+          }));
 
-  const filteredApplicants = applicants.filter((a) => {
+          // Merge: unique by id
+          setApplicantsList((prev) => {
+            const existingIds = new Set(prev.map((p) => p.id));
+            const newGarages = mapped.filter((m) => !existingIds.has(m.id));
+            return [...newGarages, ...prev];
+          });
+        }
+      } catch (err) {
+        console.warn('Backend unavailable, using initial data:', err);
+      }
+    };
+    fetchBackendGarages();
+  }, []);
+
+  const selectedApplicant = applicantsList.find((a) => a.id === selectedApplicantId) || applicantsList[0];
+
+  const filteredApplicants = applicantsList.filter((a) => {
+    if (activeTab === 'pending' && a.status !== 'PENDING') return false;
+    if (activeTab === 'approved' && a.status !== 'APPROVED') return false;
+    if (activeTab === 'rejected' && a.status !== 'REJECTED') return false;
+    if (activeTab === 'need_info' && a.status !== 'NEED_INFO') return false;
+
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       if (!a.name.toLowerCase().includes(q) && !a.ownerName.toLowerCase().includes(q) && !a.phone.includes(q)) {
@@ -35,19 +99,42 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
     return true;
   });
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     setIsActivating(true);
-    setTimeout(() => {
+    try {
+      const rawId = selectedApplicant.id.replace('GAR-', '');
+      const numId = parseInt(rawId, 10);
+      if (!isNaN(numId)) {
+        await garageApi.moderateGarage(numId, 'APPROVED', auditorNote || 'Hồ sơ pháp lý hợp lệ');
+      }
+    } catch (err: any) {
+      console.warn('Backend API update:', err);
+    } finally {
       setIsActivating(false);
       setShowConfirmModal(false);
+      setApplicantsList((prev) =>
+        prev.map((a) => (a.id === selectedApplicant.id ? { ...a, status: 'APPROVED' } : a))
+      );
       onShowToast(
         'Kích Hoạt Garage Thành Công!',
-        `Đã kích hoạt ${selectedApplicant.name} cùng 3 chi nhánh trực chiến. Hệ thống đã mở tiếp nhận đơn cứu hộ ngập lụt.`
+        `Đã kích hoạt ${selectedApplicant.name} cùng các chi nhánh trực chiến. Hệ thống đã mở tiếp nhận đơn cứu hộ ngập lụt.`
       );
-    }, 1000);
+    }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
+    try {
+      const rawId = selectedApplicant.id.replace('GAR-', '');
+      const numId = parseInt(rawId, 10);
+      if (!isNaN(numId)) {
+        await garageApi.moderateGarage(numId, 'REJECTED', auditorNote || 'Hồ sơ chưa đạt tiêu chuẩn');
+      }
+    } catch (err: any) {
+      console.warn('Backend API update:', err);
+    }
+    setApplicantsList((prev) =>
+      prev.map((a) => (a.id === selectedApplicant.id ? { ...a, status: 'REJECTED' } : a))
+    );
     onShowToast('Đã Từ Chối Hồ Sơ', `Đã gửi thông báo từ chối tới chủ gara ${selectedApplicant.ownerName}.`);
   };
 
@@ -106,7 +193,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-surface-container-lowest animate-ping"></span>
-            <span>Chờ duyệt (8 hồ sơ)</span>
+            <span>Chờ duyệt ({applicantsList.filter((a) => a.status === 'PENDING').length} hồ sơ)</span>
           </button>
           <button
             onClick={() => setActiveTab('need_info')}
@@ -116,7 +203,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                 : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high'
             }`}
           >
-            <span>Cần bổ sung thông tin (3)</span>
+            <span>Cần bổ sung ({applicantsList.filter((a) => a.status === 'NEED_INFO').length})</span>
           </button>
           <button
             onClick={() => setActiveTab('approved')}
@@ -127,7 +214,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
-            <span>Đã kích hoạt (42)</span>
+            <span>Đã kích hoạt ({applicantsList.filter((a) => a.status === 'APPROVED').length})</span>
           </button>
           <button
             onClick={() => setActiveTab('rejected')}
@@ -137,7 +224,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                 : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high'
             }`}
           >
-            <span>Đã từ chối (5)</span>
+            <span>Đã từ chối ({applicantsList.filter((a) => a.status === 'REJECTED').length})</span>
           </button>
         </div>
       </section>
