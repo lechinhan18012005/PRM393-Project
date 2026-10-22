@@ -26,15 +26,14 @@ function formatTimeAgo(dateStr?: string): string {
   }
 }
 
-export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
-  applicants = [],
-  onShowToast
-}) => {
+export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({ onShowToast }) => {
   const [applicantsList, setApplicantsList] = useState<GarageApplicant[]>([]);
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'pending' | 'need_info' | 'approved' | 'rejected'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'suspended' | 'approved' | 'rejected'>('pending');
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [isActivating, setIsActivating] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState('');
+  const [detailError, setDetailError] = useState('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [auditorNote, setAuditorNote] = useState<string>('');
   const [docTab, setDocTab] = useState<'id_card' | 'business_license' | 'certificate'>('id_card');
@@ -49,6 +48,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
   // Load real garages from backend
   const fetchBackendGarages = useCallback(async () => {
     setIsLoading(true);
+    setLoadError('');
     try {
       const liveGarages = await garageApi.getAllGarages();
       if (liveGarages && liveGarages.length > 0) {
@@ -56,26 +56,30 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
           let badgeText: string | undefined;
           if (item.status === 'PENDING') badgeText = 'MỚI NỘP';
           else if (item.status === 'APPROVED') badgeText = 'ĐÃ KÍCH HOẠT';
-          else if (item.status === 'SUSPENDED') badgeText = 'CẦN BỔ SUNG';
+          else if (item.status === 'SUSPENDED') badgeText = 'ĐÃ ĐÌNH CHỈ';
           else if (item.status === 'REJECTED') badgeText = 'ĐÃ TỪ CHỐI';
 
           return {
             id: `GAR-${item.id}`,
             numericId: item.id,
             name: item.garageName,
-            area: item.address ? (item.address.includes(',') ? item.address.split(',').pop()!.trim() : item.address) : 'TP. Hồ Chí Minh',
+            area: item.address
+              ? item.address.includes(',')
+                ? item.address.split(',').pop()!.trim()
+                : item.address
+              : 'TP. Hồ Chí Minh',
             ownerName: item.ownerName || 'Chưa cập nhật',
             ownerEmail: item.ownerEmail,
-            phone: item.phone,
+            phone: item.phone || 'Chưa cập nhật',
             branchesCount: item.branchCount || 0,
             mechanicsCount: item.mechanicCount || 0,
             timeAgo: formatTimeAgo(item.createdAt),
             status: item.status,
             badge: badgeText,
-            taxCode: `MST-0312${item.id}889`,
-            idCardNumber: `CCCD-07908800${item.id}`,
+            taxCode: 'Chưa có dữ liệu',
+            idCardNumber: 'Xem giấy tờ đính kèm',
             address: item.address || 'Chưa thiết lập địa chỉ trụ sở',
-            ekycMatchRate: item.idCardUrl ? 98 : 0,
+            ekycMatchRate: 0,
             idCardUrl: item.idCardUrl,
             businessLicenseUrl: item.businessLicenseUrl,
             rejectionReason: item.rejectionReason,
@@ -94,58 +98,24 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
         setApplicantsList([]);
       }
     } catch (err: any) {
-      console.warn('Backend unavailable, using initial data:', err);
-      if (applicants && applicants.length > 0) {
-        setApplicantsList(applicants);
-        setSelectedApplicantId((curr) => curr || applicants[0]?.id || '');
-      }
+      setLoadError(err.message || 'Không tải được danh sách gara. Vui lòng thử lại.');
+      setApplicantsList([]);
+      setSelectedApplicantId('');
     } finally {
       setIsLoading(false);
     }
-  }, [applicants]);
+  }, []);
 
   useEffect(() => {
     fetchBackendGarages();
   }, [fetchBackendGarages]);
-
-  const selectedApplicant = applicantsList.find((a) => a.id === selectedApplicantId) || applicantsList[0];
-
-  // Fetch real branches and mechanics whenever selected applicant changes
-  useEffect(() => {
-    if (!selectedApplicant) {
-      setBranches([]);
-      setMechanics([]);
-      return;
-    }
-
-    setAuditorNote(selectedApplicant.rejectionReason || '');
-
-    const rawId = selectedApplicant.numericId || parseInt(selectedApplicant.id.replace('GAR-', ''), 10);
-    if (!isNaN(rawId)) {
-      setDetailLoading(true);
-      Promise.all([
-        garageApi.getGarageBranches(rawId),
-        garageApi.getGarageMechanics(rawId)
-      ])
-        .then(([bList, mList]) => {
-          setBranches(bList);
-          setMechanics(mList);
-        })
-        .catch((err) => {
-          console.warn('Error loading garage sub-entities:', err);
-        })
-        .finally(() => {
-          setDetailLoading(false);
-        });
-    }
-  }, [selectedApplicant?.id, selectedApplicant?.numericId]);
 
   // Tab filtering
   const filteredApplicants = applicantsList.filter((a) => {
     if (activeTab === 'pending' && a.status !== 'PENDING') return false;
     if (activeTab === 'approved' && a.status !== 'APPROVED') return false;
     if (activeTab === 'rejected' && a.status !== 'REJECTED') return false;
-    if (activeTab === 'need_info' && a.status !== 'NEED_INFO' && a.status !== 'SUSPENDED') return false;
+    if (activeTab === 'suspended' && a.status !== 'SUSPENDED') return false;
 
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
@@ -159,8 +129,40 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
     return true;
   });
 
-  const handleApprove = async () => {
+  const selectedApplicant = filteredApplicants.find((a) => a.id === selectedApplicantId) || filteredApplicants[0];
+
+  // Cancel obsolete responses when staff switches between garage dossiers.
+  useEffect(() => {
+    let cancelled = false;
+    setBranches([]);
+    setMechanics([]);
+    setDetailError('');
+    setDetailLoading(false);
     if (!selectedApplicant) return;
+    setAuditorNote(selectedApplicant.rejectionReason || '');
+    const id = selectedApplicant.numericId;
+    if (id === undefined) return;
+    setDetailLoading(true);
+    Promise.all([garageApi.getGarageBranches(id), garageApi.getGarageMechanics(id)])
+      .then(([bList, mList]) => {
+        if (!cancelled) {
+          setBranches(bList);
+          setMechanics(mList);
+        }
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setDetailError(err.message || 'Không tải được chi nhánh và đội thợ.');
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedApplicant?.id, selectedApplicant?.numericId, selectedApplicant?.rejectionReason]);
+
+  const handleApprove = async () => {
+    if (!selectedApplicant || isActivating) return;
     setIsActivating(true);
     try {
       const rawId = selectedApplicant.numericId || parseInt(selectedApplicant.id.replace('GAR-', ''), 10);
@@ -182,58 +184,86 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
   };
 
   const handleReject = async () => {
-    if (!selectedApplicant) return;
+    if (!selectedApplicant || isActivating) return;
+    setIsActivating(true);
     try {
       const rawId = selectedApplicant.numericId || parseInt(selectedApplicant.id.replace('GAR-', ''), 10);
       if (!isNaN(rawId)) {
         await garageApi.moderateGarage(rawId, 'REJECTED', auditorNote || 'Hồ sơ chưa đạt tiêu chuẩn');
-        onShowToast('Đã Từ Chối Hồ Sơ', `Đã gửi thông báo từ chối tới chủ gara ${selectedApplicant.ownerName}.`, 'warning');
+        onShowToast(
+          'Đã Từ Chối Hồ Sơ',
+          `Đã lưu quyết định từ chối hồ sơ của ${selectedApplicant.ownerName}.`,
+          'warning'
+        );
         await fetchBackendGarages();
       }
     } catch (err: any) {
       onShowToast('Lỗi Từ Chối', err.message || 'Lỗi kết nối API', 'error');
+    } finally {
+      setIsActivating(false);
     }
   };
 
   const handleRequestDocs = async () => {
-    if (!selectedApplicant) return;
+    if (!selectedApplicant || isActivating) return;
+    setIsActivating(true);
     try {
       const rawId = selectedApplicant.numericId || parseInt(selectedApplicant.id.replace('GAR-', ''), 10);
       if (!isNaN(rawId)) {
-        await garageApi.moderateGarage(rawId, 'SUSPENDED', auditorNote || 'Yêu cầu bổ sung tài liệu pháp lý & chứng chỉ');
-        onShowToast('Yêu Cầu Bổ Sung', `Đã chuyển trạng thái hồ sơ của ${selectedApplicant.name} sang Chờ Bổ Sung.`, 'info');
+        await garageApi.moderateGarage(rawId, 'REJECTED', auditorNote.trim() || 'Vui lòng bổ sung giấy tờ hồ sơ gara');
+        onShowToast(
+          'Yêu Cầu Bổ Sung',
+          `Đã trả hồ sơ ${selectedApplicant.name} để chủ gara bổ sung và nộp lại.`,
+          'info'
+        );
         await fetchBackendGarages();
       }
     } catch (err: any) {
       onShowToast('Lỗi Thao Tác', err.message || 'Lỗi kết nối API', 'error');
+    } finally {
+      setIsActivating(false);
     }
   };
 
   const handleSuspend = async () => {
-    if (!selectedApplicant) return;
+    if (!selectedApplicant || isActivating) return;
+    setIsActivating(true);
     try {
       const rawId = selectedApplicant.numericId || parseInt(selectedApplicant.id.replace('GAR-', ''), 10);
       if (!isNaN(rawId)) {
         await garageApi.moderateGarage(rawId, 'SUSPENDED', auditorNote || 'Tạm dừng tiếp nhận đơn để rà soát');
-        onShowToast('Đã Tạm Dừng Hoạt Động', `Garage ${selectedApplicant.name} đã tạm dừng nhận đơn cứu hộ.`, 'warning');
+        onShowToast(
+          'Đã Tạm Dừng Hoạt Động',
+          `Garage ${selectedApplicant.name} đã tạm dừng nhận đơn cứu hộ.`,
+          'warning'
+        );
         await fetchBackendGarages();
       }
     } catch (err: any) {
       onShowToast('Lỗi Thao Tác', err.message || 'Lỗi kết nối API', 'error');
+    } finally {
+      setIsActivating(false);
     }
   };
 
   const handleUpdateNote = async () => {
-    if (!selectedApplicant) return;
+    if (!selectedApplicant || isActivating) return;
+    setIsActivating(true);
     try {
       const rawId = selectedApplicant.numericId || parseInt(selectedApplicant.id.replace('GAR-', ''), 10);
       if (!isNaN(rawId)) {
-        await garageApi.moderateGarage(rawId, selectedApplicant.status as any, auditorNote);
+        await garageApi.moderateGarage(
+          rawId,
+          selectedApplicant.status === 'NEED_INFO' ? 'REJECTED' : selectedApplicant.status,
+          auditorNote
+        );
         onShowToast('Cập Nhật Thành Công', 'Đã lưu ghi chú thẩm định viên vào hệ thống.', 'success');
         await fetchBackendGarages();
       }
     } catch (err: any) {
       onShowToast('Lỗi Cập Nhật', err.message || 'Lỗi kết nối API', 'error');
+    } finally {
+      setIsActivating(false);
     }
   };
 
@@ -256,6 +286,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     onShowToast('Xuất Báo Cáo', 'Đã tải xuống file CSV danh sách garage thẩm định thành công.');
   };
 
@@ -263,6 +294,17 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
 
   return (
     <div className="flex flex-col w-full">
+      {loadError && (
+        <div role="alert" className="border border-red-300 bg-red-50 p-4 mb-4 rounded">
+          <p>{loadError}</p>
+          <button onClick={() => void fetchBackendGarages()}>Thử lại</button>
+        </div>
+      )}
+      {detailError && (
+        <p role="alert" className="text-red-700 p-3">
+          {detailError}
+        </p>
+      )}
       {/* Command Header & Operational Sub-navigation */}
       <section className="bg-surface-container-lowest p-space-md mb-space-md rounded shadow-sm border border-surface-container">
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-space-md pb-space-sm border-b border-surface-container">
@@ -281,7 +323,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
               </div>
               <ViewGuide>
                 <p className="font-body-sm text-body-sm text-secondary">
-                  Thẩm định danh tính eKYC, chứng chỉ chuyên môn thủy kích, phạm vi chi nhánh và năng lực kéo xe ngập lụt đô thị.
+                  Kiểm tra giấy tờ chủ gara, chi nhánh và đội thợ từ dữ liệu hồ sơ đã nộp.
                 </p>
               </ViewGuide>
             </div>
@@ -329,16 +371,14 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
             <span>Chờ duyệt ({applicantsList.filter((a) => a.status === 'PENDING').length} hồ sơ)</span>
           </button>
           <button
-            onClick={() => setActiveTab('need_info')}
+            onClick={() => setActiveTab('suspended')}
             className={`px-space-md py-1.5 rounded font-label-md text-label-md flex items-center gap-space-xs cursor-pointer transition-all ${
-              activeTab === 'need_info'
+              activeTab === 'suspended'
                 ? 'bg-primary-container text-on-primary-container shadow-sm font-bold'
                 : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high'
             }`}
           >
-            <span>
-              Cần bổ sung ({applicantsList.filter((a) => a.status === 'NEED_INFO' || a.status === 'SUSPENDED').length})
-            </span>
+            <span>Đình chỉ ({applicantsList.filter((a) => a.status === 'SUSPENDED').length})</span>
           </button>
           <button
             onClick={() => setActiveTab('approved')}
@@ -416,7 +456,9 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
           <div className="flex flex-col gap-space-sm max-h-[calc(100vh-290px)] overflow-y-auto pr-0.5">
             {isLoading ? (
               <div className="p-space-lg text-center text-secondary bg-surface-container-lowest rounded border border-surface-container">
-                <span className="material-symbols-outlined text-[32px] animate-spin mb-1 text-primary">progress_activity</span>
+                <span className="material-symbols-outlined text-[32px] animate-spin mb-1 text-primary">
+                  progress_activity
+                </span>
                 <p className="font-body-sm">Đang tải danh sách hồ sơ từ hệ thống...</p>
               </div>
             ) : filteredApplicants.length === 0 ? (
@@ -438,7 +480,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                   statusLabel = 'ĐÃ TỪ CHỐI';
                 } else if (applicant.status === 'SUSPENDED') {
                   statusBadgeColor = 'bg-amber-100 text-amber-800';
-                  statusLabel = 'CẦN BỔ SUNG';
+                  statusLabel = 'ĐÃ ĐÌNH CHỈ';
                 }
 
                 return (
@@ -457,10 +499,10 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                           applicant.status === 'PENDING'
                             ? 'bg-primary-container text-on-primary-container'
                             : applicant.status === 'APPROVED'
-                            ? 'bg-tertiary text-on-tertiary'
-                            : applicant.status === 'SUSPENDED'
-                            ? 'bg-amber-500 text-white'
-                            : 'bg-error text-on-error'
+                              ? 'bg-tertiary text-on-tertiary'
+                              : applicant.status === 'SUSPENDED'
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-error text-on-error'
                         }`}
                       >
                         {applicant.status === 'PENDING' && (
@@ -510,9 +552,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                         <span className="material-symbols-outlined text-[14px]">bolt</span>
                         {applicant.timeAgo}
                       </span>
-                      <span className={`px-2 py-0.5 rounded font-bold ${statusBadgeColor}`}>
-                        {statusLabel}
-                      </span>
+                      <span className={`px-2 py-0.5 rounded font-bold ${statusBadgeColor}`}>{statusLabel}</span>
                     </div>
                   </div>
                 );
@@ -549,9 +589,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                     }`}
                   >
                     <span className="material-symbols-outlined text-[16px]">fingerprint</span>
-                    {selectedApplicant.idCardUrl
-                      ? `eKYC Khớp ${selectedApplicant.ekycMatchRate}%`
-                      : 'Chưa tải lên CCCD'}
+                    {selectedApplicant.idCardUrl ? 'Đã đính kèm CCCD · chờ kiểm tra' : 'Chưa tải lên CCCD'}
                   </span>
                 </div>
               </div>
@@ -577,14 +615,16 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                     {selectedApplicant.status === 'APPROVED'
                       ? 'Đã duyệt & đang nhận điều phối'
                       : selectedApplicant.status === 'PENDING'
-                      ? 'Đang chờ thẩm định viên duyệt'
-                      : selectedApplicant.status === 'SUSPENDED'
-                      ? 'Tạm dừng tiếp nhận / Yêu cầu bổ sung'
-                      : 'Hồ sơ đã bị từ chối'}
+                        ? 'Đang chờ thẩm định viên duyệt'
+                        : selectedApplicant.status === 'SUSPENDED'
+                          ? 'Đã đình chỉ hoạt động'
+                          : 'Hồ sơ đã bị từ chối'}
                   </span>
                 </div>
                 <div>
-                  <span className="font-label-sm text-label-sm text-secondary block uppercase">Trụ sở chính quản lý</span>
+                  <span className="font-label-sm text-label-sm text-secondary block uppercase">
+                    Trụ sở chính quản lý
+                  </span>
                   <span className="font-label-lg text-label-lg text-on-surface font-semibold block">
                     {selectedApplicant.address}
                   </span>
@@ -605,9 +645,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center gap-1 bg-surface-container-low p-1 rounded">
-                  <span className="font-data-mono text-data-mono text-on-surface px-2">
-                    Tệp tài liệu đối chiếu
-                  </span>
+                  <span className="font-data-mono text-data-mono text-on-surface px-2">Tệp tài liệu đối chiếu</span>
                 </div>
               </div>
 
@@ -680,11 +718,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                   </div>
                   <div className="w-full h-48 overflow-hidden rounded relative bg-surface-container-high flex items-center justify-center">
                     {selectedApplicant.idCardUrl ? (
-                      <img
-                        className="w-full h-full object-cover"
-                        alt="CCCD"
-                        src={selectedApplicant.idCardUrl}
-                      />
+                      <img className="w-full h-full object-cover" alt="CCCD" src={selectedApplicant.idCardUrl} />
                     ) : (
                       <div className="flex flex-col items-center text-secondary">
                         <span className="material-symbols-outlined text-[44px] mb-1">id_card</span>
@@ -724,7 +758,9 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                     ) : (
                       <div className="flex flex-col items-center text-secondary">
                         <span className="material-symbols-outlined text-[44px] mb-1">description</span>
-                        <span className="font-label-sm text-label-sm font-semibold">Chưa tải lên Giấy phép kinh doanh</span>
+                        <span className="font-label-sm text-label-sm font-semibold">
+                          Chưa tải lên Giấy phép kinh doanh
+                        </span>
                       </div>
                     )}
                     <div className="absolute bottom-2 left-2 right-2 bg-on-background/80 text-surface-bright backdrop-blur-sm p-1 rounded font-data-mono text-label-sm flex justify-between">
@@ -774,7 +810,10 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
               ) : branches.length > 0 ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-space-sm">
                   {branches.map((b) => (
-                    <div key={b.id} className="bg-surface-container-low p-space-sm rounded flex flex-col justify-between">
+                    <div
+                      key={b.id}
+                      className="bg-surface-container-low p-space-sm rounded flex flex-col justify-between"
+                    >
                       <div>
                         <div className="flex items-center justify-between pb-1">
                           <span className="font-label-md text-label-md font-bold text-on-surface">{b.branchName}</span>
@@ -829,14 +868,18 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                   </h3>
                 </div>
                 <span className="font-data-mono text-data-mono text-secondary">
-                  {mechanics.filter((m) => m.workingStatus === 'ONLINE' || m.workingStatus === 'BUSY').length} Thợ đang trực chiến
+                  {mechanics.filter((m) => m.workingStatus === 'ONLINE' || m.workingStatus === 'BUSY').length} Thợ đang
+                  trực chiến
                 </span>
               </div>
 
               {mechanics.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-space-sm">
                   {mechanics.map((m) => (
-                    <div key={m.id} className="bg-surface-container-low p-space-sm rounded flex items-start gap-space-sm">
+                    <div
+                      key={m.id}
+                      className="bg-surface-container-low p-space-sm rounded flex items-start gap-space-sm"
+                    >
                       <div className="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-label-lg shrink-0">
                         {m.fullName?.charAt(0) || 'T'}
                       </div>
@@ -850,8 +893,8 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                               m.workingStatus === 'ONLINE'
                                 ? 'bg-tertiary text-on-tertiary'
                                 : m.workingStatus === 'BUSY'
-                                ? 'bg-error text-on-error'
-                                : 'bg-surface-container-high text-secondary'
+                                  ? 'bg-error text-on-error'
+                                  : 'bg-surface-container-high text-secondary'
                             }`}
                           >
                             {m.workingStatus}
@@ -902,6 +945,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
               {selectedApplicant.status === 'PENDING' && (
                 <>
                   <button
+                    disabled={isActivating}
                     onClick={handleReject}
                     className="bg-error text-on-error hover:bg-on-error-container px-space-md py-2 rounded font-label-lg text-label-lg flex items-center gap-1 transition-colors cursor-pointer"
                   >
@@ -910,6 +954,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                   </button>
 
                   <button
+                    disabled={isActivating}
                     onClick={handleRequestDocs}
                     className="bg-surface-container-high text-on-surface hover:bg-surface-container px-space-md py-2 rounded font-label-lg text-label-lg flex items-center gap-1 transition-colors cursor-pointer"
                   >
@@ -934,6 +979,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                     <span>Garage đã kích hoạt</span>
                   </span>
                   <button
+                    disabled={isActivating}
                     onClick={handleSuspend}
                     className="bg-amber-600 text-white hover:bg-amber-700 px-space-md py-2 rounded font-label-lg text-label-lg flex items-center gap-1 transition-colors cursor-pointer"
                   >
@@ -941,6 +987,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                     <span>Tạm Dừng Hoạt Động (Suspend)</span>
                   </button>
                   <button
+                    disabled={isActivating}
                     onClick={handleUpdateNote}
                     className="bg-surface-container-high text-on-surface hover:bg-surface-container px-space-md py-2 rounded font-label-lg text-label-lg flex items-center gap-1 transition-colors cursor-pointer"
                   >
@@ -970,7 +1017,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                 <>
                   <span className="px-3 py-1.5 rounded bg-amber-100 text-amber-800 font-bold text-label-md flex items-center gap-1">
                     <span className="material-symbols-outlined text-[18px]">warning</span>
-                    <span>Đang tạm dừng / Chờ bổ sung</span>
+                    <span>Đã đình chỉ hoạt động</span>
                   </span>
                   <button
                     onClick={() => setShowConfirmModal(true)}
@@ -980,6 +1027,7 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                     <span>Kích Hoạt Lại</span>
                   </button>
                   <button
+                    disabled={isActivating}
                     onClick={handleReject}
                     className="bg-error text-on-error hover:bg-on-error-container px-space-md py-2 rounded font-label-lg text-label-lg flex items-center gap-1 cursor-pointer"
                   >
@@ -1002,14 +1050,17 @@ export const GarageVerificationView: React.FC<GarageVerificationViewProps> = ({
                 <span className="material-symbols-outlined text-[28px]">verified</span>
               </div>
               <div>
-                <h4 className="font-headline-md text-headline-md text-on-surface font-bold">Xác Nhận Kích Hoạt Garage?</h4>
+                <h4 className="font-headline-md text-headline-md text-on-surface font-bold">
+                  Xác Nhận Kích Hoạt Garage?
+                </h4>
                 <span className="font-body-sm text-body-sm text-secondary">
                   {selectedApplicant.id} ({branches.length} Chi nhánh trực chiến)
                 </span>
               </div>
             </div>
             <p className="font-body-md text-body-md text-on-surface mb-space-md leading-relaxed">
-              Sau khi kích hoạt, <strong>{selectedApplicant.name}</strong> sẽ ngay lập tức được cấp quyền nhận đơn cứu hộ ngập lụt từ người dân trong khu vực.
+              Sau khi kích hoạt, <strong>{selectedApplicant.name}</strong> sẽ ngay lập tức được cấp quyền nhận đơn cứu
+              hộ ngập lụt từ người dân trong khu vực.
             </p>
             <div className="flex items-center justify-end gap-space-sm">
               <button

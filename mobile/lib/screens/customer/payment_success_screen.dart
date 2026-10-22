@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/rescue_ui.dart';
 import 'electronic_invoice_screen.dart';
 import 'rating_review_screen.dart';
 
@@ -10,7 +11,7 @@ class PaymentSuccessScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
           'Thanh toán thành công',
@@ -24,6 +25,9 @@ class PaymentSuccessScreen extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
+            const RescueDemoNote(
+              'Kết quả thanh toán minh họa · Chưa có giao dịch thật',
+            ),
             const SizedBox(height: 20),
             // Success Check Icon
             Container(

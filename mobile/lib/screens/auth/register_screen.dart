@@ -3,12 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../core/services/auth_service.dart';
 import '../customer/stitch_hydro_rescue_screen.dart';
 import '../home/mechanic_home_screen.dart';
-import '../home/garage_home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  final bool invitation;
+  const RegisterScreen({super.key, this.invitation = false});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -23,6 +24,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _confirmPasswordController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _activating = false;
+
+  final _invitationCodeController = TextEditingController();
 
   @override
   void dispose() {
@@ -32,6 +36,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _invitationCodeController.dispose();
     super.dispose();
   }
 
@@ -39,8 +44,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     Widget target;
     if (role == 'FIELD_MECHANIC') {
       target = const MechanicHomeScreen();
-    } else if (role == 'GARAGE_OWNER') {
-      target = const GarageHomeScreen();
     } else {
       target = const StitchHydroRescueScreen();
     }
@@ -93,6 +96,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (widget.invitation) {
+      if (_activating) return;
+      if (_invitationCodeController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Vui lòng nhập mã mời')));
+        return;
+      }
+      setState(() => _activating = true);
+      try {
+        await AuthService().activateInvitation(
+          code: _invitationCodeController.text,
+          fullName: _fullNameController.text.trim(),
+          username: _usernameController.text.trim(),
+          email: _emailController.text.trim(),
+          phone: _phoneController.text.trim().isEmpty
+              ? null
+              : _phoneController.text.trim(),
+          password: _passwordController.text,
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kích hoạt thành công. Vui lòng đăng nhập.'),
+          ),
+        );
+        Navigator.of(context).pop();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      } finally {
+        if (mounted) setState(() => _activating = false);
+      }
+      return;
+    }
     final success = await authProvider.register(
       fullName: fullName,
       username: username,
@@ -127,8 +167,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text(
-          'Đăng Ký Tài Khoản',
+        title: Text(
+          widget.invitation ? 'Kích hoạt Thợ cứu hộ' : 'Đăng ký Khách hàng',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -141,9 +181,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (widget.invitation) ...[
+                const Text('Kích hoạt Thợ cứu hộ bằng mã do Chủ gara cấp'),
+                TextField(
+                  controller: _invitationCodeController,
+                  decoration: const InputDecoration(labelText: 'Mã mời'),
+                ),
+              ],
               // Public registration only creates customer accounts.
               const Text(
-                'Đăng ký công khai dành cho khách hàng. Tài khoản gara và nhân viên do quản trị viên cấp.',
+                'Khách hàng tự đăng ký. Thợ cứu hộ kích hoạt bằng mã mời. Chủ gara đăng ký và sử dụng Web.',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
@@ -266,7 +313,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               // Submit Button
               ElevatedButton(
-                onPressed: authProvider.isLoading ? null : _handleRegister,
+                onPressed: (authProvider.isLoading || _activating)
+                    ? null
+                    : _handleRegister,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryOrange,
                   foregroundColor: Colors.white,
@@ -276,7 +325,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   elevation: 2,
                 ),
-                child: authProvider.isLoading
+                child: (authProvider.isLoading || _activating)
                     ? const SizedBox(
                         height: 20,
                         width: 20,
@@ -285,8 +334,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text(
-                        'Hoàn Tất Đăng Ký',
+                    : Text(
+                        widget.invitation
+                            ? 'Kích hoạt tài khoản'
+                            : 'Đăng ký Khách hàng',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,

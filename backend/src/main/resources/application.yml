@@ -2,6 +2,10 @@ server:
   port: ${SERVER_PORT:8080}
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   application:
     name: motorbike-flood-rescue-backend
   config:
@@ -25,7 +29,7 @@ jwt:
 
 app:
   demo:
-    seed-users: ${APP_DEMO_SEED_USERS:true}
+    seed-users: ${APP_DEMO_SEED_USERS:false}
 
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}

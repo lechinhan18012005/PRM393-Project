@@ -1,3 +1,4 @@
+import { DocumentUpload } from '../DocumentUpload';
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Shield, AlertCircle, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react';
@@ -8,6 +9,9 @@ interface RegisterViewProps {
 
 export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) => {
   const { register } = useAuth();
+  const [garageName, setGarageName] = useState('');
+  const [businessLicenseUrl, setBusinessLicenseUrl] = useState('');
+  const [idCardUrl, setIdCardUrl] = useState('');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -23,7 +27,15 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
     setError(null);
     setSuccess(null);
 
-    if (!fullName.trim() || !username.trim() || !email.trim() || !password) {
+    if (
+      !garageName.trim() ||
+      !businessLicenseUrl ||
+      !idCardUrl ||
+      !fullName.trim() ||
+      !username.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       setError('Vui lòng điền đầy đủ các thông tin bắt buộc (*)');
       return;
     }
@@ -45,7 +57,13 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
         username: username.trim(),
         email: email.trim(),
         phone: phone.trim() || undefined,
-        password
+        password,
+        application: {
+          garageName,
+          businessLicenseUrl,
+          idCardUrl,
+          phone: phone.trim() || undefined
+        }
       });
       setSuccess('Đăng ký tài khoản thành công! Đang chuyển hướng...');
     } catch (err: any) {
@@ -67,7 +85,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 mb-3 shadow-inner">
             <Shield className="w-7 h-7" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Tạo Tài Khoản Mới</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Đăng ký Chủ gara</h1>
           <p className="text-sm text-slate-500 mt-1">Gia nhập mạng lưới cứu hộ xe máy ngập lụt</p>
         </div>
 
@@ -86,14 +104,26 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
           </div>
         )}
 
-        <p className="mb-5 text-sm text-slate-600">Đăng ký công khai chỉ tạo tài khoản khách hàng. Tài khoản gara và nhân viên do quản trị viên cấp.</p>
+        <p className="mb-5 text-sm text-slate-600">
+          Nộp hồ sơ gara để Staff/Admin duyệt. Trong thời gian chờ, bạn chỉ được xem và bổ sung hồ sơ. Staff được Admin
+          mời; Khách hàng đăng ký trên Mobile.
+        </p>
 
         {/* Registration Form */}
         <form onSubmit={handleSubmit} className="space-y-3.5">
+          <label className="block text-sm">
+            Tên gara *
+            <input
+              required
+              className="w-full border rounded p-2"
+              value={garageName}
+              onChange={(e) => setGarageName(e.target.value)}
+            />
+          </label>
+          <DocumentUpload label="Giấy phép kinh doanh" value={businessLicenseUrl} onChange={setBusinessLicenseUrl} />
+          <DocumentUpload label="CCCD của chủ gara" value={idCardUrl} onChange={setIdCardUrl} />
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Họ và tên *
-            </label>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Họ và tên *</label>
             <input
               type="text"
               value={fullName}
@@ -105,9 +135,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Tên đăng nhập *
-              </label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Tên đăng nhập *</label>
               <input
                 type="text"
                 value={username}
@@ -117,9 +145,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Số điện thoại
-              </label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Số điện thoại</label>
               <input
                 type="tel"
                 value={phone}
@@ -131,9 +157,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Địa chỉ Email *
-            </label>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Địa chỉ Email *</label>
             <input
               type="email"
               value={email}
@@ -145,9 +169,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Mật khẩu *
-              </label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Mật khẩu *</label>
               <input
                 type="password"
                 value={password}
@@ -157,9 +179,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Xác nhận mật khẩu *
-              </label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Xác nhận mật khẩu *</label>
               <input
                 type="password"
                 value={confirmPassword}

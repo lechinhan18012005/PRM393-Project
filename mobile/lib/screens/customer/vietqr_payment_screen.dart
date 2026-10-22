@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/rescue_ui.dart';
 import 'payment_success_screen.dart';
 
 class VietQRPaymentScreen extends StatefulWidget {
@@ -20,7 +21,7 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
       appBar: AppBar(
         title: const Text(
           'Thanh toán',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -30,6 +31,15 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const RescueIntro(
+              eyebrow: 'HOÀN TẤT HÀNH TRÌNH',
+              title: 'Chọn cách thanh toán',
+              description: 'Kiểm tra thông tin và phương thức thanh toán.',
+            ),
+            const SizedBox(height: 12),
+            const RescueDemoNote(
+              'Mô phỏng · Chưa xử lý giao dịch hoặc gửi dữ liệu thật',
+            ),
             // Payment method selector
             Container(
               padding: const EdgeInsets.all(4),
@@ -123,19 +133,8 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
             const SizedBox(height: 16),
 
             // Main VietQR Box
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 8,
-                    offset: Offset(0, 3),
-                  ),
-                ],
-              ),
+            RescuePanel(
+              padding: 16,
               child: Column(
                 children: [
                   // Timer

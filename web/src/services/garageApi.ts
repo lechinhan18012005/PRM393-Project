@@ -70,6 +70,12 @@ export interface ServiceItemBackend {
   warrantyDays: number;
 }
 
+async function readGarageResponse<T>(response: Response): Promise<T> {
+  const json = await response.json();
+  if (!response.ok || !json.success) throw new Error(json.message || 'Không thể tải dữ liệu gara. Vui lòng thử lại.');
+  return json.data;
+}
+
 export const garageApi = {
   // Staff methods (UC-03)
   getPendingGarages: async (): Promise<GarageBackendResponse[]> => {
@@ -77,7 +83,8 @@ export const garageApi = {
       headers: getAuthHeaders()
     });
     const json = await res.json();
-    return json.success ? json.data : [];
+    if (!res.ok || !json.success) throw new Error(json.message || 'Không thể tải dữ liệu gara. Vui lòng thử lại.');
+    return json.data;
   },
 
   getAllGarages: async (): Promise<GarageBackendResponse[]> => {
@@ -85,53 +92,35 @@ export const garageApi = {
       headers: getAuthHeaders()
     });
     const json = await res.json();
-    return json.success ? json.data : [];
+    if (!res.ok || !json.success) throw new Error(json.message || 'Không thể tải dữ liệu gara. Vui lòng thử lại.');
+    return json.data;
   },
 
-  getGarageById: async (id: number): Promise<GarageBackendResponse | null> => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/staff/garages/${id}`, {
-        headers: getAuthHeaders()
-      });
-      const json = await res.json();
-      return json.success ? json.data : null;
-    } catch {
-      return null;
-    }
+  getGarageById: async (id: number): Promise<GarageBackendResponse> => {
+    const res = await fetch(`${API_BASE_URL}/staff/garages/${id}`, { headers: getAuthHeaders() });
+    return readGarageResponse<GarageBackendResponse>(res);
   },
-
   getGarageBranches: async (id: number): Promise<GarageBranchBackend[]> => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/staff/garages/${id}/branches`, {
-        headers: getAuthHeaders()
-      });
-      const json = await res.json();
-      return json.success ? json.data : [];
-    } catch {
-      return [];
-    }
+    const res = await fetch(`${API_BASE_URL}/staff/garages/${id}/branches`, { headers: getAuthHeaders() });
+    return readGarageResponse<GarageBranchBackend[]>(res);
   },
-
   getGarageMechanics: async (id: number): Promise<GarageMechanicBackend[]> => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/staff/garages/${id}/mechanics`, {
-        headers: getAuthHeaders()
-      });
-      const json = await res.json();
-      return json.success ? json.data : [];
-    } catch {
-      return [];
-    }
+    const res = await fetch(`${API_BASE_URL}/staff/garages/${id}/mechanics`, { headers: getAuthHeaders() });
+    return readGarageResponse<GarageMechanicBackend[]>(res);
   },
 
-  moderateGarage: async (id: number, status: 'APPROVED' | 'REJECTED' | 'SUSPENDED', note?: string): Promise<GarageBackendResponse> => {
+  moderateGarage: async (
+    id: number,
+    status: GarageBackendResponse['status'],
+    note?: string
+  ): Promise<GarageBackendResponse> => {
     const res = await fetch(`${API_BASE_URL}/staff/garages/${id}/moderate`, {
       method: 'PATCH',
       headers: getAuthHeaders(),
       body: JSON.stringify({ status, note })
     });
     const json = await res.json();
-    if (!json.success) throw new Error(json.message || 'Thao tác duyệt thất bại');
+    if (!res.ok || !json.success) throw new Error(json.message || 'Thao tác duyệt thất bại');
     return json.data;
   },
 
@@ -141,7 +130,8 @@ export const garageApi = {
       headers: getAuthHeaders()
     });
     const json = await res.json();
-    return json.success ? json.data : [];
+    if (!res.ok || !json.success) throw new Error(json.message || 'Không thể tải dữ liệu gara. Vui lòng thử lại.');
+    return json.data;
   },
 
   createService: async (service: Partial<ServiceItemBackend>): Promise<ServiceItemBackend> => {
@@ -151,7 +141,7 @@ export const garageApi = {
       body: JSON.stringify(service)
     });
     const json = await res.json();
-    if (!json.success) throw new Error(json.message || 'Thêm dịch vụ thất bại');
+    if (!res.ok || !json.success) throw new Error(json.message || 'Thêm dịch vụ thất bại');
     return json.data;
   },
 
@@ -162,7 +152,7 @@ export const garageApi = {
       body: JSON.stringify(service)
     });
     const json = await res.json();
-    if (!json.success) throw new Error(json.message || 'Cập nhật dịch vụ thất bại');
+    if (!res.ok || !json.success) throw new Error(json.message || 'Cập nhật dịch vụ thất bại');
     return json.data;
   },
 
@@ -172,6 +162,6 @@ export const garageApi = {
       headers: getAuthHeaders()
     });
     const json = await res.json();
-    if (!json.success) throw new Error(json.message || 'Xóa dịch vụ thất bại');
+    if (!res.ok || !json.success) throw new Error(json.message || 'Xóa dịch vụ thất bại');
   }
 };

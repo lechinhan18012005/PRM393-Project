@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../core/models/mechanic_staff_model.dart';
 import '../core/services/mechanic_service.dart';
 
@@ -96,6 +97,7 @@ class MechanicProvider with ChangeNotifier {
   Future<void> fetchMyProfile() async {
     try {
       _myProfile = await _mechanicService.getMyProfile();
+      _errorMessage = null;
       notifyListeners();
     } catch (e) {
       _errorMessage = e.toString().replaceAll('Exception: ', '');
