@@ -5,7 +5,6 @@ import 'core/constants/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/flood_report_provider.dart';
-import 'providers/garage_provider.dart';
 import 'providers/mechanic_provider.dart';
 import 'screens/splash_screen.dart';
 
@@ -22,7 +21,6 @@ class HydroRescueApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => GarageProvider()),
         ChangeNotifierProvider(create: (_) => MechanicProvider()),
         ChangeNotifierProvider(create: (_) => FloodReportProvider()),
       ],

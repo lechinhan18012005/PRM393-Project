@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/rescue_ui.dart';
+import '../../core/widgets/rescue_map_painter.dart';
 import '../../core/models/flood_report_model.dart';
 import '../../providers/flood_report_provider.dart';
 import 'community_flood_report_screen.dart';
@@ -14,7 +16,8 @@ class FloodMapScreen extends StatefulWidget {
 }
 
 class _FloodMapScreenState extends State<FloodMapScreen> {
-  int _filterIndex = 0; // 0: Tất cả, 1: Ngập sâu > 40cm, 2: Cảnh báo đỏ, 3: Đang có cứu hộ
+  int _filterIndex =
+      0; // 0: Tất cả, 1: Ngập sâu > 40cm, 2: Cảnh báo đỏ, 3: Đang có cứu hộ
 
   @override
   void initState() {
@@ -30,164 +33,171 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
     } else if (_filterIndex == 2) {
       return all.where((p) => p.waterDepthLevel == 'SEAT_60CM_PLUS').toList();
     } else if (_filterIndex == 3) {
-      return all.where((p) => p.nearbyStations != null && p.nearbyStations!.isNotEmpty).toList();
+      return all
+          .where(
+            (p) => p.nearbyStations != null && p.nearbyStations!.isNotEmpty,
+          )
+          .toList();
     }
     return all;
   }
 
   @override
   Widget build(BuildContext context) {
-    final floodProvider = context.watch<FloodReportProvider>();
-    final allPoints = floodProvider.floodPoints;
-    final displayedPoints = _filterPoints(allPoints);
-
+    final provider = context.watch<FloodReportProvider>();
+    final points = provider.floodPoints;
+    final visible = _filterPoints(points);
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
           'Bản đồ ngập',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => floodProvider.fetchActiveFloodPoints(),
+            tooltip: 'Tải lại điểm ngập',
+            onPressed: provider.isLoading
+                ? null
+                : provider.fetchActiveFloodPoints,
+            icon: const Icon(Icons.refresh, color: AppColors.secondary),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Simulated Heatmap Canvas Area (Visual map with dynamic pins)
-          Container(
-            height: 220,
-            width: double.infinity,
-            color: const Color(0xFFD6E3DF),
-            child: Stack(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: RefreshIndicator(
+            onRefresh: provider.fetchActiveFloodPoints,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
               children: [
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                RescueIntro(
+                  eyebrow: 'THÔNG TIN ĐƯỜNG ĐI',
+                  title: 'Chủ động trước điểm ngập',
+                  description: 'Theo dõi danh sách được tải từ hệ thống. Sơ đồ bên dưới chỉ minh họa, không định vị hoặc dẫn đường.',
+                ),
+                const SizedBox(height: 14),
+                RescuePanel(
+                  padding: 0,
+                  child: SizedBox(
+                    height: 190,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(painter: RescueMapPainter()),
+                        ),
+                        const Positioned(
+                          top: 12,
+                          left: 12,
+                          child: RescueLabel(
+                            'SƠ ĐỒ MINH HỌA',
+                            color: AppColors.secondary,
+                          ),
+                        ),
+                        for (final entry in visible.take(3).indexed)
+                          Align(
+                            alignment: [
+                              const Alignment(-.55, .45),
+                              const Alignment(.55, .35),
+                              const Alignment(.1, -.2),
+                            ][entry.$1],
+                            child: _buildMapPin(entry.$2),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                RescueSection(
+                  'Danh sách điểm ngập',
+                  action: RescueLabel(
+                    provider.isLoading
+                        ? 'Đang tải...'
+                        : '${visible.length} điểm',
+                  ),
+                ),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
                     children: [
-                      const Icon(
-                        Icons.map,
-                        size: 50,
-                        color: AppColors.secondary,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Điểm ngập tại TP. Hồ Chí Minh',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: Colors.blueGrey.shade800,
-                        ),
-                      ),
-                      Text(
-                        '${allPoints.length} Điểm ngập hoạt động • Cập nhật trực tuyến',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.secondary,
-                        ),
-                      ),
+                      _buildFilterChip(0, 'Tất cả (${points.length})'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(1, 'Ngập sâu'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(2, 'Cảnh báo đỏ'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(3, 'Có trạm cứu hộ'),
                     ],
                   ),
                 ),
-
-                // Simulated dynamic map pins positioned across the canvas
-                if (displayedPoints.isNotEmpty) ...[
-                  Positioned(
-                    top: 35,
-                    left: 50,
-                    child: _buildMapPin(displayedPoints[0]),
+                const SizedBox(height: 14),
+                if (provider.isLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 14),
+                    child: LinearProgressIndicator(),
                   ),
-                ],
-                if (displayedPoints.length > 1) ...[
-                  Positioned(
-                    bottom: 45,
-                    right: 70,
-                    child: _buildMapPin(displayedPoints[1]),
+                if (provider.errorMessage != null)
+                  RescuePanel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Icon(
+                          Icons.cloud_off_outlined,
+                          color: AppColors.secondary,
+                          size: 30,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Chưa cập nhật được điểm ngập',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          provider.errorMessage!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.error,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: provider.isLoading
+                              ? null
+                              : provider.fetchActiveFloodPoints,
+                          icon: const Icon(Icons.refresh, size: 17),
+                          label: const Text('Thử lại'),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-                if (displayedPoints.length > 2) ...[
-                  Positioned(
-                    top: 85,
-                    right: 120,
-                    child: _buildMapPin(displayedPoints[2]),
+                if (visible.isEmpty &&
+                    !provider.isLoading &&
+                    provider.errorMessage == null)
+                  const RescuePanel(
+                    child: RescueInfo(
+                      icon: Icons.layers_clear_outlined,
+                      title: 'Chưa có điểm ngập phù hợp',
+                      value: 'Danh sách hiện chưa có dữ liệu theo bộ lọc này. Hãy tải lại hoặc đổi bộ lọc.',
+                    ),
                   ),
-                ],
-                if (displayedPoints.length > 3) ...[
-                  Positioned(
-                    bottom: 30,
-                    left: 100,
-                    child: _buildMapPin(displayedPoints[3]),
+                for (final point in visible)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _buildFloodPointCard(context, point),
                   ),
-                ],
               ],
             ),
           ),
-
-          // Filters
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: Colors.white,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildFilterChip(0, 'Tất cả (${allPoints.length})'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip(1, 'Ngập sâu > 40cm'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip(2, 'Cảnh báo Đỏ'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip(3, 'Có trạm cứu hộ'),
-                ],
-              ),
-            ),
-          ),
-
-          // List of flood points
-          Expanded(
-            child: floodProvider.isLoading && allPoints.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : displayedPoints.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.check_circle_outline, size: 48, color: Colors.green),
-                            const SizedBox(height: 8),
-                            const Text('Không có điểm ngập nào theo tiêu chí này!'),
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: () => floodProvider.fetchActiveFloodPoints(),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Tải lại bản đồ'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () => floodProvider.fetchActiveFloodPoints(),
-                        child: ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: displayedPoints.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final pt = displayedPoints[index];
-                            return _buildFloodPointCard(context, pt);
-                          },
-                        ),
-                      ),
-          ),
-        ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.of(context).push(
-            MaterialPageRoute(
+            MaterialPageRoute<void>(
               builder: (_) => const CommunityFloodReportScreen(),
             ),
           );
@@ -196,11 +206,9 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
           }
         },
         backgroundColor: AppColors.primaryOrange,
-        icon: const Icon(Icons.add_location_alt, color: Colors.white),
-        label: const Text(
-          'Báo Điểm Ngập',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_location_alt_outlined),
+        label: const Text('Báo điểm ngập'),
       ),
     );
   }
@@ -215,11 +223,17 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
-              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+              boxShadow: const [
+                BoxShadow(color: Colors.black26, blurRadius: 2),
+              ],
             ),
             child: Text(
               pt.depthCm,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: pt.levelColor),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: pt.levelColor,
+              ),
             ),
           ),
           Icon(Icons.location_on, color: pt.levelColor, size: 32),
@@ -229,19 +243,8 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
   }
 
   Widget _buildFloodPointCard(BuildContext context, FloodReportModel pt) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x05000000),
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
+    return RescuePanel(
+      padding: 14,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -258,10 +261,7 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 2,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: pt.levelColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
@@ -306,10 +306,7 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
             const SizedBox(height: 2),
             Text(
               pt.description!,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.secondary,
-              ),
+              style: const TextStyle(fontSize: 11, color: AppColors.secondary),
             ),
           ],
           if (pt.nearbyStations != null && pt.nearbyStations!.isNotEmpty) ...[
@@ -318,11 +315,7 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                const Icon(
-                  Icons.shield,
-                  size: 14,
-                  color: AppColors.tertiary,
-                ),
+                const Icon(Icons.shield, size: 14, color: AppColors.tertiary),
                 const SizedBox(width: 4),
                 Text(
                   pt.nearbyStations!,

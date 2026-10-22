@@ -8,8 +8,10 @@ import com.prm393.floodrescue.features.garage.entity.ServiceItem;
 import com.prm393.floodrescue.features.garage.entity.ServiceType;
 import com.prm393.floodrescue.features.garage.repository.GarageRepository;
 import com.prm393.floodrescue.features.garage.repository.ServiceItemRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,8 +28,14 @@ public class ServicePricingService {
 
     @Transactional(readOnly = true)
     public List<ServiceItemDto> getServicesByCurrentUser(User user) {
-        Garage garage = garageRepository.findByOwnerId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(user.getId())
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Chưa tìm thấy garage của tài khoản này!"));
+        GarageAccess.requireApproved(garage);
         return serviceItemRepository.findByGarageIdOrderByCreatedAtAsc(garage.getId()).stream()
                 .map(this::mapToDto)
                 .toList();
@@ -35,30 +43,54 @@ public class ServicePricingService {
 
     @Transactional(readOnly = true)
     public List<ServiceItemDto> getPublicServicesByGarage(Long garageId) {
-        return serviceItemRepository.findByGarageIdAndActiveTrueOrderByCreatedAtAsc(garageId).stream()
+        Garage garage =
+                garageRepository
+                        .findById(garageId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy gara"));
+        GarageAccess.requireApproved(garage);
+        return serviceItemRepository
+                .findByGarageIdAndActiveTrueOrderByCreatedAtAsc(garageId)
+                .stream()
                 .map(this::mapToDto)
                 .toList();
     }
 
     @Transactional
     public ServiceItemDto createServiceItem(User user, ServiceItemDto dto) {
-        Garage garage = garageRepository.findByOwnerId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(user.getId())
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Chưa tìm thấy garage của tài khoản này!"));
+        GarageAccess.requireApproved(garage);
 
-        ServiceItem item = ServiceItem.builder()
-                .garage(garage)
-                .serviceName(dto.getServiceName())
-                .category(dto.getCategory() != null ? dto.getCategory() : "TẠI CHỖ")
-                .serviceType(dto.getServiceType() != null ? dto.getServiceType() : ServiceType.REPAIR_ONSITE)
-                .standardPrice(dto.getStandardPrice())
-                .minPrice(dto.getMinPrice() != null ? dto.getMinPrice() : dto.getStandardPrice().multiply(BigDecimal.valueOf(0.8)))
-                .maxPrice(dto.getMaxPrice() != null ? dto.getMaxPrice() : dto.getStandardPrice().multiply(BigDecimal.valueOf(1.3)))
-                .unit(dto.getUnit() != null ? dto.getUnit() : "lượt")
-                .estimatedTimeMin(dto.getEstimatedTimeMin() != null ? dto.getEstimatedTimeMin() : 15)
-                .description(dto.getDescription())
-                .active(dto.isActive())
-                .warrantyDays(dto.getWarrantyDays() != null ? dto.getWarrantyDays() : 3)
-                .build();
+        ServiceItem item =
+                ServiceItem.builder()
+                        .garage(garage)
+                        .serviceName(dto.getServiceName())
+                        .category(dto.getCategory() != null ? dto.getCategory() : "TẠI CHỖ")
+                        .serviceType(
+                                dto.getServiceType() != null
+                                        ? dto.getServiceType()
+                                        : ServiceType.REPAIR_ONSITE)
+                        .standardPrice(dto.getStandardPrice())
+                        .minPrice(
+                                dto.getMinPrice() != null
+                                        ? dto.getMinPrice()
+                                        : dto.getStandardPrice().multiply(BigDecimal.valueOf(0.8)))
+                        .maxPrice(
+                                dto.getMaxPrice() != null
+                                        ? dto.getMaxPrice()
+                                        : dto.getStandardPrice().multiply(BigDecimal.valueOf(1.3)))
+                        .unit(dto.getUnit() != null ? dto.getUnit() : "lượt")
+                        .estimatedTimeMin(
+                                dto.getEstimatedTimeMin() != null ? dto.getEstimatedTimeMin() : 15)
+                        .description(dto.getDescription())
+                        .active(dto.isActive())
+                        .warrantyDays(dto.getWarrantyDays() != null ? dto.getWarrantyDays() : 3)
+                        .build();
 
         item = serviceItemRepository.save(item);
         log.info("Service item created with id: {} for garage: {}", item.getId(), garage.getId());
@@ -67,14 +99,26 @@ public class ServicePricingService {
 
     @Transactional
     public ServiceItemDto updateServiceItem(User user, Long serviceId, ServiceItemDto dto) {
-        Garage garage = garageRepository.findByOwnerId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(user.getId())
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Chưa tìm thấy garage của tài khoản này!"));
+        GarageAccess.requireApproved(garage);
 
-        ServiceItem item = serviceItemRepository.findById(serviceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy dịch vụ với id: " + serviceId));
+        ServiceItem item =
+                serviceItemRepository
+                        .findById(serviceId)
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Không tìm thấy dịch vụ với id: " + serviceId));
 
         if (!item.getGarage().getId().equals(garage.getId())) {
-            throw new ResourceNotFoundException("Dịch vụ không thuộc quyền quản lý của garage bạn!");
+            throw new ResourceNotFoundException(
+                    "Dịch vụ không thuộc quyền quản lý của garage bạn!");
         }
 
         if (dto.getServiceName() != null) item.setServiceName(dto.getServiceName());
@@ -95,14 +139,26 @@ public class ServicePricingService {
 
     @Transactional
     public void deleteServiceItem(User user, Long serviceId) {
-        Garage garage = garageRepository.findByOwnerId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(user.getId())
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Chưa tìm thấy garage của tài khoản này!"));
+        GarageAccess.requireApproved(garage);
 
-        ServiceItem item = serviceItemRepository.findById(serviceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy dịch vụ với id: " + serviceId));
+        ServiceItem item =
+                serviceItemRepository
+                        .findById(serviceId)
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Không tìm thấy dịch vụ với id: " + serviceId));
 
         if (!item.getGarage().getId().equals(garage.getId())) {
-            throw new ResourceNotFoundException("Dịch vụ không thuộc quyền quản lý của garage bạn!");
+            throw new ResourceNotFoundException(
+                    "Dịch vụ không thuộc quyền quản lý của garage bạn!");
         }
 
         serviceItemRepository.delete(item);

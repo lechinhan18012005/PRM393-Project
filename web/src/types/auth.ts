@@ -38,5 +38,11 @@ export interface RegisterPayload {
   phone?: string;
   password: string;
   fullName: string;
-  role?: 'CUSTOMER';
+  application: {
+    garageName: string;
+    phone?: string;
+    businessLicenseUrl: string;
+    idCardUrl: string;
+    firstBranchAddress?: string;
+  };
 }

@@ -5,7 +5,6 @@ import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../customer/stitch_hydro_rescue_screen.dart';
 import '../home/mechanic_home_screen.dart';
-import '../home/garage_home_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -18,7 +17,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-  String _selectedRole = 'CUSTOMER'; // CUSTOMER, FIELD_MECHANIC, GARAGE_OWNER
+  String _selectedRole = 'CUSTOMER'; // CUSTOMER, FIELD_MECHANIC
   bool _obscurePassword = true;
 
   @override
@@ -32,8 +31,6 @@ class _LoginScreenState extends State<LoginScreen> {
     Widget target;
     if (role == 'FIELD_MECHANIC') {
       target = const MechanicHomeScreen();
-    } else if (role == 'GARAGE_OWNER') {
-      target = const GarageHomeScreen();
     } else {
       target = const StitchHydroRescueScreen();
     }
@@ -209,11 +206,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             'Thợ cơ động',
                             Icons.build,
                           ),
-                          _buildRoleTab(
-                            'GARAGE_OWNER',
-                            'Chủ Gara',
-                            Icons.store,
-                          ),
                         ],
                       ),
                     ),
@@ -226,9 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: 'Số điện thoại hoặc Email',
                         hintText: _selectedRole == 'CUSTOMER'
                             ? 'customer@floodrescue.vn hoặc 0900000005'
-                            : _selectedRole == 'FIELD_MECHANIC'
-                            ? 'mechanic@floodrescue.vn hoặc 0900000004'
-                            : 'garage@floodrescue.vn hoặc 0900000003',
+                            : 'mechanic@floodrescue.vn hoặc 0900000004',
                         prefixIcon: const Icon(Icons.account_circle_outlined),
                         filled: true,
                         fillColor: AppColors.surfaceContainerLowest,
@@ -372,29 +362,22 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => _handleDemoLogin('GARAGE_OWNER'),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Text(
-                                'Chủ Gara',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 24),
                     ],
 
+                    TextButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const RegisterScreen(invitation: true),
+                        ),
+                      ),
+                      child: const Text(
+                        'Kích hoạt tài khoản Thợ cứu hộ được mời',
+                      ),
+                    ),
                     // Link to Register
                     Wrap(
                       spacing: 8,

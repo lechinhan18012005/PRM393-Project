@@ -32,7 +32,7 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF111C2D), // Dark radar theme
+      backgroundColor: const Color(0xFF112C42), // Dark radar theme
       appBar: AppBar(
         title: const Text(
           'Tìm cứu hộ',
@@ -46,7 +46,7 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
         children: [
           const SizedBox(height: 10),
           const Text(
-            'HỆ THỐNG ĐANG QUÉT TRONG BÁN KÍNH 3KM',
+            'MÔ PHỎNG TÌM KIẾM TRONG BÁN KÍNH 3KM',
             style: TextStyle(
               color: AppColors.primaryContainer,
               fontSize: 11,
@@ -56,7 +56,7 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
           ),
           const SizedBox(height: 6),
           const Text(
-            'Đã tìm thấy 3 thợ trực chiến đang sẵn sàng...',
+            'Minh họa kết nối đội cứu hộ gần bạn.',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const Spacer(),

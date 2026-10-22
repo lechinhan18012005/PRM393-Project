@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
+
 import '../core/models/user_model.dart';
 import '../core/services/auth_service.dart';
 
 class AuthProvider with ChangeNotifier {
-  final AuthService _authService = AuthService();
+  final AuthService _authService;
+  AuthProvider({AuthService? authService})
+    : _authService = authService ?? AuthService();
 
   UserModel? _user;
   bool _isLoading = false;
@@ -89,15 +92,6 @@ class AuthProvider with ChangeNotifier {
     }
     String identifier;
     switch (role) {
-      case 'ADMIN':
-        identifier = 'admin@floodrescue.vn';
-        break;
-      case 'STAFF':
-        identifier = 'staff@floodrescue.vn';
-        break;
-      case 'GARAGE_OWNER':
-        identifier = 'garage@floodrescue.vn';
-        break;
       case 'FIELD_MECHANIC':
         identifier = 'mechanic@floodrescue.vn';
         break;
@@ -110,9 +104,50 @@ class AuthProvider with ChangeNotifier {
     return login(identifier, 'Password@123');
   }
 
+  Future<bool> refreshProfile() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      _user = await _authService.getCurrentUser();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Không tải được thông tin tài khoản. Vui lòng thử lại.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateProfile({
+    required String fullName,
+    required String email,
+    String? phone,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      _user = await _authService.updateProfile(
+        fullName: fullName,
+        email: email,
+        phone: phone,
+      );
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> logout() async {
     await _authService.logout();
     _user = null;
+    _errorMessage = null;
     notifyListeners();
   }
 

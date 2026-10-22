@@ -51,26 +51,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
   }, []);
 
+  // isLoading is reserved for restoring the initial session. Login/register views
+  // keep their own submit state so failed requests do not unmount their errors.
   const login = async (payload: LoginPayload) => {
-    setIsLoading(true);
-    try {
-      const data = await authApi.login(payload);
-      setToken(data.accessToken);
-      setUser(data.user);
-    } finally {
-      setIsLoading(false);
-    }
+    const data = await authApi.login(payload);
+    setToken(data.accessToken);
+    setUser(data.user);
   };
 
   const register = async (payload: RegisterPayload) => {
-    setIsLoading(true);
-    try {
-      const data = await authApi.register(payload);
-      setToken(data.accessToken);
-      setUser(data.user);
-    } finally {
-      setIsLoading(false);
-    }
+    const data = await authApi.register(payload);
+    setToken(data.accessToken);
+    setUser(data.user);
   };
 
   const demoLogin = async (role: Role) => {

@@ -3,367 +3,484 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
-import '../auth/login_screen.dart';
-import '../demo/demo_catalog_screen.dart';
+import '../../providers/mechanic_provider.dart';
+import '../customer/account_screen.dart';
+import '../customer/vietqr_payment_screen.dart';
 import '../mechanic/incoming_dispatch_screen.dart';
 import '../mechanic/quotation_builder_screen.dart';
+import '../mechanic/repair_execution_screen.dart';
+import '../mechanic/route_navigation_screen.dart';
 import '../mechanic/mechanic_shift_screen.dart';
-import '../customer/vietqr_payment_screen.dart';
+import '../mechanic/mechanic_ui.dart';
 
 class MechanicHomeScreen extends StatefulWidget {
   const MechanicHomeScreen({super.key});
-
   @override
   State<MechanicHomeScreen> createState() => _MechanicHomeScreenState();
 }
 
 class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
-  bool _isOnline = true;
+  // Hot reload can retain a State created before these fields existed.
+  // Read through defaults instead of relying on field initializers being rerun.
+  int? _tab;
+  int get _currentTab => _tab ?? 0;
+  Set<int>? _visited;
+  Set<int> get _visitedTabs => _visited ??= <int>{0};
+  static const _titles = [
+    'Tổng quan',
+    'Công việc',
+    'Ca trực',
+    'Công cụ',
+    'Tài khoản',
+  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<MechanicProvider>().fetchMyProfile();
+    });
+  }
 
+  void _select(int value) => setState(() {
+    _tab = value;
+    _visitedTabs.add(value);
+  });
+  void _open(Widget page) =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final user = authProvider.user;
-
     return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Ca làm việc',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        foregroundColor: AppColors.onSurface,
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.grid_view_rounded,
-              color: AppColors.primaryOrange,
-            ),
-            tooltip: 'Khám phá ứng dụng',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const DemoCatalogScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: AppColors.error),
-            tooltip: 'Đăng xuất',
-            onPressed: () async {
-              await authProvider.logout();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-              }
-            },
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Status Toggle Card
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: _isOnline
-                    ? const Color(0xFFE8F5E9)
-                    : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: _isOnline
-                      ? Colors.green.shade300
-                      : Colors.grey.shade300,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      backgroundColor: AppColors.background,
+      appBar: _currentTab == 4
+          ? null
+          : AppBar(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: _isOnline ? Colors.green : Colors.grey,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        _isOnline ? 'Đang nhận đơn' : 'Tạm nghỉ',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: _isOnline
-                              ? Colors.green.shade900
-                              : Colors.grey.shade700,
-                        ),
-                      ),
-                    ],
+                  const Text(
+                    'FLOOD RESCUE / ĐỘI CỨU HỘ',
+                    style: TextStyle(
+                      fontSize: 9,
+                      letterSpacing: 1.4,
+                      color: AppColors.secondary,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  Switch(
-                    value: _isOnline,
-                    activeThumbColor: AppColors.tertiary,
-                    onChanged: (val) {
-                      setState(() {
-                        _isOnline = val;
-                      });
-                    },
+                  const SizedBox(height: 3),
+                  Text(
+                    _titles[_currentTab],
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ],
               ),
+              actions: [
+                IconButton(
+                  tooltip: 'Làm mới hồ sơ',
+                  onPressed: () =>
+                      context.read<MechanicProvider>().fetchMyProfile(),
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    color: AppColors.secondary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 14),
-
-            // Mechanic Card Info (Tap to view shift and tools)
-            GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const MechanicShiftScreen(),
-                  ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x05000000),
-                      blurRadius: 6,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const CircleAvatar(
-                      radius: 24,
-                      backgroundColor: AppColors.surfaceContainerHigh,
-                      child: Icon(
-                        Icons.engineering,
-                        color: AppColors.primaryOrange,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user?.fullName ?? 'Phạm Thợ Cứu Hộ',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            'Chi nhánh Q.7 • Gara Toàn Thắng • ⭐ 4.9 (128 đơn)',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.secondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(
-                      Icons.arrow_forward_ios,
-                      size: 14,
-                      color: AppColors.secondary,
-                    ),
-                  ],
-                ),
-              ),
+      body: IndexedStack(
+        index: _currentTab,
+        children: [
+          _overview(),
+          _visitedTabs.contains(1) ? _jobs() : const SizedBox.shrink(),
+          _visitedTabs.contains(2)
+              ? const MechanicShiftScreen(embedded: true)
+              : const SizedBox.shrink(),
+          _visitedTabs.contains(3) ? _tools() : const SizedBox.shrink(),
+          _visitedTabs.contains(4)
+              ? const AccountScreen()
+              : const SizedBox.shrink(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentTab,
+        onDestinationSelected: _select,
+        backgroundColor: Colors.white,
+        indicatorColor: AppColors.primaryContainer,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(
+              Icons.dashboard_rounded,
+              color: AppColors.primary,
             ),
-            const SizedBox(height: 16),
+            label: 'Tổng quan',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment, color: AppColors.primary),
+            label: 'Công việc',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.schedule_outlined),
+            selectedIcon: Icon(Icons.schedule, color: AppColors.primary),
+            label: 'Ca trực',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.handyman_outlined),
+            selectedIcon: Icon(Icons.handyman, color: AppColors.primary),
+            label: 'Công cụ',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person, color: AppColors.primary),
+            label: 'Tài khoản',
+          ),
+        ],
+      ),
+    );
+  }
 
-            // Incoming Dispatch Alert (Tap to open 45s alert screen)
-            if (_isOnline) ...[
-              GestureDetector(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const IncomingDispatchScreen(),
-                    ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: AppColors.primaryOrange,
-                      width: 1.5,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        alignment: WrapAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryOrange.withValues(
-                                alpha: 0.15,
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(
-                                  Icons.timer,
-                                  size: 14,
-                                  color: AppColors.primaryOrange,
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Còn 42s phản hồi',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primaryOrange,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Text(
-                            'Cách bạn 1.1 km',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.secondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Yêu cầu cứu hộ khẩn cấp #SOS-8924',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Khách: Hoàng Văn Khách (0900000005)\nXe: Honda SH • Xe ngập ngang ống bô, chết máy',
-                        style: TextStyle(fontSize: 13, color: Colors.black87),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Vị trí: Số 148 Trần Xuân Soạn, P. Tân Hưng, Q.7',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.secondary,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const IncomingDispatchScreen(),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryOrange,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: const Text(
-                          'Xem yêu cầu',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-
-            // Quick Tool Shortcuts
+  Widget _scroll(List<Widget> children) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 760),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+        children: children,
+      ),
+    ),
+  );
+  Widget _overview() {
+    final provider = context.watch<MechanicProvider>();
+    final profile = provider.myProfile;
+    final name = context.watch<AuthProvider>().user?.fullName ?? 'Thợ cứu hộ';
+    return _scroll([
+      MechanicPanel(
+        dark: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             const Text(
-              'Công cụ',
+              'CHÀO MỪNG TRỞ LẠI',
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: AppColors.outline,
+                color: Color(0xFF99B4C6),
+                fontSize: 10,
+                letterSpacing: 1.3,
+                fontWeight: FontWeight.w700,
               ),
-            ),
-            const SizedBox(height: 10),
-            ListTile(
-              tileColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              leading: const Icon(Icons.receipt_long, color: AppColors.primary),
-              title: const Text('Lập Báo Giá Hiện Trường (V1/V2)'),
-              subtitle: const Text('Chọn dịch vụ sấy bugi, xả nước, thay dầu'),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const QuotationBuilderScreen(),
-                  ),
-                );
-              },
             ),
             const SizedBox(height: 8),
-            ListTile(
-              tileColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            Text(
+              name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 23,
+                fontWeight: FontWeight.w800,
               ),
-              leading: const Icon(Icons.qr_code, color: AppColors.tertiary),
-              title: const Text('Thanh toán'),
-              subtitle: const Text(
-                'Tạo mã VietQR động để khách quét thanh toán',
-              ),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const VietQRPaymentScreen(),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              profile?.garageName ?? 'Không gian làm việc của đội cứu hộ',
+              style: const TextStyle(color: Color(0xFFB9CEDB), fontSize: 12),
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                MechanicLabel(
+                  profile == null
+                      ? 'Chưa tải hồ sơ'
+                      : profile.isBusy
+                      ? 'Đang thực hiện việc'
+                      : profile.isOnline
+                      ? 'Sẵn sàng nhận đơn'
+                      : 'Đang nghỉ',
+                  color: const Color(0xFF76D6B5),
+                ),
+                if (profile?.branchName != null)
+                  MechanicLabel(
+                    profile!.branchName!,
+                    color: const Color(0xFFB9CEDB),
                   ),
-                );
-              },
+              ],
             ),
           ],
         ),
       ),
-    );
+      const SizedBox(height: 12),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _metric(
+              Icons.storefront_outlined,
+              'Chi nhánh',
+              profile?.branchName ?? 'Chưa phân công',
+              AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _metric(
+              Icons.schedule_rounded,
+              'Ca được phân',
+              profile?.shiftName ?? 'Chưa phân ca',
+              AppColors.tertiary,
+            ),
+          ),
+        ],
+      ),
+      if (provider.errorMessage != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: MechanicPanel(
+            child: Text(
+              provider.errorMessage!,
+              style: const TextStyle(color: AppColors.error, fontSize: 12),
+            ),
+          ),
+        ),
+      MechanicSection(
+        'Trạng thái làm việc',
+        action: TextButton(
+          onPressed: () => _select(2),
+          child: const Text('Xem ca trực'),
+        ),
+      ),
+      MechanicPanel(
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.tertiary.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.radar, color: AppColors.tertiary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    profile == null
+                        ? 'Chờ tải hồ sơ'
+                        : profile.isBusy
+                        ? 'Đang bận'
+                        : profile.isOnline
+                        ? 'Đang nhận yêu cầu'
+                        : 'Tạm nghỉ',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Trạng thái đồng bộ với gara',
+                    style: TextStyle(fontSize: 11, color: AppColors.secondary),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: profile?.isOnline ?? false,
+              onChanged: profile == null || profile.isBusy || provider.isLoading
+                  ? null
+                  : (_) => changeMechanicAvailability(context),
+            ),
+          ],
+        ),
+      ),
+      const MechanicSection('Công việc cứu hộ'),
+      _jobCard(),
+      const MechanicSection('Truy cập nhanh'),
+      _tool(
+        Icons.receipt_long_outlined,
+        'Lập báo giá',
+        'Chọn dịch vụ và tính chi phí',
+        () => _open(const QuotationBuilderScreen()),
+      ),
+      const SizedBox(height: 8),
+      _tool(
+        Icons.person_outline,
+        'Thông tin tài khoản',
+        'Xem hồ sơ, cập nhật và đăng xuất',
+        () => _select(4),
+        demo: false,
+      ),
+    ]);
   }
+
+  Widget _metric(IconData icon, String label, String value, Color color) =>
+      MechanicPanel(
+        padding: 13,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: const TextStyle(color: AppColors.secondary, fontSize: 10),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      );
+  Widget _jobCard() => MechanicPanel(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            MechanicLabel('ĐƠN MINH HỌA', color: AppColors.primary),
+            MechanicLabel('Sửa chữa tại chỗ'),
+          ],
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Cứu hộ xe bị ngập nước',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 5),
+        const Text(
+          '#SOS-8924 · Honda SH',
+          style: TextStyle(fontSize: 12, color: AppColors.secondary),
+        ),
+        const Divider(height: 26),
+        const MechanicInfo(
+          icon: Icons.person_outline,
+          title: 'Khách hàng',
+          value: 'Hoàng Văn Khách',
+        ),
+        const MechanicInfo(
+          icon: Icons.location_on_outlined,
+          title: 'Điểm cứu hộ',
+          value: '148 Trần Xuân Soạn, P. Tân Hưng, Q.7',
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => _open(const IncomingDispatchScreen()),
+            icon: const Icon(Icons.arrow_forward, size: 17),
+            label: const Text('Xem yêu cầu mô phỏng'),
+          ),
+        ),
+      ],
+    ),
+  );
+  Widget _jobs() => _scroll([
+    const MechanicDemoNotice(),
+    const Text(
+      'Danh sách công việc',
+      style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
+    ),
+    const SizedBox(height: 6),
+    const Text(
+      'Luồng minh họa từ nhận yêu cầu đến hoàn tất sửa chữa.',
+      style: TextStyle(fontSize: 12, color: AppColors.secondary),
+    ),
+    const SizedBox(height: 16),
+    _jobCard(),
+    const SizedBox(height: 16),
+    const MechanicPanel(
+      child: MechanicInfo(
+        icon: Icons.info_outline,
+        title: 'Lưu ý',
+        value: 'Chưa kết nối danh sách và phân công đơn cứu hộ thật.',
+      ),
+    ),
+  ]);
+  Widget _tools() => _scroll([
+    const MechanicDemoNotice(),
+    const Text(
+      'Bộ công cụ hiện trường',
+      style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
+    ),
+    const SizedBox(height: 6),
+    const Text(
+      'Hỗ trợ từng bước của hành trình cứu hộ.',
+      style: TextStyle(fontSize: 12, color: AppColors.secondary),
+    ),
+    const MechanicSection('Tiếp nhận & di chuyển'),
+    _tool(
+      Icons.notifications_active_outlined,
+      'Yêu cầu cứu hộ',
+      'Xem thông tin khách và sự cố',
+      () => _open(const IncomingDispatchScreen()),
+    ),
+    const SizedBox(height: 8),
+    _tool(
+      Icons.route_outlined,
+      'Đường đến khách',
+      'Xem lộ trình minh họa',
+      () => _open(const RouteNavigationScreen()),
+    ),
+    const MechanicSection('Sửa chữa & thanh toán'),
+    _tool(
+      Icons.receipt_long_outlined,
+      'Lập báo giá',
+      'Danh mục dịch vụ và tổng chi phí',
+      () => _open(const QuotationBuilderScreen()),
+    ),
+    const SizedBox(height: 8),
+    _tool(
+      Icons.build_outlined,
+      'Thực hiện sửa chữa',
+      'Theo dõi các bước công việc',
+      () => _open(const RepairExecutionScreen()),
+    ),
+    const SizedBox(height: 8),
+    _tool(
+      Icons.qr_code_rounded,
+      'Thanh toán VietQR',
+      'Xem giao diện thanh toán mẫu',
+      () => _open(const VietQRPaymentScreen()),
+    ),
+  ]);
+  Widget _tool(
+    IconData icon,
+    String title,
+    String subtitle,
+    VoidCallback onTap, {
+    bool demo = true,
+  }) => MechanicPanel(
+    padding: 0,
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.primaryContainer,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: AppColors.primary, size: 21),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+      subtitle: Text(
+        '$subtitle${demo ? ' · Mô phỏng' : ''}',
+        style: const TextStyle(fontSize: 11, color: AppColors.secondary),
+      ),
+      trailing: const Icon(
+        Icons.chevron_right,
+        size: 18,
+        color: AppColors.secondary,
+      ),
+      onTap: onTap,
+    ),
+  );
 }

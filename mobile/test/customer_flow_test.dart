@@ -23,6 +23,8 @@ void main() {
     await tester.tap(find.byKey(const Key('request-rescue')));
     await tester.pumpAndSettle();
     expect(find.byType(ServiceSelectionScreen), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('service-1')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('service-1')));
     await tester.pumpAndSettle();
     final details = find.text('Dịch vụ bao gồm những gì?');

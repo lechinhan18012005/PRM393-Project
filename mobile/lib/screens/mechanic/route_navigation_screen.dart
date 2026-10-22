@@ -1,214 +1,156 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import 'mechanic_ui.dart';
 import 'quotation_builder_screen.dart';
 
 class RouteNavigationScreen extends StatelessWidget {
   const RouteNavigationScreen({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Đường đến khách',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
+  Widget build(BuildContext context) => MechanicPage(
+    title: 'Di chuyển đến khách',
+    bottom: FilledButton.icon(
+      onPressed: () => Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const QuotationBuilderScreen()),
       ),
-      body: Stack(
-        children: [
-          // Simulated Fullscreen Map Canvas
-          Container(
-            color: const Color(0xFFD4E0D9),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+      icon: const Icon(Icons.check_circle_outline),
+      label: const Text('Đã đến nơi · Lập báo giá mẫu'),
+    ),
+    children: [
+      MechanicPanel(
+        padding: 0,
+        child: Column(
+          children: [
+            Container(
+              height: 230,
+              decoration: const BoxDecoration(
+                color: Color(0xFFE8F1EE),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Stack(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade100,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-
-                      children: [
-                        Icon(Icons.warning, color: Colors.red, size: 16),
-                        SizedBox(width: 6),
-                        Text(
-                          'Đoạn ngập 45cm - Đi theo lộ trình né ngập đề xuất',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.red,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+                  const Positioned.fill(
+                    child: CustomPaint(painter: _RouteSketch()),
                   ),
-                  const SizedBox(height: 30),
-                  const Icon(
-                    Icons.navigation,
-                    color: AppColors.primaryOrange,
-                    size: 54,
-                  ),
-                  const Text(
-                    'Bạn đang di chuyển (40 km/h)',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                  const Positioned(
+                    left: 16,
+                    top: 16,
+                    child: MechanicLabel(
+                      'SƠ ĐỒ MINH HỌA',
                       color: AppColors.secondary,
                     ),
                   ),
-                  const SizedBox(height: 30),
-                  const Icon(Icons.place, color: Colors.red, size: 44),
-                  const Text(
-                    'Điểm đến: 148 Trần Xuân Soạn',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Top Turn-by-Turn Instruction Banner
-          Positioned(
-            top: 16,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 8,
-                    offset: Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.turn_right, color: Colors.greenAccent, size: 40),
-                  SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Sau 150m nữa',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                        Text(
-                          'Rẽ phải vào đường Trần Xuân Soạn',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ],
+                  const Align(
+                    alignment: Alignment(-.55, .55),
+                    child: CircleAvatar(
+                      backgroundColor: AppColors.tertiary,
+                      child: Icon(Icons.navigation, color: Colors.white),
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-
-          // Bottom Action Card
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 10,
-                    offset: Offset(0, -3),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.access_time_filled,
-                            color: AppColors.primaryOrange,
-                            size: 22,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            '5 Phút nữa đến nơi',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        'Khoảng cách: 850m',
-                        style: TextStyle(
-                          color: AppColors.secondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (_) => const QuotationBuilderScreen(),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
+                  const Align(
+                    alignment: Alignment(.55, -.4),
+                    child: CircleAvatar(
                       backgroundColor: AppColors.primaryOrange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      child: Icon(Icons.location_on, color: Colors.white),
                     ),
-                    child: const Text(
-                      'Đã đến nơi',
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.route, color: AppColors.tertiary),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '1,1 km · khoảng 5 phút',
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
+      const MechanicSection('Lộ trình cứu hộ'),
+      const MechanicPanel(
+        child: Column(
+          children: [
+            MechanicInfo(
+              icon: Icons.my_location,
+              title: 'Điểm xuất phát mẫu',
+              value: 'Chi nhánh Q.7',
+            ),
+            Divider(),
+            MechanicInfo(
+              icon: Icons.turn_right_outlined,
+              title: 'Di chuyển',
+              value: 'Theo đường Huỳnh Tấn Phát đến Trần Xuân Soạn',
+            ),
+            Divider(),
+            MechanicInfo(
+              icon: Icons.location_on_outlined,
+              title: 'Điểm đến mẫu',
+              value: '148 Trần Xuân Soạn, P. Tân Hưng, Quận 7',
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 14),
+      const MechanicPanel(
+        child: MechanicInfo(
+          icon: Icons.info_outline,
+          title: 'Bản đồ mô phỏng',
+          value: 'Sơ đồ không sử dụng vị trí GPS hoặc chỉ đường trực tiếp.',
+        ),
+      ),
+    ],
+  );
+}
+
+class _RouteSketch extends CustomPainter {
+  const _RouteSketch();
+  @override
+  void paint(Canvas canvas, Size size) {
+    final road = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 22
+      ..style = PaintingStyle.stroke;
+    for (final x in [.15, .5, .85]) {
+      canvas.drawLine(
+        Offset(size.width * x, 0),
+        Offset(size.width * (x - .12), size.height),
+        road,
+      );
+    }
+    for (final y in [.25, .7]) {
+      canvas.drawLine(
+        Offset(0, size.height * y),
+        Offset(size.width, size.height * (y + .1)),
+        road,
+      );
+    }
+    final path = Path()
+      ..moveTo(size.width * .23, size.height * .77)
+      ..lineTo(size.width * .45, size.height * .77)
+      ..lineTo(size.width * .5, size.height * .29)
+      ..lineTo(size.width * .78, size.height * .29);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = AppColors.tertiary
+        ..strokeWidth = 5
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
     );
   }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
