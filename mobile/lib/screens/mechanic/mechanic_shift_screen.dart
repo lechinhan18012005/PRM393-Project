@@ -3,334 +3,201 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../providers/mechanic_provider.dart';
+import 'mechanic_ui.dart';
+
+Future<void> changeMechanicAvailability(BuildContext context) async {
+  final provider = context.read<MechanicProvider>();
+  final profile = provider.myProfile;
+  if (profile == null || profile.isBusy || provider.isLoading) return;
+  final target = profile.isOnline ? 'OFFLINE' : 'AVAILABLE';
+  final ok = await provider.toggleStatus(status: target);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        ok
+            ? (target == 'AVAILABLE'
+                  ? 'Đã bật trạng thái sẵn sàng nhận đơn.'
+                  : 'Đã chuyển sang trạng thái tạm nghỉ.')
+            : (provider.errorMessage ??
+                  'Không thể cập nhật trạng thái. Vui lòng thử lại.'),
+      ),
+      backgroundColor: ok ? AppColors.tertiary : AppColors.error,
+    ),
+  );
+}
 
 class MechanicShiftScreen extends StatefulWidget {
-  const MechanicShiftScreen({super.key});
-
+  const MechanicShiftScreen({super.key, this.embedded = false});
+  final bool embedded;
   @override
   State<MechanicShiftScreen> createState() => _MechanicShiftScreenState();
 }
 
 class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
-  int _activeShift = 1; // 0: Ca Sáng, 1: Ca Chiều (Trực Bão), 2: Ca Đêm
-
-  final List<Map<String, String>> _shifts = [
-    {
-      'title': 'Ca 1: Sáng sớm (06:00 - 14:00)',
-      'desc': 'Triều cường dâng ca sáng',
-      'team': '4 Thợ cơ động trực chiến',
-    },
-    {
-      'title': 'Ca 2: Chiều tối (14:00 - 22:00) [Đang trực]',
-      'desc': 'Đỉnh triều cường + Mưa bão lớn',
-      'team': '8 Thợ cơ động trực chiến',
-    },
-    {
-      'title': 'Ca 3: Đêm khẩn cấp (22:00 - 06:00)',
-      'desc': 'Ứng trực tại Gara chi nhánh',
-      'team': '3 Thợ túc trực xe tải',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<MechanicProvider>().fetchMyProfile();
-    });
+    if (!widget.embedded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<MechanicProvider>().fetchMyProfile();
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final mechProvider = context.watch<MechanicProvider>();
-    final profile = mechProvider.myProfile;
-    final isOnline = profile?.isOnline ?? false;
-
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Ca trực',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    final provider = context.watch<MechanicProvider>();
+    final p = provider.myProfile;
+    final body = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
           children: [
-            // Shift Header Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x05000000),
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
+            MechanicPanel(
+              dark: true,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text(
+                    'LỊCH LÀM VIỆC',
+                    style: TextStyle(
+                      fontSize: 10,
+                      letterSpacing: 1.5,
+                      color: Color(0xFF99B4C6),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    p?.shiftName ?? 'Chưa được phân ca',
+                    style: const TextStyle(
+                      fontSize: 23,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    p?.garageName ?? 'Ca trực do chủ gara phân công',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFFB9CEDB),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const MechanicSection('Thông tin phân công'),
+            MechanicPanel(
+              child: Column(
+                children: [
+                  MechanicInfo(
+                    icon: Icons.engineering_outlined,
+                    title: 'Thợ cứu hộ',
+                    value: p?.fullName ?? 'Chưa tải được hồ sơ',
+                  ),
+                  const Divider(),
+                  MechanicInfo(
+                    icon: Icons.storefront_outlined,
+                    title: 'Chi nhánh',
+                    value: p?.branchName ?? 'Chưa phân chi nhánh',
+                  ),
+                  MechanicInfo(
+                    icon: Icons.location_on_outlined,
+                    title: 'Địa chỉ',
+                    value: p?.branchAddress ?? 'Chưa cập nhật',
+                  ),
+                  MechanicInfo(
+                    icon: Icons.schedule_outlined,
+                    title: 'Ca làm việc',
+                    value: p?.shiftName ?? 'Chưa được phân ca',
+                  ),
+                ],
+              ),
+            ),
+            const MechanicSection('Trạng thái nhận việc'),
+            MechanicPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      const Icon(Icons.radar, color: AppColors.tertiary),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          profile?.garageName != null
-                              ? 'ĐỘI CỨU HỘ • ${profile!.garageName!.toUpperCase()}'
-                              : 'ĐỘI TRỰC CHIẾN BÃO SỐ 4',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          p == null
+                              ? 'Chưa xác định'
+                              : p.isBusy
+                              ? 'Đang thực hiện công việc'
+                              : p.isOnline
+                              ? 'Sẵn sàng nhận đơn'
+                              : 'Đang tạm nghỉ',
                           style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryOrange,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isOnline
-                              ? Colors.green.shade50
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          isOnline ? 'ONLINE' : 'OFFLINE',
-                          style: TextStyle(
-                            color: isOnline
-                                ? Colors.green.shade800
-                                : Colors.grey.shade700,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Thợ phụ trách: ${profile?.fullName ?? "Phạm Tuấn Anh"} (Mã: #${profile?.username ?? "TECH-01"})',
-                    style: const TextStyle(
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Bật nhận việc khi bạn sẵn sàng. Thay đổi trạng thái được đồng bộ với gara.',
+                    style: TextStyle(
                       fontSize: 12,
                       color: AppColors.secondary,
+                      height: 1.6,
                     ),
                   ),
-                  Text(
-                    'Chi nhánh: ${profile?.branchName ?? "Chi nhánh Q.7"} • ${profile?.branchAddress ?? "Huỳnh Tấn Phát"}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: p == null || p.isBusy || provider.isLoading
+                        ? null
+                        : () => changeMechanicAvailability(context),
+                    icon: Icon(
+                      p?.isOnline == true
+                          ? Icons.pause_circle_outline
+                          : Icons.play_circle_outline,
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            const Text(
-              'CHỌN CA TRỰC CHIẾN',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppColors.outline,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            ..._shifts.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final s = entry.value;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _buildShiftCard(
-                  idx,
-                  s['title']!,
-                  s['desc']!,
-                  s['team']!,
-                ),
-              );
-            }),
-
-            const SizedBox(height: 20),
-            const Text(
-              'THIẾT BỊ & PHƯƠNG TIỆN ĐÃ BÀN GIAO',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppColors.outline,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Column(
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.check_box, color: Colors.green, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '1 Xe máy Honda Future trang bị ống thở chống ngập',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.check_box, color: Colors.green, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '1 Thùng đồ nghề chống nước + Máy bơm hút dầu',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.check_box, color: Colors.green, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '10 Bình nhớt Castrol + 15 Bugi NGK dự phòng',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            if (mechProvider.isLoading)
-              const Center(child: CircularProgressIndicator())
-            else
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final targetStatus = isOnline ? 'OFFLINE' : 'AVAILABLE';
-                  await context.read<MechanicProvider>().toggleStatus(
-                    status: targetStatus,
-                    latitude: 10.7423,
-                    longitude: 106.7021,
-                  );
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          targetStatus == 'AVAILABLE'
-                              ? 'Điểm danh vào ca trực chiến thành công! Vị trí GPS đã bật sẵn sàng nhận đơn.'
-                              : 'Đã chuyển sang trạng thái Nghỉ trực (OFFLINE).',
-                        ),
-                        backgroundColor: targetStatus == 'AVAILABLE'
-                            ? Colors.green
-                            : Colors.grey.shade800,
-                      ),
-                    );
-                  }
-                },
-                icon: Icon(
-                  isOnline ? Icons.power_settings_new : Icons.radar,
-                  size: 20,
-                ),
-                label: Text(
-                  isOnline
-                      ? 'KẾT THÚC CA TRỰC (TẮT ONLINE)'
-                      : 'ĐIỂM DANH VÀO CA TRỰC CHIẾN',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isOnline
-                      ? Colors.grey.shade800
-                      : AppColors.primaryOrange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildShiftCard(int index, String title, String desc, String team) {
-    final isSelected = _activeShift == index;
-    return GestureDetector(
-      onTap: () => setState(() => _activeShift = index),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isSelected ? AppColors.primaryOrange : Colors.grey.shade300,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: isSelected ? AppColors.primaryOrange : Colors.grey,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                  Text(
-                    desc,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.secondary,
-                    ),
-                  ),
-                  Text(
-                    team,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.tertiary,
+                    label: Text(
+                      provider.isLoading
+                          ? 'Đang cập nhật...'
+                          : p?.isOnline == true
+                          ? 'Tạm nghỉ nhận việc'
+                          : 'Bắt đầu nhận việc',
                     ),
                   ),
                 ],
+              ),
+            ),
+            if (provider.errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  provider.errorMessage!,
+                  style: const TextStyle(color: AppColors.error, fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: 14),
+            const MechanicPanel(
+              child: MechanicInfo(
+                icon: Icons.info_outline,
+                title: 'Cần thay đổi ca trực?',
+                value: 'Liên hệ chủ gara để điều chỉnh chi nhánh hoặc ca làm được phân.',
               ),
             ),
           ],
         ),
       ),
     );
+    return widget.embedded
+        ? body
+        : Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(title: const Text('Ca trực')),
+            body: body,
+          );
   }
 }

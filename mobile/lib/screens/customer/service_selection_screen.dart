@@ -2,17 +2,31 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/info_details.dart';
+import '../../core/widgets/rescue_ui.dart';
 import 'radar_dispatch_screen.dart';
 
 class ServiceSelectionScreen extends StatefulWidget {
-  const ServiceSelectionScreen({super.key});
+  const ServiceSelectionScreen({
+    super.key,
+    this.initialService = 0,
+    this.vehicleName = 'Honda SH 150i',
+    this.vehiclePlate = '59-B1 892.44',
+  });
+  final int initialService;
+  final String vehicleName, vehiclePlate;
 
   @override
   State<ServiceSelectionScreen> createState() => _ServiceSelectionScreenState();
 }
 
 class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
-  int _selectedService = 0;
+  late int _selectedService;
+  @override
+  void initState() {
+    super.initState();
+    _selectedService = widget.initialService.clamp(0, 2);
+  }
+
   int _waterLevel = 1;
   static const _services = [
     (
@@ -42,40 +56,31 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Chọn dịch vụ')),
     body: ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       children: [
-        const Card(
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.location_on_outlined, color: AppColors.tertiary),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Vị trí cứu hộ',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        '148 Trần Xuân Soạn, Quận 7',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+        const RescueIntro(
+          eyebrow: 'BẮT ĐẦU YÊU CẦU',
+          title: 'Chọn cách hỗ trợ',
+          description:
+              'Chọn dịch vụ phù hợp và kiểm tra giá trước khi tiếp tục.',
+        ),
+        const SizedBox(height: 12),
+        const RescueDemoNote('Mô phỏng · Giá và đơn cứu hộ chưa nối API'),
+        RescuePanel(
+          child: Column(
+            children: [
+              const RescueInfo(
+                icon: Icons.location_on_outlined,
+                title: 'Điểm cứu hộ mẫu',
+                value: '142 Nguyễn Gia Trí, Bình Thạnh, TP.HCM',
+              ),
+              const Divider(),
+              RescueInfo(
+                icon: Icons.two_wheeler,
+                title: 'Phương tiện đang chọn',
+                value: '${widget.vehicleName} · ${widget.vehiclePlate}',
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 24),

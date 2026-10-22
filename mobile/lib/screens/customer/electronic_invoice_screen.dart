@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/rescue_ui.dart';
 import 'stitch_hydro_rescue_screen.dart';
 
 class ElectronicInvoiceScreen extends StatelessWidget {
@@ -13,7 +14,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'Hóa đơn & bảo hành',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -23,20 +24,18 @@ class ElectronicInvoiceScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const RescueIntro(
+              eyebrow: 'THÔNG TIN SAU CỨU HỘ',
+              title: 'Hóa đơn & bảo hành',
+              description: 'Lưu lại chi phí và thông tin bảo hành mẫu.',
+            ),
+            const SizedBox(height: 12),
+            const RescueDemoNote(
+              'Mô phỏng · Chưa xử lý giao dịch hoặc gửi dữ liệu thật',
+            ),
             // E-Invoice Paper Simulation
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 8,
-                    offset: Offset(0, 3),
-                  ),
-                ],
-              ),
+            RescuePanel(
+              padding: 20,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

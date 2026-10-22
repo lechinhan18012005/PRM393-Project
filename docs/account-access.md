@@ -55,3 +55,11 @@ API tạo tài khoản thợ trực tiếp `POST /garages/mechanics` đã đư�
 `mvn -f backend/pom.xml test`, `npm --prefix web run lint`, `npm --prefix web run build`, `cd mobile` rồi `flutter analyze`, `flutter test`.
 
 Integration test bao gồm ma trận vai trò/nền tảng, chặn gara chưa duyệt, vòng đời nộp lại/duyệt/đình chỉ, lời mời đúng email/hết hạn/dùng lại, quyền Admin và quyền sở hữu chi nhánh, khóa Staff/Thợ và token cũ. Mobile test kiểm tra vai trò trước lưu phiên, xóa phiên cũ không còn phù hợp và kích hoạt không lưu phiên đăng nhập.
+
+## Tài khoản cá nhân trên Mobile Khách hàng
+
+Mở biểu tượng người dùng trên trang chủ hoặc tab **Tài khoản**. Trang này đọc thông tin mới nhất từ `GET /api/v1/auth/me`, cho xem tên đăng nhập/vai trò và chỉnh sửa họ tên, email, số điện thoại qua `PATCH /api/v1/auth/me`.
+
+Backend xác định người dùng từ phiên JWT, không nhận ID tài khoản cần sửa từ client và không cập nhật vai trò, tên đăng nhập, mật khẩu hay trạng thái kích hoạt qua API này. Email/số điện thoại trùng bị từ chối. Thay đổi được cập nhật vào trạng thái ứng dụng và bộ nhớ tài khoản sau khi API thành công.
+
+**Đăng xuất** xóa access token, refresh token và thông tin tài khoản đã lưu trên thiết bị, sau đó xóa lịch sử màn hình và mở trang đăng nhập. Cơ chế JWT hiện tại không có danh sách thu hồi token phía server; chức năng này kết thúc phiên trên thiết bị.

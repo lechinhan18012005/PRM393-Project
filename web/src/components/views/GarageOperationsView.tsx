@@ -1,104 +1,193 @@
 import React from 'react';
 import { DEMO_MODE } from '../../context/AuthContext';
+import { Wallet, Truck, Receipt } from 'lucide-react';
+import { GarageHeading, GarageStat, GaragePanel, GarageEmpty } from '../garage/GarageUI';
 const money = (value: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
 export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }) {
   if (!DEMO_MODE)
     return (
-      <section className="management-page p-6 space-y-4">
-        <h1 className="text-2xl font-bold">{mode === 'finance' ? 'Doanh thu & ví gara' : 'Chuyến chở xe'}</h1>
-        <p>
-          Chức năng đã được chuyển từ Mobile sang Web. Chưa có API{' '}
-          {mode === 'finance' ? 'doanh thu/rút tiền' : 'điều phối chuyến chở xe'}; hiện chưa thể thực hiện nghiệp vụ
-          này.
-        </p>
+      <section className="garage-portal">
+        <GarageHeading
+          title={mode === 'finance' ? 'Doanh thu & ví gara' : 'Điều phối chuyến chở xe'}
+          description={
+            mode === 'finance'
+              ? 'Theo dõi doanh thu, đối soát và dòng tiền của gara.'
+              : 'Quản lý phương tiện và hành trình vận chuyển cứu hộ.'
+          }
+        />
+        <GarageEmpty
+          title={mode === 'finance' ? 'Chưa kết nối dữ liệu doanh thu & ví' : 'Chưa kết nối dữ liệu chuyến chở xe'}
+          description={
+            mode === 'finance'
+              ? 'Chức năng doanh thu, đối soát và rút tiền chưa khả dụng trên hệ thống thật.'
+              : 'Chức năng theo dõi và điều phối chuyến chở xe chưa khả dụng trên hệ thống thật.'
+          }
+        />
       </section>
     );
-  return (
-    <section className="management-page p-6 space-y-5">
-      <h1 className="text-2xl font-bold">{mode === 'finance' ? 'Doanh thu & ví gara' : 'Chuyến chở xe'}</h1>
-      <p className="border border-amber-400 bg-amber-50 p-3 rounded">
-        Dữ liệu mẫu. Chức năng này chưa kết nối nghiệp vụ thật.
-      </p>
-      {mode === 'finance' ? (
-        <>
-          <h2 className="text-xl">Doanh thu tháng 10/2026</h2>
-          <div className="grid gap-3 md:grid-cols-3">
-            {[
-              ['Thực nhận', money(34785000)],
-              ['Đơn hoàn thành', '142'],
-              ['Hoa hồng sàn (10%)', money(3865000)]
-            ].map(([label, value]) => (
-              <article key={label} className="border rounded p-4">
-                <p>{label}</p>
-                <strong>{value}</strong>
-              </article>
-            ))}
-          </div>
-          <h2 className="text-xl">Theo dịch vụ</h2>
-          <ul>
-            <li>Sửa chữa tại chỗ: {money(22500000)}</li>
-            <li>Vận chuyển về gara: {money(8700000)}</li>
-            <li>Dịch vụ khác: {money(3585000)}</li>
-          </ul>
-          <h2 className="text-xl">Ví & rút tiền</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            <article className="border rounded p-4">
-              <p>Số dư khả dụng (mẫu)</p>
-              <strong>{money(24850000)}</strong>
-            </article>
-            <article className="border rounded p-4">
-              <p>Đang giữ đối soát (2 đơn mẫu)</p>
-              <strong>{money(1200000)}</strong>
-            </article>
-          </div>
-          <p>Ngân hàng thụ hưởng mẫu: Vietcombank · tài khoản 0071****2831 · LÊ VĂN GARA.</p>
-          <h3 className="font-bold">Lịch sử rút tiền mẫu</h3>
-          <ul>
-            <li>WD-9912 · 08/10/2026 · {money(10000000)} · Đã giải ngân</li>
-            <li>WD-9820 · 28/09/2026 · {money(8500000)} · Đã giải ngân</li>
-          </ul>
-          <p>Chưa hỗ trợ yêu cầu rút tiền thật.</p>
-          <button disabled className="border p-2 opacity-50">
-            Rút tiền (chưa khả dụng)
-          </button>
-        </>
-      ) : (
-        <>
-          <h2 className="text-xl">2 chuyến mẫu đang hoạt động</h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            {[
-              {
-                id: 'BATCH-TRIP-01',
-                vehicle: 'Xe tải nhẹ 1.25 tấn · 51D-891.22',
-                capacity: 'Đã gom 4/6 xe',
-                route: 'Dốc Cầu Tân Thuận → Ngã tư Nguyễn Thị Thập',
-                status: 'Đang gom khách tại điểm chờ',
-                fare: 40000
-              },
-              {
-                id: 'BATCH-TRIP-02',
-                vehicle: 'Xe ba gác cứu hộ',
-                capacity: 'Đã gom 4/4 xe (đầy chuyến)',
-                route: 'Chợ Mễ Cốc → Cầu Số 2 Bến Bình Đông',
-                status: 'Đang chở xe qua ngập',
-                fare: 35000
-              }
-            ].map((trip) => (
-              <article key={trip.id} className="border rounded p-4 space-y-2">
-                <h3 className="font-bold">{trip.id}</h3>
-                <p>{trip.vehicle}</p>
-                <p>{trip.route}</p>
-                <p>{trip.status}</p>
-                <p>Sức chứa: {trip.capacity}</p>
-                <p>{money(trip.fare)} / xe</p>
-                <button disabled className="border p-2 opacity-50">
-                  Điều phối (chưa khả dụng)
-                </button>
-              </article>
-            ))}
-          </div>
-        </>
-      )}
-    </section>
-  );
+
+    return (
+      <section className="garage-portal">
+        <GarageHeading
+          title={mode === 'finance' ? 'Doanh thu & ví gara' : 'Điều phối chuyến chở xe'}
+          description={
+            mode === 'finance'
+              ? 'Theo dõi doanh thu, đối soát và dòng tiền của gara.'
+              : 'Quản lý phương tiện và hành trình vận chuyển cứu hộ.'
+          }
+        />
+        <div className="garage-note">DỮ LIỆU MẪU · Chưa kết nối giao dịch hoặc điều phối thật.</div>
+        {mode === 'finance' ? (
+          <>
+            <div className="garage-stat-grid three">
+              <GarageStat
+                label="Thực nhận · Tháng 10/2026"
+                value={money(34785000)}
+                detail="Số liệu minh họa"
+                icon={<Receipt size={18} />}
+              />
+              <GarageStat
+                label="Đơn hoàn thành"
+                value="142"
+                detail="Đơn cứu hộ mẫu trong tháng"
+                icon={<Truck size={18} />}
+                accent="teal"
+              />
+              <GarageStat
+                label="Hoa hồng sàn (10%)"
+                value={money(3865000)}
+                detail="Số liệu minh họa"
+                icon={<Wallet size={18} />}
+                accent="blue"
+              />
+            </div>
+            <div className="garage-columns">
+              <GaragePanel title="Cơ cấu doanh thu mẫu" description="Tháng 10/2026 · Theo nhóm dịch vụ">
+                <div className="garage-revenue-list">
+                  {[
+                    ['Sửa chữa tại chỗ', 22500000, 100],
+                    ['Vận chuyển về gara', 8700000, 39],
+                    ['Dịch vụ khác', 3585000, 16]
+                  ].map(([name, value, width]) => (
+                    <div key={String(name)}>
+                      <div>
+                        <span>{name}</span>
+                        <strong>{money(Number(value))}</strong>
+                      </div>
+                      <div className="garage-revenue-track">
+                        <i style={{ width: `${width}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </GaragePanel>
+              <GaragePanel title="Ví gara · Dữ liệu mẫu">
+                <div className="garage-wallet">
+                  <small>SỐ DƯ KHẢ DỤNG MẪU</small>
+                  <strong>{money(24850000)}</strong>
+                  <small>Đang giữ đối soát: {money(1200000)}</small>
+                </div>
+                <div style={{ padding: 20 }}>
+                  <p className="garage-muted">Chưa hỗ trợ rút tiền thật.</p>
+                  <button className="garage-button" disabled>
+                    Rút tiền — chưa khả dụng
+                  </button>
+                </div>
+              </GaragePanel>
+            </div>
+            <GaragePanel
+              title="Lịch sử rút tiền mẫu"
+              description="Các giao dịch bên dưới chỉ phục vụ minh họa giao diện"
+            >
+              <div className="garage-table-wrap">
+                <table className="garage-table">
+                  <thead>
+                    <tr>
+                      <th>Mã giao dịch</th>
+                      <th>Ngày tạo</th>
+                      <th>Số tiền</th>
+                      <th>Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>WD-9912</td>
+                      <td>08/10/2026</td>
+                      <td>{money(10000000)}</td>
+                      <td>Đã giải ngân (mẫu)</td>
+                    </tr>
+                    <tr>
+                      <td>WD-9820</td>
+                      <td>28/09/2026</td>
+                      <td>{money(8500000)}</td>
+                      <td>Đã giải ngân (mẫu)</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </GaragePanel>
+          </>
+        ) : (
+          <>
+            <div className="garage-stat-grid three">
+              <GarageStat
+                label="Chuyến hoạt động mẫu"
+                value="02"
+                detail="Chuyến minh họa đang thực hiện"
+                icon={<Truck size={18} />}
+              />
+              <GarageStat
+                label="Xe được ghép chuyến mẫu"
+                value="08"
+                detail="Tổng số xe trong 2 chuyến mẫu"
+                icon={<Truck size={18} />}
+                accent="teal"
+              />
+              <GarageStat
+                label="Vùng phục vụ mẫu"
+                value="02"
+                detail="Quận 7 và Quận 8"
+                icon={<Receipt size={18} />}
+                accent="blue"
+              />
+            </div>
+            <GaragePanel title="Chuyến vận chuyển mẫu" description="Theo dõi phương tiện, sức chứa và điểm đón">
+              <div className="garage-branch-grid">
+                {[
+                  {
+                    id: 'BATCH-TRIP-01',
+                    vehicle: 'Xe tải nhẹ 1.25 tấn · 51D-891.22',
+                    capacity: '4/6 xe',
+                    route: 'Cầu Tân Thuận → Nguyễn Thị Thập',
+                    status: 'Đang gom khách tại điểm chờ',
+                    fare: 40000
+                  },
+                  {
+                    id: 'BATCH-TRIP-02',
+                    vehicle: 'Xe ba gác cứu hộ',
+                    capacity: '4/4 xe',
+                    route: 'Chợ Mễ Cốc → Cầu Số 2 Bến Bình Đông',
+                    status: 'Đang chở xe qua ngập',
+                    fare: 35000
+                  }
+                ].map((trip) => (
+                  <article className="garage-branch-card" key={trip.id}>
+                    <h3>{trip.id}</h3>
+                    <p>{trip.vehicle}</p>
+                    <p>{trip.route}</p>
+                    <p>{trip.status}</p>
+                    <p>
+                      Sức chứa: <strong>{trip.capacity}</strong> · {money(trip.fare)} / xe
+                    </p>
+                    <button className="garage-button" disabled>
+                      Điều phối — chưa khả dụng
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </GaragePanel>
+          </>
+        )}
+      </section>
+    );
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -163,6 +164,70 @@ class AuthService {
     }
     final user = UserModel.fromJson(data['data']);
     _requireMobileRole(user);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userDataKey, jsonEncode(user.toJson()));
+    return user;
+  }
+
+  Future<UserModel> updateProfile({
+    required String fullName,
+    required String email,
+    String? phone,
+  }) async {
+    final token = await getToken();
+    if (token == null) {
+      throw Exception('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+    }
+    late http.Response response;
+    try {
+      response = await _client
+          .patch(
+            Uri.parse(ApiConstants.currentUserUrl),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'fullName': fullName.trim(),
+              'email': email.trim(),
+              'phone': phone == null || phone.trim().isEmpty
+                  ? null
+                  : phone.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      throw Exception('Kết nối quá thời gian chờ. Vui lòng thử lại.');
+    } on http.ClientException {
+      throw Exception(
+        'Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối mạng.',
+      );
+    }
+    late Map<String, dynamic> data;
+    try {
+      data =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    } catch (_) {
+      throw Exception('Chưa thể cập nhật tài khoản. Vui lòng thử lại sau.');
+    }
+    if (response.statusCode != 200 || data['success'] != true) {
+      if (response.statusCode == 401) {
+        throw Exception('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      }
+      final errors = data['validationErrors'];
+      final message = errors is Map && errors.isNotEmpty
+          ? errors.values.first.toString()
+          : data['message'];
+      throw Exception(
+        response.statusCode >= 500
+            ? 'Chưa thể cập nhật tài khoản. Vui lòng thử lại sau.'
+            : message ?? 'Cập nhật tài khoản thất bại',
+      );
+    }
+    final user = UserModel.fromJson(data['data']);
+    _requireMobileRole(user);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userDataKey, jsonEncode(user.toJson()));
     return user;
   }
 

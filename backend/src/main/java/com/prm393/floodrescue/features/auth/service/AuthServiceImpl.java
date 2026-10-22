@@ -9,6 +9,7 @@ import com.prm393.floodrescue.features.auth.dto.AuthResponse;
 import com.prm393.floodrescue.features.auth.dto.LoginRequest;
 import com.prm393.floodrescue.features.auth.dto.RegisterRequest;
 import com.prm393.floodrescue.features.auth.dto.TokenRefreshRequest;
+import com.prm393.floodrescue.features.auth.dto.UpdateProfileRequest;
 import com.prm393.floodrescue.features.auth.dto.UserProfileResponse;
 import com.prm393.floodrescue.features.auth.entity.Role;
 import com.prm393.floodrescue.features.auth.entity.User;
@@ -174,5 +175,46 @@ public class AuthServiceImpl implements AuthService {
                                         new ResourceNotFoundException(
                                                 "Không tìm thấy thông tin người dùng"));
         return UserProfileResponse.fromEntity(user);
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse updateCurrentUserProfile(
+            String username, UpdateProfileRequest request) {
+        User user =
+                userRepository
+                        .findByUsername(username)
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException("Không tìm thấy tài khoản"));
+        String email = request.email().trim().toLowerCase(java.util.Locale.ROOT);
+        String phone =
+                request.phone() == null || request.phone().isBlank()
+                        ? null
+                        : request.phone().trim();
+        userRepository
+                .findByEmail(email)
+                .filter(other -> !other.getId().equals(user.getId()))
+                .ifPresent(
+                        other -> {
+                            throw new BadRequestException("Email đã được tài khoản khác sử dụng");
+                        });
+        if (phone != null)
+            userRepository
+                    .findByPhone(phone)
+                    .filter(other -> !other.getId().equals(user.getId()))
+                    .ifPresent(
+                            other -> {
+                                throw new BadRequestException(
+                                        "Số điện thoại đã được tài khoản khác sử dụng");
+                            });
+        user.setFullName(request.fullName().trim());
+        user.setEmail(email);
+        user.setPhone(phone);
+        try {
+            return UserProfileResponse.fromEntity(userRepository.saveAndFlush(user));
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new BadRequestException(
+                    "Email hoặc số điện thoại đã được sử dụng. Vui lòng kiểm tra lại.");
+        }
     }
 }

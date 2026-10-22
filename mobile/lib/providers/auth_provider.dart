@@ -104,9 +104,50 @@ class AuthProvider with ChangeNotifier {
     return login(identifier, 'Password@123');
   }
 
+  Future<bool> refreshProfile() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      _user = await _authService.getCurrentUser();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Không tải được thông tin tài khoản. Vui lòng thử lại.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateProfile({
+    required String fullName,
+    required String email,
+    String? phone,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      _user = await _authService.updateProfile(
+        fullName: fullName,
+        email: email,
+        phone: phone,
+      );
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> logout() async {
     await _authService.logout();
     _user = null;
+    _errorMessage = null;
     notifyListeners();
   }
 

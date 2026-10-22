@@ -1,216 +1,138 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import 'mechanic_ui.dart';
 import 'repair_execution_screen.dart';
 
 class QuotationBuilderScreen extends StatefulWidget {
   const QuotationBuilderScreen({super.key});
-
   @override
   State<QuotationBuilderScreen> createState() => _QuotationBuilderScreenState();
 }
 
 class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
-  int _selectedVersion = 1; // 0: V1, 1: V2
-  final Map<String, bool> _items = {
-    'Phí điều phối & tiếp cận ngập (50.000 đ)': true,
-    'Sấy bugi & xả nước buồng đốt (70.000 đ)': true,
-    'Thay nhớt Castrol Scooter (130.000 đ)': true,
-    'Súc rửa lọc gió & xịt khô IC (40.000 đ)': true,
-    'Kéo xe về Gara xử lý đại tu (150.000 đ)': false,
-  };
-
+  int _version = 1;
+  final _selected = <int>{0, 1, 2, 3};
+  static const _names = [
+    'Phí điều phối & tiếp cận ngập',
+    'Sấy bugi & xả nước buồng đốt',
+    'Thay nhớt Castrol Scooter',
+    'Súc rửa lọc gió & xịt khô IC',
+    'Kéo xe về gara xử lý',
+  ];
+  static const _prices = [50000, 70000, 130000, 40000, 150000];
+  String _money(int value) =>
+      '${value.toString().replaceAllMapped(RegExp(r"(\d)(?=(\d{3})+(?!\d))"), (m) => '${m[1]}.')} đ';
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Lập báo giá',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Version toggle
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedVersion = 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _selectedVersion == 0
-                              ? Colors.white
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          'V1 · Ước tính',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            color: _selectedVersion == 0
-                                ? AppColors.primaryOrange
-                                : AppColors.secondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedVersion = 1),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _selectedVersion == 1
-                              ? Colors.white
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          'V2 · Sau kiểm tra',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            color: _selectedVersion == 1
-                                ? AppColors.primaryOrange
-                                : AppColors.secondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            const Text(
-              'Dịch vụ & phụ tùng',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppColors.outline,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Items Checkbox List Card
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x05000000),
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: _items.keys.map((key) {
-                  return Material(
-                    color: Colors.transparent,
-                    child: CheckboxListTile(
-                      title: Text(
-                        key,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      value: _items[key],
-                      activeColor: AppColors.primaryOrange,
-                      onChanged: (val) {
-                        setState(() {
-                          _items[key] = val ?? false;
-                        });
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Summary Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.primaryContainer.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.primaryContainer),
-              ),
-              child: const Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'TỔNG BÁO GIÁ V2:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                  Text(
-                    '290.000 đ',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: AppColors.primaryOrange,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Đã gửi báo giá số V2 sang máy khách hàng. Đang chờ khách bấm duyệt...',
-                    ),
-                  ),
-                );
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const RepairExecutionScreen(),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryOrange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+    final total = _selected.fold<int>(0, (sum, i) => sum + _prices[i]);
+    return MechanicPage(
+      title: 'Lập báo giá',
+      bottom: FilledButton.icon(
+        onPressed: _selected.isEmpty
+            ? null
+            : () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const RepairExecutionScreen(),
                 ),
               ),
-              child: const Text(
-                'Gửi báo giá',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        icon: const Icon(Icons.build_outlined, size: 18),
+        label: const Text('Tiếp tục sửa chữa mô phỏng'),
+      ),
+      children: [
+        const MechanicPanel(
+          child: MechanicInfo(
+            icon: Icons.receipt_long_outlined,
+            title: 'Yêu cầu mẫu #SOS-8924',
+            value: 'Hoàng Văn Khách · Honda SH',
+          ),
+        ),
+        const SizedBox(height: 16),
+        SegmentedButton<int>(
+          segments: const [
+            ButtonSegment(value: 0, label: Text('V1 · Ước tính')),
+            ButtonSegment(value: 1, label: Text('V2 · Tại chỗ')),
+          ],
+          selected: {_version},
+          onSelectionChanged: (v) => setState(() => _version = v.first),
+        ),
+        const MechanicSection('Chọn hạng mục dịch vụ'),
+        MechanicPanel(
+          padding: 0,
+          child: Column(
+            children: List.generate(
+              _names.length,
+              (i) => CheckboxListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 5,
+                ),
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _selected.contains(i),
+                onChanged: (v) => setState(() {
+                  v == true ? _selected.add(i) : _selected.remove(i);
+                }),
+                title: Text(
+                  _names[i],
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  _money(_prices[i]),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        MechanicPanel(
+          dark: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'TỔNG BÁO GIÁ MẪU',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFFB9CEDB),
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _money(total),
+                key: const Key('quotation-total'),
+                style: const TextStyle(
+                  fontSize: 31,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${_selected.length} hạng mục · Phiên bản V${_version + 1}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFFB9CEDB)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Giá và danh mục trên là dữ liệu minh họa; báo giá chưa được gửi cho khách.',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.secondary,
+            height: 1.6,
+          ),
+        ),
+      ],
     );
   }
 }
