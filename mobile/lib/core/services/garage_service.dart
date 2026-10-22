@@ -165,4 +165,44 @@ class GarageService {
       throw Exception(data['message'] ?? 'Xóa dịch vụ thất bại');
     }
   }
+
+  // UC-26: Garage Wallet & Payout Requests
+  Future<Map<String, dynamic>> getMyWallet() async {
+    final headers = await _getHeaders();
+    final response = await http.get(
+      Uri.parse(ApiConstants.garageWalletUrl),
+      headers: headers,
+    );
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
+    if (response.statusCode == 200 && data['success'] == true) {
+      return Map<String, dynamic>.from(data['data'] as Map);
+    }
+    throw Exception(data['message'] ?? 'Không thể tải thông tin ví garage');
+  }
+
+  Future<Map<String, dynamic>> createPayoutRequest({
+    required double requestedAmount,
+    required String bankCode,
+    String? bankName,
+    required String accountNumber,
+    required String accountHolderName,
+  }) async {
+    final headers = await _getHeaders();
+    final response = await http.post(
+      Uri.parse(ApiConstants.garagePayoutsUrl),
+      headers: headers,
+      body: jsonEncode({
+        'requestedAmount': requestedAmount,
+        'bankCode': bankCode,
+        'bankName': bankName ?? bankCode,
+        'accountNumber': accountNumber,
+        'accountHolderName': accountHolderName,
+      }),
+    );
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
+    if (response.statusCode == 200 && data['success'] == true) {
+      return Map<String, dynamic>.from(data['data'] as Map);
+    }
+    throw Exception(data['message'] ?? 'Gửi yêu cầu rút tiền thất bại');
+  }
 }
