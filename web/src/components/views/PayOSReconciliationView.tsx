@@ -1,6 +1,7 @@
 import { ViewGuide } from '../ViewGuide';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PayOSTransaction, ScreenId } from '../../types';
+import { financeApi, PaymentTransactionBackend } from '../../services/financeApi';
 
 interface PayOSReconciliationViewProps {
   transactions: PayOSTransaction[];
@@ -8,21 +9,91 @@ interface PayOSReconciliationViewProps {
   onShowToast: (title: string, msg: string) => void;
 }
 
+const mapBackendTxToView = (tx: PaymentTransactionBackend): PayOSTransaction => {
+  let parsedPayload: Record<string, any> = {
+    code: '00',
+    desc: 'success',
+    data: {
+      orderCode: tx.payosOrderCode,
+      amount: tx.amount,
+      description: tx.paymentContent || `RESCUE ${tx.rescueOrderId}`,
+      accountNumber: tx.accountNumber || '038299482910'
+    },
+    signature: tx.webhookSignature || 'hmac-sha256-verified'
+  };
+  if (tx.rawWebhookPayload) {
+    try {
+      parsedPayload = JSON.parse(tx.rawWebhookPayload);
+    } catch {
+      // keep default object
+    }
+  }
+  const orderTypeLabel =
+    tx.orderType === 'BATCH_CROSSING'
+      ? 'Đi ghép chở xe tải'
+      : tx.orderType === 'WATERLOGGED_REPAIR'
+      ? 'Sửa chữa thủy kích ngập'
+      : 'Đơn lẻ tại chỗ';
+
+  return {
+    id: `PAYOS-${tx.payosOrderCode}`,
+    orderCode: String(tx.payosOrderCode),
+    rescueCode: tx.rescueCode || `#RESCUE-${tx.rescueOrderId}`,
+    rescueType: `${orderTypeLabel} (${tx.paymentMethod === 'CASH' ? 'Tiền mặt' : 'VietQR'})`,
+    customerName: tx.customerName || 'Khách hàng cứu hộ',
+    customerPhone: tx.customerPhone || '0909000111',
+    garageName: tx.garageName || `Garage #${tx.garageId}`,
+    mechanicName: 'KTV Cứu Hộ',
+    totalAmount: Number(tx.amount),
+    platformFee: Number(tx.platformFee),
+    netPayout: Number(tx.netGarageAmount),
+    checksumStatus: tx.checksumValid ? 'OK' : 'REV',
+    status: tx.reconciled ? 'RECONCILED' : tx.status === 'SUCCESS' ? 'PAID' : 'PENDING',
+    timestamp: tx.paidAt ? new Date(tx.paidAt).toLocaleString('vi-VN') : new Date(tx.createdAt).toLocaleString('vi-VN'),
+    bankName: tx.bankName || 'MB Bank (Napas247)',
+    accountNumber: tx.accountNumber || '038299482910',
+    accountHolder: tx.accountHolder || 'HE THONG CUU HO HYDRORESCUE',
+    payosContent: tx.paymentContent || `RESCUE ${tx.rescueOrderId}`,
+    evidenceImage: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=300&q=80',
+    evidenceLocation: 'Điểm ngập TP.HCM • Đã xác thực GPS',
+    rawPayload: parsedPayload
+  };
+};
+
 export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = ({
-  transactions,
+  transactions: initialTransactions,
   onSelectScreen,
   onShowToast
 }) => {
-  const [selectedTxId, setSelectedTxId] = useState<string>(transactions[0]?.id || 'PAYOS-8947291');
+  const [txList, setTxList] = useState<PayOSTransaction[]>(initialTransactions);
+  const [selectedTxId, setSelectedTxId] = useState<string>(initialTransactions[0]?.id || 'PAYOS-8947291');
   const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'flood3d' | 'month'>('today');
   const [webhookFilter, setWebhookFilter] = useState<string>('verified');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isReconciling, setIsReconciling] = useState<boolean>(false);
 
-  const selectedTx = transactions.find((t) => t.id === selectedTxId) || transactions[0];
+  useEffect(() => {
+    let mounted = true;
+    financeApi
+      .getPaymentTransactions()
+      .then((backendTxs) => {
+        if (!mounted || !backendTxs || backendTxs.length === 0) return;
+        const mapped = backendTxs.map(mapBackendTxToView);
+        setTxList([...mapped, ...initialTransactions]);
+        setSelectedTxId(mapped[0].id);
+      })
+      .catch(() => {
+        // Fallback to mock transactions when offline
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [initialTransactions]);
 
-  const filteredTransactions = transactions.filter((tx) => {
+  const selectedTx = txList.find((t) => t.id === selectedTxId) || txList[0];
+
+  const filteredTransactions = txList.filter((tx) => {
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       const match =
@@ -38,9 +109,25 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
     return true;
   });
 
-  const handleAutoReconcile = () => {
+  const handleAutoReconcile = async () => {
     setIsReconciling(true);
+    try {
+      const reconciledBackend = await financeApi.reconcileAllTransactions();
+      if (reconciledBackend && reconciledBackend.length > 0) {
+        const mapped = reconciledBackend.map(mapBackendTxToView);
+        setTxList([...mapped, ...initialTransactions.map((t) => ({ ...t, status: 'RECONCILED' as const }))]);
+        onShowToast(
+          'Đối Soát Backend Hoàn Tất!',
+          `Đã đối soát tự động ${reconciledBackend.length} giao dịch thực tế khớp chữ ký HMAC-SHA256 trên PayOS.`
+        );
+        setIsReconciling(false);
+        return;
+      }
+    } catch {
+      // Fallback to UI simulation
+    }
     setTimeout(() => {
+      setTxList((prev) => prev.map((t) => (t.checksumStatus === 'OK' ? { ...t, status: 'RECONCILED' } : t)));
       setIsReconciling(false);
       onShowToast(
         'Đối Soát Hoàn Tất!',
