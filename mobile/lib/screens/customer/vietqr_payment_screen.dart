@@ -1,20 +1,36 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import '../../core/constants/api_constants.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/services/auth_service.dart';
 import '../../core/widgets/rescue_ui.dart';
 import 'payment_success_screen.dart';
 
 class VietQRPaymentScreen extends StatefulWidget {
   final int? orderId;
+  final int? garageId;
   final double? amount;
   final String? orderCode;
 
+  int? get rescueOrderId => orderId;
+  String get rescueCode => orderCode ?? 'RO-DEMO-8924';
+
   const VietQRPaymentScreen({
     super.key,
-    this.orderId,
+    int? orderId,
+    int? rescueOrderId,
+    this.garageId,
     this.amount,
-    this.orderCode,
-  });
+    String? orderCode,
+    String? rescueCode,
+  }) : assert(
+         orderId == null || rescueOrderId == null || orderId == rescueOrderId,
+       ),
+       orderId = orderId ?? rescueOrderId,
+       orderCode = orderCode ?? rescueCode;
 
   @override
   State<VietQRPaymentScreen> createState() => _VietQRPaymentScreenState();
@@ -22,19 +38,163 @@ class VietQRPaymentScreen extends StatefulWidget {
 
 class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
   int _paymentMethod = 0; // 0: VietQR, 1: Cash
+  bool _isLoading = false;
+  int? _payosOrderCode;
+  String _bankName = 'MB Bank (Quân Đội)';
+  String _accountNumber = '038299482910';
+  String _accountHolder = 'HE THONG CUU HO HYDRORESCUE';
+  String _paymentContent = 'RESCUE 8924';
+  double _commissionRate = 12.5;
+  double _platformFee = 36250;
+  double _netGarageAmount = 253750;
+
+  // Existing rescue routes remain previews until all payment inputs are supplied.
+  bool get _isPreview =>
+      widget.orderId == null ||
+      widget.garageId == null ||
+      widget.amount == null;
+
+  @override
+  void initState() {
+    super.initState();
+    final amount = widget.amount ?? 150000;
+    _platformFee = amount * _commissionRate / 100;
+    _netGarageAmount = amount - _platformFee;
+    _paymentContent = 'RESCUE ${widget.rescueCode}';
+    _initPaymentOrder();
+  }
+
+  Future<void> _initPaymentOrder() async {
+    if (_isPreview) return;
+    setState(() => _isLoading = true);
+    try {
+      final token = await AuthService().getToken();
+      if (token == null || token.isEmpty) return;
+
+      final response = await http.post(
+        Uri.parse(ApiConstants.createPaymentUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'rescueOrderId': widget.rescueOrderId,
+          'garageId': widget.garageId,
+          'rescueCode': widget.rescueCode,
+          'orderType': 'SINGLE_CROSSING',
+          'amount': widget.amount,
+          'paymentMethod': _paymentMethod == 0 ? 'PAYOS_VIETQR' : 'CASH',
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+        final data = decoded['data'];
+        if (data != null && mounted) {
+          setState(() {
+            _payosOrderCode = (data['payosOrderCode'] as num?)?.toInt();
+            _bankName = data['bankName'] ?? _bankName;
+            _accountNumber = data['accountNumber'] ?? _accountNumber;
+            _accountHolder = data['accountHolder'] ?? _accountHolder;
+            _paymentContent = data['paymentContent'] ?? _paymentContent;
+            _commissionRate =
+                (data['commissionRate'] as num?)?.toDouble() ?? _commissionRate;
+            _platformFee =
+                (data['platformFee'] as num?)?.toDouble() ?? _platformFee;
+            _netGarageAmount =
+                (data['netGarageAmount'] as num?)?.toDouble() ??
+                _netGarageAmount;
+          });
+        }
+      }
+    } catch (_) {
+      // Confirmation stays blocked until the server creates a transaction.
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _selectPaymentMethod(int method) {
+    if (_isLoading || method == _paymentMethod) return;
+    setState(() {
+      _paymentMethod = method;
+      _payosOrderCode = null;
+    });
+    _initPaymentOrder();
+  }
+
+  Future<void> _confirmPayment() async {
+    if (_isPreview) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const PaymentSuccessScreen()));
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      final token = await AuthService().getToken();
+      if (token == null || token.isEmpty || _payosOrderCode == null) {
+        throw Exception(
+          'Chưa khởi tạo được giao dịch. Vui lòng mở lại màn thanh toán và thử lại.',
+        );
+      }
+      final url = _paymentMethod == 0
+          ? ApiConstants.simulateWebhookUrl(_payosOrderCode!)
+          : ApiConstants.confirmCashPaymentUrl(_payosOrderCode!);
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      final body = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode != 200 || body['data']?['status'] != 'SUCCESS') {
+        throw Exception(
+          body['message'] ?? 'Giao dịch chưa được xác nhận thanh toán.',
+        );
+      }
+      if (mounted) {
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const PaymentSuccessScreen()));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  String _formatVnd(double value) {
+    final intVal = value.round();
+    final str = intVal.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < str.length; i++) {
+      if (i > 0 && (str.length - i) % 3 == 0) {
+        buffer.write('.');
+      }
+      buffer.write(str[i]);
+    }
+    return '${buffer.toString()} đ';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final displayAmount = widget.amount != null
-        ? '${widget.amount!.toStringAsFixed(0)} ₫'
-        : '150.000 ₫';
-    final displayOrderCode = widget.orderCode ?? 'RO-DEMO-8924';
-
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text(
-          'Thanh toán chuyến đi',
+          'Thanh toán',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
@@ -47,14 +207,13 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
           children: [
             RescueIntro(
               eyebrow: 'HOÀN TẤT HÀNH TRÌNH',
-              title: 'Thanh toán đơn #$displayOrderCode',
-              description: 'Kiểm tra thông tin chi phí niêm yết và phương thức thanh toán.',
+              title: 'Thanh toán đơn #${widget.rescueCode}',
+              description: 'Kiểm tra thông tin và phương thức thanh toán.',
             ),
             const SizedBox(height: 12),
-            const RescueDemoNote(
-              'UC-18 Preview Hợp đồng tích hợp · Chưa kết nối cổng PayOS hoặc thu tiền mặt thật',
+            RescueDemoNote(
+              _isPreview ? 'UC-18 Preview · Chưa tạo giao dịch thanh toán' : 'PayOS demo · Nút xác nhận VietQR giả lập callback và có ghi dữ liệu ví gara',
             ),
-            const SizedBox(height: 12),
             // Payment method selector
             Container(
               padding: const EdgeInsets.all(4),
@@ -66,7 +225,7 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
                 children: [
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setState(() => _paymentMethod = 0),
+                      onTap: () => _selectPaymentMethod(0),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
@@ -105,7 +264,7 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
                   ),
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setState(() => _paymentMethod = 1),
+                      onTap: () => _selectPaymentMethod(1),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         decoration: BoxDecoration(
@@ -239,26 +398,28 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
                   // Bank details
                   _buildBankRow(
                     'Số tiền thanh toán',
-                    displayAmount,
+                    _formatVnd(widget.amount ?? 150000),
                     highlight: true,
                   ),
-                  _buildBankRow('Ngân hàng thụ hưởng', 'MB Bank (Quân Đội)'),
-                  _buildBankRow('Số tài khoản', '038299482910'),
-                  _buildBankRow('Chủ tài khoản', 'HE THONG CUU HO HYDRORESCUE'),
-                  _buildBankRow('Nội dung chuyển khoản', 'RESCUE $displayOrderCode'),
+                  _buildBankRow('Ngân hàng thụ hưởng', _bankName),
+                  _buildBankRow('Số tài khoản', _accountNumber),
+                  _buildBankRow('Chủ tài khoản', _accountHolder),
+                  _buildBankRow('Nội dung chuyển khoản', _paymentContent),
+                  _buildBankRow(
+                    'Phí điều phối (${_commissionRate.toStringAsFixed(1)}%)',
+                    _formatVnd(_platformFee),
+                  ),
+                  _buildBankRow(
+                    'Thực cộng ví Gara',
+                    _formatVnd(_netGarageAmount),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
 
             ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const PaymentSuccessScreen(),
-                  ),
-                );
-              },
+              onPressed: _isLoading ? null : _confirmPayment,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.tertiary,
                 foregroundColor: Colors.white,
@@ -267,9 +428,18 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text(
-                'Xác Nhận Đã Thanh Toán (Preview)',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              child: Text(
+                _isLoading
+                    ? 'Đang xử lý...'
+                    : (_isPreview
+                          ? 'Xác Nhận Đã Thanh Toán (Preview)'
+                          : (_paymentMethod == 0
+                                ? 'Giả lập xác nhận PayOS'
+                                : 'Xác nhận tiền mặt')),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],

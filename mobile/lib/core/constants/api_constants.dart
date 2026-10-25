@@ -56,5 +56,15 @@ class ApiConstants {
   static String updateTransitStageUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/transit-stage';
   static String completeRescueOrderUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/complete';
   static String rescueOrderEvidenceUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/evidence';
-}
 
+  // Finance & Garage Wallet Endpoints (Luồng 5 - UC-26)
+  static String get garageWalletUrl => '$baseUrl/garages/wallet';
+  static String get garagePayoutsUrl => '$baseUrl/garages/wallet/payouts';
+
+  // PayOS Payment Endpoints (Luồng 5 - UC-18)
+  static String get createPaymentUrl => '$baseUrl/payments/create';
+  static String simulateWebhookUrl(int orderCode) =>
+      '$baseUrl/payments/$orderCode/simulate-webhook';
+  static String confirmCashPaymentUrl(int orderCode) =>
+      '$baseUrl/payments/$orderCode/confirm-cash';
+}
