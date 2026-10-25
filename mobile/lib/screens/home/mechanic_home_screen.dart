@@ -1,11 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/models/rescue_order_model.dart';
+import '../../core/services/location_service.dart';
+import '../../core/services/rescue_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/mechanic_provider.dart';
 import '../customer/account_screen.dart';
 import '../customer/vietqr_payment_screen.dart';
+import '../mechanic/crossing_transport_screen.dart';
 import '../mechanic/incoming_dispatch_screen.dart';
 import '../mechanic/quotation_builder_screen.dart';
 import '../mechanic/repair_execution_screen.dart';
@@ -19,7 +24,7 @@ class MechanicHomeScreen extends StatefulWidget {
   State<MechanicHomeScreen> createState() => _MechanicHomeScreenState();
 }
 
-class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
+class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBindingObserver {
   // Hot reload can retain a State created before these fields existed.
   // Read through defaults instead of relying on field initializers being rerun.
   int? _tab;
@@ -33,20 +38,342 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
     'Công cụ',
     'Tài khoản',
   ];
+
+  final RescueService _rescueService = RescueService();
+  RescueOrderModel? _activeOrder;
+
+  // Quản lý offer & GPS nhàn rỗi theo phiên FIELD_MECHANIC
+  RescueOfferModel? _pendingOffer;
+  int _offerSecondsRemaining = 0;
+  int? _presentedOfferId;
+  bool _isHandlingOfferNavigation = false;
+  bool _isPollingOffers = false;
+  bool _isSendingGps = false;
+  bool _gpsUnavailable = false;
+  String? _currentMechanicUsername;
+
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+  bool get _isAppForeground => _lifecycleState == AppLifecycleState.resumed;
+  MechanicProvider? _mechanicProvider;
+
+  Timer? _offerPollingTimer;
+  Timer? _offerCountdownTimer;
+  Timer? _idleGpsTimer;
+
+  bool get _hasActiveOrder =>
+      _activeOrder != null &&
+      (_activeOrder!.status == 'DISPATCHED' ||
+          _activeOrder!.status == 'ARRIVED' ||
+          _activeOrder!.status == 'IN_PROGRESS');
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.read<MechanicProvider>();
+    if (_mechanicProvider != provider) {
+      _mechanicProvider?.removeListener(_onProfileChanged);
+      _mechanicProvider = provider;
+      _mechanicProvider?.addListener(_onProfileChanged);
+    }
+  }
+
+  void _onProfileChanged() {
+    if (!mounted || !_isAppForeground) return;
+    _syncTimers();
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<MechanicProvider>().fetchMyProfile();
+      if (mounted && _isAppForeground) {
+        _initializeHomeScreen();
+      }
     });
+  }
+
+  Future<void> _initializeHomeScreen() async {
+    if (!mounted || !_isAppForeground) return;
+    try {
+      await Future.wait([
+        context.read<MechanicProvider>().fetchMyProfile(),
+        _loadActiveOrder(),
+      ]);
+    } catch (_) {}
+    if (mounted && _isAppForeground) {
+      _syncTimers();
+      _pollOffersOnce();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _mechanicProvider?.removeListener(_onProfileChanged);
+    _stopAllTimers();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    if (state == AppLifecycleState.resumed) {
+      if (mounted) {
+        _initializeHomeScreen();
+      }
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _stopAllTimers();
+    }
+  }
+
+  void _syncTimers() {
+    if (!mounted || !_isAppForeground) {
+      _stopAllTimers();
+      return;
+    }
+    final provider = context.read<MechanicProvider>();
+    final profile = provider.myProfile;
+    final isOnline = profile?.isOnline == true;
+
+    // Chỉ poll offer và gửi GPS khi thợ AVAILABLE và chưa có cuốc active
+    if (isOnline && !_hasActiveOrder) {
+      if (_offerPollingTimer == null || !_offerPollingTimer!.isActive) {
+        _offerPollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+          _pollOffersOnce();
+        });
+        _pollOffersOnce();
+      }
+      if (_idleGpsTimer == null || !_idleGpsTimer!.isActive) {
+        _idleGpsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+          _sendIdleGps();
+        });
+      }
+    } else {
+      _stopAllTimers();
+    }
+  }
+
+  void _stopAllTimers() {
+    _offerPollingTimer?.cancel();
+    _offerPollingTimer = null;
+    _idleGpsTimer?.cancel();
+    _idleGpsTimer = null;
+    _offerCountdownTimer?.cancel();
+    _offerCountdownTimer = null;
+  }
+
+  int _calculateRemainingSeconds(RescueOfferModel offer) {
+    if (offer.expiresAt != null) {
+      final expireTime = DateTime.tryParse(offer.expiresAt!);
+      if (expireTime != null) {
+        final diffMs = expireTime.difference(DateTime.now()).inMilliseconds;
+        final seconds = (diffMs + 999) ~/ 1000;
+        return seconds.clamp(0, 45);
+      }
+    }
+    return offer.secondsRemaining.clamp(0, 45);
+  }
+
+  Future<void> _pollOffersOnce() async {
+    if (_isPollingOffers || !mounted || !_isAppForeground) return;
+
+    final authUser = context.read<AuthProvider>().user;
+    if (authUser == null || authUser.role != 'FIELD_MECHANIC') {
+      _stopAllTimers();
+      setState(() {
+        _pendingOffer = null;
+        _presentedOfferId = null;
+      });
+      return;
+    }
+
+    // Đổi tài khoản: reset cache offer
+    if (_currentMechanicUsername != null && _currentMechanicUsername != authUser.username) {
+      setState(() {
+        _pendingOffer = null;
+        _presentedOfferId = null;
+      });
+    }
+    _currentMechanicUsername = authUser.username;
+
+    // Nếu đã có đơn active hoặc profile offline, không poll
+    final profile = context.read<MechanicProvider>().myProfile;
+    if (_hasActiveOrder || profile?.isOnline != true) {
+      _stopAllTimers();
+      return;
+    }
+
+    _isPollingOffers = true;
+    try {
+      final list = await _rescueService.getPendingOffers();
+      if (!mounted || !_isAppForeground) return;
+
+      final currentAuth = context.read<AuthProvider>().user;
+      if (currentAuth?.username != _currentMechanicUsername) return;
+
+      final validOffers = list.where((o) {
+        if (o.status != 'PENDING') return false;
+        final rem = _calculateRemainingSeconds(o);
+        return rem > 0;
+      }).toList();
+
+      if (validOffers.isNotEmpty) {
+        final latest = validOffers.first;
+        final rem = _calculateRemainingSeconds(latest);
+
+        setState(() {
+          _pendingOffer = latest;
+          _offerSecondsRemaining = rem;
+        });
+        _startOfferCountdown();
+
+        // Mở màn nhận cuốc đúng 1 lần cho mỗi offerId
+        if (IncomingDispatchScreen.isScreenOpen) {
+          _presentedOfferId = latest.offerId;
+          IncomingDispatchScreen.updateActiveOffer(latest);
+        } else if (_presentedOfferId != latest.offerId && !_isHandlingOfferNavigation) {
+          _presentedOfferId = latest.offerId;
+          _openIncomingDispatchScreen(offer: latest);
+        }
+      } else {
+        if (_pendingOffer != null) {
+          setState(() {
+            _pendingOffer = null;
+            _offerSecondsRemaining = 0;
+            _presentedOfferId = null;
+          });
+          _offerCountdownTimer?.cancel();
+        }
+      }
+    } catch (_) {
+      // Bỏ qua lỗi mạng chập chờn khi polling, chu kỳ sau thử lại
+    } finally {
+      _isPollingOffers = false;
+    }
+  }
+
+  void _startOfferCountdown() {
+    _offerCountdownTimer?.cancel();
+    if (!_isAppForeground) return;
+    _offerCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || !_isAppForeground || _pendingOffer == null) {
+        timer.cancel();
+        return;
+      }
+      final rem = _calculateRemainingSeconds(_pendingOffer!);
+      if (rem <= 0) {
+        timer.cancel();
+        setState(() {
+          _offerSecondsRemaining = 0;
+          _pendingOffer = null;
+          _presentedOfferId = null;
+        });
+      } else {
+        setState(() => _offerSecondsRemaining = rem);
+      }
+    });
+  }
+
+  Future<void> _sendIdleGps() async {
+    if (_isSendingGps || !mounted || !_isAppForeground) return;
+    final profile = context.read<MechanicProvider>().myProfile;
+    if (profile == null || !profile.isOnline || _hasActiveOrder) return;
+
+    _isSendingGps = true;
+    try {
+      final loc = await LocationService.instance.getCurrentLocation();
+      if (!mounted || !_isAppForeground) return;
+      if (loc == null) {
+        setState(() => _gpsUnavailable = true);
+        return;
+      }
+
+      final age = DateTime.now().difference(loc.timestamp).inSeconds.abs();
+      if (age > 30) {
+        setState(() => _gpsUnavailable = true);
+        return;
+      }
+
+      setState(() => _gpsUnavailable = false);
+      // Gửi GPS thật lên backend để làm mới last_gps_updated_at lúc thợ đang AVAILABLE
+      await context.read<MechanicProvider>().toggleStatus(
+            status: 'AVAILABLE',
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+          );
+    } catch (_) {
+      // Bỏ qua lỗi mạng lúc gửi GPS heartbeat
+    } finally {
+      _isSendingGps = false;
+    }
+  }
+
+  Future<void> _loadActiveOrder() async {
+    try {
+      final order = await _rescueService.getActiveOrder();
+      if (mounted) {
+        setState(() => _activeOrder = order);
+        if (_isAppForeground) {
+          _syncTimers();
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleAvailability() async {
+    await changeMechanicAvailability(context);
+    if (mounted && _isAppForeground) {
+      _syncTimers();
+      _pollOffersOnce();
+    }
   }
 
   void _select(int value) => setState(() {
     _tab = value;
     _visitedTabs.add(value);
   });
-  void _open(Widget page) =>
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+
+  Future<void> _openIncomingDispatchScreen({RescueOfferModel? offer}) async {
+    if (IncomingDispatchScreen.isScreenOpen) {
+      if (offer != null) {
+        IncomingDispatchScreen.updateActiveOffer(offer);
+      }
+      return;
+    }
+    _isHandlingOfferNavigation = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => IncomingDispatchScreen(
+            offerId: offer?.offerId,
+            initialOffer: offer,
+          ),
+        ),
+      );
+    } finally {
+      _isHandlingOfferNavigation = false;
+      if (mounted && _isAppForeground) {
+        context.read<MechanicProvider>().fetchMyProfile();
+        await _loadActiveOrder();
+        _syncTimers();
+        _pollOffersOnce();
+      }
+    }
+  }
+
+  Future<void> _open(Widget page) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+    if (mounted && _isAppForeground) {
+      context.read<MechanicProvider>().fetchMyProfile();
+      await _loadActiveOrder();
+      _syncTimers();
+      _pollOffersOnce();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -78,9 +405,10 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
               ),
               actions: [
                 IconButton(
-                  tooltip: 'Làm mới hồ sơ',
-                  onPressed: () =>
-                      context.read<MechanicProvider>().fetchMyProfile(),
+                  tooltip: 'Làm mới',
+                  onPressed: () {
+                    _initializeHomeScreen();
+                  },
                   icon: const Icon(
                     Icons.refresh_rounded,
                     color: AppColors.secondary,
@@ -151,10 +479,14 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
       ),
     ),
   );
+
   Widget _overview() {
     final provider = context.watch<MechanicProvider>();
     final profile = provider.myProfile;
     final name = context.watch<AuthProvider>().user?.fullName ?? 'Thợ cứu hộ';
+
+
+
     return _scroll([
       MechanicPanel(
         dark: true,
@@ -279,9 +611,18 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Trạng thái đồng bộ với gara',
-                    style: TextStyle(fontSize: 11, color: AppColors.secondary),
+                  Text(
+                    profile?.isOnline == true
+                        ? (_gpsUnavailable
+                            ? 'GPS không khả dụng · Cần bật vị trí để nhận cuốc'
+                            : 'Đang trực tuyến · Tọa độ GPS đã đồng bộ')
+                        : 'Trạng thái đồng bộ với gara',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _gpsUnavailable && profile?.isOnline == true
+                          ? AppColors.error
+                          : AppColors.secondary,
+                    ),
                   ),
                 ],
               ),
@@ -290,14 +631,27 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
               value: profile?.isOnline ?? false,
               onChanged: profile == null || profile.isBusy || provider.isLoading
                   ? null
-                  : (_) => changeMechanicAvailability(context),
+                  : (_) => _toggleAvailability(),
             ),
           ],
         ),
       ),
       const MechanicSection('Công việc cứu hộ'),
-      _jobCard(),
+      if (_hasActiveOrder)
+        _activeOrderCard(_activeOrder!)
+      else if (_pendingOffer != null)
+        _pendingOfferCard(_pendingOffer!)
+      else
+        _idleWaitingCard(),
       const MechanicSection('Truy cập nhanh'),
+      _tool(
+        Icons.notifications_active_outlined,
+        'Tiếp nhận điều phối cứu hộ',
+        'Kiểm tra và nhận các ca cứu hộ đang chờ',
+        () => _openIncomingDispatchScreen(),
+        demo: false,
+      ),
+      const SizedBox(height: 8),
       _tool(
         Icons.receipt_long_outlined,
         'Lập báo giá',
@@ -335,75 +689,225 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
           ],
         ),
       );
-  Widget _jobCard() => MechanicPanel(
+
+  Widget _activeOrderCard(RescueOrderModel order) => MechanicPanel(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Wrap(
+        Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            MechanicLabel('ĐƠN MINH HỌA', color: AppColors.primary),
-            MechanicLabel('Sửa chữa tại chỗ'),
+            const MechanicLabel('ĐƠN ĐANG THỰC HIỆN', color: AppColors.primaryOrange),
+            MechanicLabel(order.statusDescription),
           ],
         ),
         const SizedBox(height: 14),
-        const Text(
-          'Cứu hộ xe bị ngập nước',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+        Text(
+          'Đơn #${order.orderCode} · ${order.serviceName}',
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 5),
-        const Text(
-          '#SOS-8924 · Honda SH',
-          style: TextStyle(fontSize: 12, color: AppColors.secondary),
+        Text(
+          '${order.vehiclePlate} · ${order.vehicleModel ?? "Xe máy"}',
+          style: const TextStyle(fontSize: 12, color: AppColors.secondary),
         ),
         const Divider(height: 26),
-        const MechanicInfo(
+        MechanicInfo(
           icon: Icons.person_outline,
           title: 'Khách hàng',
-          value: 'Hoàng Văn Khách',
+          value: '${order.customerName} (${order.customerPhone ?? ""})',
         ),
-        const MechanicInfo(
+        MechanicInfo(
           icon: Icons.location_on_outlined,
-          title: 'Điểm cứu hộ',
-          value: '148 Trần Xuân Soạn, P. Tân Hưng, Q.7',
+          title: 'Điểm đón',
+          value: order.pickupAddress,
         ),
-        const SizedBox(height: 12),
+        MechanicInfo(
+          icon: Icons.wb_sunny_outlined,
+          title: 'Điểm trả',
+          value: order.dropoffAddress,
+        ),
+        const SizedBox(height: 14),
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: () => _open(const IncomingDispatchScreen()),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.primaryOrange),
+            onPressed: () {
+              if (order.status == 'DISPATCHED') {
+                _open(RouteNavigationScreen(orderId: order.id));
+              } else {
+                _open(CrossingTransportScreen(orderId: order.id));
+              }
+            },
             icon: const Icon(Icons.arrow_forward, size: 17),
-            label: const Text('Xem yêu cầu mô phỏng'),
+            label: Text(
+              order.status == 'DISPATCHED'
+                  ? 'Tiếp tục di chuyển đến điểm đón'
+                  : 'Tiếp tục chuyên chở qua ngập',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ),
       ],
     ),
   );
+
+  Widget _pendingOfferCard(RescueOfferModel offer) => MechanicPanel(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            MechanicLabel(
+              'YÊU CẦU CỨU HỘ MỚI (Còn ${_offerSecondsRemaining}s)',
+              color: AppColors.primaryOrange,
+            ),
+            MechanicLabel(offer.orderType == 'SINGLE_CROSSING' ? 'Chở xe qua ngập' : 'Cứu hộ'),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'Đơn #${offer.orderCode} · ${offer.totalAmount.toStringAsFixed(0)} ₫',
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          '${offer.vehiclePlate} · ${offer.vehicleModel ?? "Xe máy"}',
+          style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+        ),
+        const Divider(height: 26),
+        MechanicInfo(
+          icon: Icons.person_outline,
+          title: 'Khách hàng',
+          value: '${offer.customerName} (${offer.customerPhone ?? ""})',
+        ),
+        MechanicInfo(
+          icon: Icons.location_on_outlined,
+          title: 'Điểm đón',
+          value: offer.pickupAddress,
+        ),
+        MechanicInfo(
+          icon: Icons.wb_sunny_outlined,
+          title: 'Điểm trả',
+          value: offer.dropoffAddress,
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.primaryOrange),
+            onPressed: () {
+              _openIncomingDispatchScreen(offer: offer);
+            },
+            icon: const Icon(Icons.arrow_forward, size: 17),
+            label: Text(
+              'Xem & Tiếp nhận ca cứu hộ (${_offerSecondsRemaining}s)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _idleWaitingCard() {
+    final provider = context.watch<MechanicProvider>();
+    final profile = provider.myProfile;
+    final isOnline = profile?.isOnline ?? false;
+
+    return MechanicPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              MechanicLabel(
+                isOnline ? 'ĐANG CHỜ ĐIỀU PHỐI' : 'TẠM NGHỈ',
+                color: isOnline ? const Color(0xFF76D6B5) : AppColors.secondary,
+              ),
+              if (_gpsUnavailable && isOnline)
+                const MechanicLabel('GPS KHÔNG TÍN HIỆU', color: AppColors.error),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            isOnline
+                ? 'Sẵn sàng tiếp nhận cứu hộ'
+                : 'Chưa kích hoạt ca trực',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            isOnline
+                ? (_gpsUnavailable
+                    ? 'Cảnh báo: GPS bị gián đoạn. Hãy bật vị trí để nhận điều phối cuốc ngập.'
+                    : 'Hệ thống tự động điều phối khi có khách cần cứu hộ trong khu vực.')
+                : 'Bật công tắc trực tuyến ở trên để bắt đầu nhận yêu cầu cứu hộ từ khách hàng.',
+            style: TextStyle(
+              fontSize: 12,
+              color: _gpsUnavailable && isOnline ? AppColors.error : AppColors.secondary,
+            ),
+          ),
+          const Divider(height: 26),
+          MechanicInfo(
+            icon: Icons.radar,
+            title: 'Kênh tiếp nhận',
+            value: isOnline ? 'Đang lắng nghe cuốc mới (chu kỳ 3s)' : 'Đang tạm dừng',
+          ),
+          MechanicInfo(
+            icon: Icons.location_on_outlined,
+            title: 'Tọa độ GPS hiện tại',
+            value: profile?.currentLatitude != null
+                ? '${profile!.currentLatitude!.toStringAsFixed(4)}, ${profile.currentLongitude!.toStringAsFixed(4)}'
+                : 'Chưa có mẫu GPS',
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _openIncomingDispatchScreen(),
+              icon: const Icon(Icons.open_in_new, size: 17),
+              label: const Text('Mở màn hình tiếp nhận điều phối'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _jobs() => _scroll([
-    const MechanicDemoNotice(),
     const Text(
       'Danh sách công việc',
       style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
     ),
     const SizedBox(height: 6),
     const Text(
-      'Luồng minh họa từ nhận yêu cầu đến hoàn tất sửa chữa.',
+      'Theo dõi các yêu cầu cứu hộ và tiến độ công việc.',
       style: TextStyle(fontSize: 12, color: AppColors.secondary),
     ),
     const SizedBox(height: 16),
-    _jobCard(),
+    if (_hasActiveOrder)
+      _activeOrderCard(_activeOrder!)
+    else if (_pendingOffer != null)
+      _pendingOfferCard(_pendingOffer!)
+    else
+      _idleWaitingCard(),
     const SizedBox(height: 16),
     const MechanicPanel(
       child: MechanicInfo(
         icon: Icons.info_outline,
-        title: 'Lưu ý',
-        value: 'Chưa kết nối danh sách và phân công đơn cứu hộ thật.',
+        title: 'Quy trình tiếp nhận',
+        value: 'Khi có ca cứu hộ mới, hệ thống tự động gửi yêu cầu với thời gian 45 giây phản hồi.',
       ),
     ),
   ]);
+
   Widget _tools() => _scroll([
-    const MechanicDemoNotice(),
     const Text(
       'Bộ công cụ hiện trường',
       style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
@@ -416,16 +920,26 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
     const MechanicSection('Tiếp nhận & di chuyển'),
     _tool(
       Icons.notifications_active_outlined,
-      'Yêu cầu cứu hộ',
-      'Xem thông tin khách và sự cố',
-      () => _open(const IncomingDispatchScreen()),
+      'Tiếp nhận điều phối cứu hộ',
+      'Kiểm tra và nhận các ca cứu hộ đang chờ',
+      () => _openIncomingDispatchScreen(),
+      demo: false,
+    ),
+    const SizedBox(height: 8),
+    _tool(
+      Icons.local_shipping_outlined,
+      'Chở xe qua ngập',
+      'Tiến độ 5 bước chở xe đơn lẻ',
+      () => _open(CrossingTransportScreen(orderId: _hasActiveOrder ? _activeOrder?.id : null)),
+      demo: !_hasActiveOrder,
     ),
     const SizedBox(height: 8),
     _tool(
       Icons.route_outlined,
       'Đường đến khách',
-      'Xem lộ trình minh họa',
-      () => _open(const RouteNavigationScreen()),
+      'Xem lộ trình điều hướng',
+      () => _open(RouteNavigationScreen(orderId: _hasActiveOrder ? _activeOrder?.id : null)),
+      demo: !_hasActiveOrder,
     ),
     const MechanicSection('Sửa chữa & thanh toán'),
     _tool(
@@ -445,10 +959,11 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
     _tool(
       Icons.qr_code_rounded,
       'Thanh toán VietQR',
-      'Xem giao diện thanh toán mẫu',
+      'Xem giao diện thanh toán',
       () => _open(const VietQRPaymentScreen()),
     ),
   ]);
+
   Widget _tool(
     IconData icon,
     String title,

@@ -16,7 +16,10 @@ import com.prm393.floodrescue.features.mechanic.dto.MechanicStaffResponse;
 import com.prm393.floodrescue.features.mechanic.dto.ToggleMechanicStatusRequest;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStaff;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStatus;
+import com.prm393.floodrescue.common.exception.BadRequestException;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
+import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
+import java.util.List;
 import com.prm393.floodrescue.features.mechanic.service.MechanicStaffService;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +45,7 @@ class MechanicStaffServiceTest {
     @Mock private UserRepository userRepository;
 
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private RescueOrderRepository rescueOrderRepository;
 
     @InjectMocks private MechanicStaffService mechanicService;
 
@@ -154,5 +158,52 @@ class MechanicStaffServiceTest {
         assertEquals(MechanicStatus.AVAILABLE, response.getWorkingStatus());
         assertEquals(10.7423, response.getCurrentLatitude());
         assertEquals(106.7021, response.getCurrentLongitude());
+        assertNotNull(response.getLastGpsUpdatedAt());
+        assertNotNull(staff.getLastGpsUpdatedAt());
+    }
+
+    @Test
+    @DisplayName("Chặn thợ tự đặt trạng thái BUSY qua toggleStatus")
+    void toggleStatus_CannotSetBusyManually() {
+        User mechanicUser = User.builder().id(50L).username("tech_01").role(Role.FIELD_MECHANIC).build();
+        MechanicStaff staff = MechanicStaff.builder().id(200L).user(mechanicUser).garage(sampleGarage).workingStatus(MechanicStatus.OFFLINE).build();
+
+        when(mechanicRepository.findByUserId(50L)).thenReturn(Optional.of(staff));
+
+        ToggleMechanicStatusRequest toggleRequest = ToggleMechanicStatusRequest.builder()
+                .workingStatus(MechanicStatus.BUSY)
+                .build();
+
+        assertThrows(BadRequestException.class, () -> mechanicService.toggleStatus(mechanicUser, toggleRequest));
+    }
+
+    @Test
+    @DisplayName("Chặn thợ đổi sang AVAILABLE/OFFLINE để thoát đơn khi đang có đơn active")
+    void toggleStatus_CannotEscapeActiveOrder() {
+        User mechanicUser = User.builder().id(50L).username("tech_01").role(Role.FIELD_MECHANIC).build();
+        MechanicStaff staff = MechanicStaff.builder().id(200L).user(mechanicUser).garage(sampleGarage).workingStatus(MechanicStatus.BUSY).build();
+
+        when(mechanicRepository.findByUserId(50L)).thenReturn(Optional.of(staff));
+        when(rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(eq(200L), anyList())).thenReturn(true);
+
+        ToggleMechanicStatusRequest toggleRequest = ToggleMechanicStatusRequest.builder()
+                .workingStatus(MechanicStatus.AVAILABLE)
+                .build();
+
+        assertThrows(BadRequestException.class, () -> mechanicService.toggleStatus(mechanicUser, toggleRequest));
+    }
+
+    @Test
+    @DisplayName("Chặn điều chuyển chi nhánh khi thợ đang xử lý đơn active")
+    void allocateBranch_BlockedWhenActiveOrder() {
+        MechanicStaff staff = MechanicStaff.builder().id(200L).garage(sampleGarage).build();
+        when(garageRepository.findByOwnerId(1L)).thenReturn(Optional.of(sampleGarage));
+        when(mechanicRepository.findById(200L)).thenReturn(Optional.of(staff));
+        when(rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(eq(200L), anyList())).thenReturn(true);
+
+        com.prm393.floodrescue.features.mechanic.dto.AllocateBranchRequest req =
+                new com.prm393.floodrescue.features.mechanic.dto.AllocateBranchRequest(2L, "Ca tối");
+
+        assertThrows(BadRequestException.class, () -> mechanicService.allocateBranch(sampleOwner, 200L, req));
     }
 }

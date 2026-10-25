@@ -78,6 +78,8 @@ class FinanceAdminServiceTest {
                 .status(GarageStatus.APPROVED)
                 .walletBalance(new BigDecimal("10000000.00"))
                 .build();
+        lenient().when(garageRepository.lockWalletBalance(any())).thenAnswer(inv -> Optional.of(approvedGarage.getWalletBalance()));
+        lenient().when(payoutRequestRepository.findGarageIdById(any())).thenReturn(Optional.of(100L));
     }
 
     @Test

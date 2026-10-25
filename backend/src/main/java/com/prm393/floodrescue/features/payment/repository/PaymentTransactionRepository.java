@@ -10,7 +10,15 @@ import java.util.Optional;
 
 @Repository
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Long> {
+    @org.springframework.data.jpa.repository.Query("select p.rescueOrderId from PaymentTransaction p where p.payosOrderCode = :code")
+    Optional<Long> findRescueOrderIdByCode(@org.springframework.data.repository.query.Param("code") Long code);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select p from PaymentTransaction p where p.payosOrderCode = :code")
+    Optional<PaymentTransaction> findByCodeWithLock(@org.springframework.data.repository.query.Param("code") Long code);
     Optional<PaymentTransaction> findByPayosOrderCode(Long payosOrderCode);
+    Optional<PaymentTransaction> findFirstByRescueOrderIdAndStatusOrderByCreatedAtDesc(Long rescueOrderId, PaymentStatus status);
+    Optional<PaymentTransaction> findFirstByRescueOrderIdOrderByCreatedAtDesc(Long rescueOrderId);
+    List<PaymentTransaction> findByRescueOrderIdAndStatus(Long rescueOrderId, PaymentStatus status);
     List<PaymentTransaction> findByRescueOrderIdOrderByCreatedAtDesc(Long rescueOrderId);
     List<PaymentTransaction> findByGarageIdOrderByCreatedAtDesc(Long garageId);
     List<PaymentTransaction> findByStatusOrderByCreatedAtDesc(PaymentStatus status);

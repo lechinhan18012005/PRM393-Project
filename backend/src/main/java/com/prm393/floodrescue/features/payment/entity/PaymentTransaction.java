@@ -81,6 +81,13 @@ public class PaymentTransaction {
     @Column(name = "checkout_url", length = 500)
     private String checkoutUrl;
 
+    @Column(name = "gateway_requested", nullable = false)
+    @Builder.Default
+    private boolean gatewayRequested = false;
+
+    @Column(name = "gateway_link_id", length = 100)
+    private String gatewayLinkId;
+
     @Column(name = "bank_name", length = 120)
     private String bankName;
 
@@ -95,6 +102,10 @@ public class PaymentTransaction {
 
     @Column(name = "raw_webhook_payload", columnDefinition = "TEXT")
     private String rawWebhookPayload;
+
+    @Column(name = "is_simulation", nullable = false)
+    @Builder.Default
+    private boolean simulation = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

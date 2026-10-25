@@ -30,6 +30,14 @@ jwt:
 app:
   demo:
     seed-users: ${APP_DEMO_SEED_USERS:false}
+  rescue:
+    booking-fee: ${RESCUE_BOOKING_FEE:30000}
+    hotline: ${RESCUE_HOTLINE:1900-6868}
+    offer-timeout-seconds: ${RESCUE_OFFER_TIMEOUT_SECONDS:45}
+    arrival-threshold-meters: ${RESCUE_ARRIVAL_THRESHOLD_METERS:30.0}
+    heartbeat-valid-minutes: ${RESCUE_HEARTBEAT_VALID_MINUTES:5}
+    default-dispatch-radius-km: ${RESCUE_DEFAULT_RADIUS_KM:5.0}
+    max-dispatch-radius-km: ${RESCUE_MAX_RADIUS_KM:7.0}
 
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}
@@ -43,6 +51,7 @@ payos:
   endpoint: ${PAYOS_ENDPOINT:https://api-merchant.payos.vn}
   return-url: ${PAYOS_RETURN_URL:http://localhost:8080/api/v1/payments/payos/return}
   cancel-url: ${PAYOS_CANCEL_URL:http://localhost:8080/api/v1/payments/payos/return?cancel=true}
+  simulation-enabled: ${PAYOS_SIMULATION_ENABLED:false}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:*,http://127.0.0.1:*}

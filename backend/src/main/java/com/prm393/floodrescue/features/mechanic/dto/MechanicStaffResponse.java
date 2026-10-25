@@ -33,5 +33,8 @@ public class MechanicStaffResponse {
     private String shiftName;
     private Double ratingAvg;
     private String speciality;
+    private boolean hasCrossingCapability;
+    private LocalDateTime lastHeartbeatAt;
+    private LocalDateTime lastGpsUpdatedAt;
     private LocalDateTime createdAt;
 }

@@ -16,6 +16,9 @@ import com.prm393.floodrescue.features.mechanic.dto.ToggleMechanicStatusRequest;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStaff;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStatus;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
+import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
+import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
+import java.time.LocalDateTime;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +39,7 @@ public class MechanicStaffService {
     private final GarageBranchRepository branchRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RescueOrderRepository rescueOrderRepository;
 
     @Transactional
     public MechanicStaffResponse createMechanic(User owner, CreateMechanicRequest request) {
@@ -160,6 +164,11 @@ public class MechanicStaffService {
             throw new ResourceNotFoundException("Thợ không thuộc quyền quản lý của garage bạn!");
         }
 
+        if (rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(
+                staffId, List.of(RescueOrderStatus.DISPATCHED, RescueOrderStatus.ARRIVED, RescueOrderStatus.IN_PROGRESS))) {
+            throw new BadRequestException("Không thể điều chuyển chi nhánh khi thợ đang thực hiện đơn cứu hộ!");
+        }
+
         if (request.getBranchId() != null) {
             GarageBranch branch =
                     branchRepository
@@ -208,10 +217,30 @@ public class MechanicStaffService {
 
         com.prm393.floodrescue.features.garage.service.GarageAccess.requireApproved(
                 staff.getGarage());
+
+        if (request.getWorkingStatus() == MechanicStatus.BUSY) {
+            throw new BadRequestException("Trạng thái BẬN do nghiệp vụ điều phối quản lý, không thể tự đặt!");
+        }
+
+        boolean hasActiveOrder = rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(
+                staff.getId(), List.of(RescueOrderStatus.DISPATCHED, RescueOrderStatus.ARRIVED, RescueOrderStatus.IN_PROGRESS)
+        );
+        if (hasActiveOrder && (request.getWorkingStatus() == MechanicStatus.AVAILABLE || request.getWorkingStatus() == MechanicStatus.OFFLINE)) {
+            throw new BadRequestException("Thợ đang có đơn cứu hộ chưa hoàn thành, không thể chuyển trạng thái để thoát đơn!");
+        }
+
         staff.setWorkingStatus(request.getWorkingStatus());
+        staff.setLastHeartbeatAt(LocalDateTime.now());
         if (request.getLatitude() != null && request.getLongitude() != null) {
-            staff.setCurrentLatitude(request.getLatitude());
-            staff.setCurrentLongitude(request.getLongitude());
+            double lat = request.getLatitude();
+            double lon = request.getLongitude();
+            if (!Double.isNaN(lat) && !Double.isInfinite(lat) && lat >= -90.0 && lat <= 90.0
+                    && !Double.isNaN(lon) && !Double.isInfinite(lon) && lon >= -180.0 && lon <= 180.0) {
+                staff.setCurrentLatitude(lat);
+                staff.setCurrentLongitude(lon);
+                staff.setLastGpsUpdatedAt(LocalDateTime.now());
+            }
+
         }
 
         staff = mechanicRepository.save(staff);
@@ -264,6 +293,9 @@ public class MechanicStaffService {
                 .shiftName(staff.getShiftName())
                 .ratingAvg(staff.getRatingAvg())
                 .speciality(staff.getSpeciality())
+                .hasCrossingCapability(staff.isHasCrossingCapability())
+                .lastHeartbeatAt(staff.getLastHeartbeatAt())
+                .lastGpsUpdatedAt(staff.getLastGpsUpdatedAt())
                 .createdAt(staff.getCreatedAt())
                 .build();
     }

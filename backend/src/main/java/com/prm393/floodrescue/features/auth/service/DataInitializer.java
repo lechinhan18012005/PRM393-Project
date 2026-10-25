@@ -8,7 +8,10 @@ import com.prm393.floodrescue.features.garage.entity.Garage;
 import com.prm393.floodrescue.features.garage.entity.GarageBranch;
 import com.prm393.floodrescue.features.garage.entity.GarageStatus;
 import com.prm393.floodrescue.features.garage.repository.GarageBranchRepository;
+import com.prm393.floodrescue.features.garage.entity.ServiceItem;
+import com.prm393.floodrescue.features.garage.entity.ServiceType;
 import com.prm393.floodrescue.features.garage.repository.GarageRepository;
+import com.prm393.floodrescue.features.garage.repository.ServiceItemRepository;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStaff;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStatus;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
@@ -34,6 +37,7 @@ public class DataInitializer implements CommandLineRunner {
     private final GarageRepository garageRepository;
     private final GarageBranchRepository branchRepository;
     private final MechanicStaffRepository mechanicRepository;
+    private final ServiceItemRepository serviceItemRepository;
 
     @Override
     @Transactional
@@ -121,6 +125,10 @@ public class DataInitializer implements CommandLineRunner {
             seedMechanicStaffIfNotExists(mechanic2, garage, branch1, "Ca sáng", "Cứu hộ kéo xe máy ngập sâu");
             seedMechanicStaffIfNotExists(mechanic3, garage, branch2, "Ca trực bão Q8", "Xử lý thủy kích xe tay ga");
             seedMechanicStaffIfNotExists(mechanic4, garage, branch3, "Ca đêm Bình Thạnh", "Xe chở gom vượt ngập");
+
+            // 5. Seed service catalog for garage
+            seedServiceItemIfNotExists(garage, "Chở xe qua ngập (Chuyến riêng)", ServiceType.CROSSING, new BigDecimal("120000"), "Chở riêng 1 xe máy và khách qua đoạn đường ngập sâu bằng phương tiện chuyên dụng đến nơi khô ráo");
+            seedServiceItemIfNotExists(garage, "Sấy bugi & Xả nước buồng đốt", ServiceType.REPAIR_ONSITE, new BigDecimal("80000"), "Khắc phục xe chết máy do ngập nước tại chỗ");
         }
     }
 
@@ -157,6 +165,28 @@ public class DataInitializer implements CommandLineRunner {
                     .build();
             mechanicRepository.save(mechanic);
             log.info("Seeded mechanic staff {} allocated to branch {}", user.getUsername(), branch.getBranchName());
+        }
+    }
+    private void seedServiceItemIfNotExists(Garage garage, String serviceName, ServiceType serviceType, BigDecimal price, String description) {
+        boolean exists = serviceItemRepository.findByGarageIdOrderByCreatedAtAsc(garage.getId()).stream()
+                .anyMatch(s -> s.getServiceName().equalsIgnoreCase(serviceName));
+        if (!exists) {
+            ServiceItem item = ServiceItem.builder()
+                    .garage(garage)
+                    .serviceName(serviceName)
+                    .category("VƯỢT NGẬP")
+                    .serviceType(serviceType)
+                    .standardPrice(price)
+                    .minPrice(price.multiply(BigDecimal.valueOf(0.9)))
+                    .maxPrice(price.multiply(BigDecimal.valueOf(1.2)))
+                    .unit("lượt")
+                    .estimatedTimeMin(20)
+                    .description(description)
+                    .active(true)
+                    .warrantyDays(3)
+                    .build();
+            serviceItemRepository.save(item);
+            log.info("Seeded ServiceItem: {} for garage id: {}", serviceName, garage.getId());
         }
     }
 }

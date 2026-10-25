@@ -24,3 +24,4 @@ payos:
   endpoint: https://api-merchant.payos.vn
   return-url: http://localhost:8080/api/v1/payments/payos/return
   cancel-url: http://localhost:8080/api/v1/payments/payos/return?cancel=true
+  simulation-enabled: true

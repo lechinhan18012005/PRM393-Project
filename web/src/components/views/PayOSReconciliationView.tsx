@@ -10,20 +10,28 @@ interface PayOSReconciliationViewProps {
 }
 
 const mapBackendTxToView = (tx: PaymentTransactionBackend): PayOSTransaction => {
-  let parsedPayload: Record<string, any> = {
+  let parsedPayload: PayOSTransaction['rawPayload'] & { signature?: string } = {
     code: '00',
     desc: 'success',
     data: {
       orderCode: tx.payosOrderCode,
       amount: tx.amount,
       description: tx.paymentContent || `RESCUE ${tx.rescueOrderId}`,
-      accountNumber: tx.accountNumber || '038299482910'
+      accountNumber: tx.accountNumber || '038299482910',
+      reference: '',
+      transactionDateTime: tx.paidAt || '',
+      signature: tx.webhookSignature || ''
     },
     signature: tx.webhookSignature || 'hmac-sha256-verified'
   };
   if (tx.rawWebhookPayload) {
     try {
-      parsedPayload = JSON.parse(tx.rawWebhookPayload);
+      const payload = JSON.parse(tx.rawWebhookPayload);
+      parsedPayload = {
+        ...parsedPayload,
+        ...payload,
+        data: { ...parsedPayload.data, ...payload?.data }
+      };
     } catch {
       // keep default object
     }

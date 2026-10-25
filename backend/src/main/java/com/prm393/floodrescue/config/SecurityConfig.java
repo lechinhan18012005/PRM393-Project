@@ -70,6 +70,7 @@ public class SecurityConfig {
                                                 "/api/v1/payments/payos/webhook",
                                                 "/api/v1/payments/payos/return",
                                                 "/api/v1/upload/**",
+                                                "/ws-rescue/**",
                                                 "/favicon.ico",
                                                 "/error")
                                         .permitAll()

@@ -24,6 +24,13 @@ import com.prm393.floodrescue.features.payment.entity.PaymentStatus;
 import com.prm393.floodrescue.features.payment.entity.PaymentTransaction;
 import com.prm393.floodrescue.features.payment.repository.PaymentTransactionRepository;
 import com.prm393.floodrescue.features.payment.service.PayOSPaymentService;
+import com.prm393.floodrescue.features.mechanic.entity.MechanicStaff;
+import com.prm393.floodrescue.features.rescue.entity.OrderType;
+import com.prm393.floodrescue.features.rescue.entity.RescueOrder;
+import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
+import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
+import com.prm393.floodrescue.features.rescue.service.RescueDispatchService;
+import com.prm393.floodrescue.features.rescue.service.RescueExecutionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -57,6 +64,15 @@ class PayOSPaymentServiceTest {
     @Mock
     private PayoutRequestRepository payoutRequestRepository;
 
+    @Mock
+    private RescueOrderRepository rescueOrderRepository;
+
+    @Mock
+    private RescueExecutionService rescueExecutionService;
+
+    @Mock
+    private RescueDispatchService rescueDispatchService;
+
     private FinanceAdminService financeAdminService;
     private PayOSConfig payOSConfig;
     private PayOSPaymentService payOSPaymentService;
@@ -70,6 +86,7 @@ class PayOSPaymentServiceTest {
         payOSConfig.setClientId("demo_client_id");
         payOSConfig.setApiKey("demo_api_key");
         payOSConfig.setChecksumKey("0cd5516e4494a92daf356b2bc8edfe4c31fc9db635fda074cb262be43f67964e");
+        payOSConfig.setSimulationEnabled(true);
 
         financeAdminService = new FinanceAdminService(
                 commissionConfigRepository,
@@ -85,7 +102,13 @@ class PayOSPaymentServiceTest {
                 walletTransactionRepository,
                 financeAdminService,
                 payOSConfig,
-                new ObjectMapper()
+                new ObjectMapper(),
+                rescueOrderRepository,
+                rescueExecutionService,
+                rescueDispatchService,
+                new com.prm393.floodrescue.features.payment.service.PaymentAttemptService(paymentTransactionRepository, rescueOrderRepository, financeAdminService, payOSConfig),
+                null,
+                new com.prm393.floodrescue.features.payment.service.PaymentSettlementService(paymentTransactionRepository, rescueOrderRepository, garageRepository, walletTransactionRepository, rescueExecutionService, rescueDispatchService)
         );
 
         customer = User.builder()
@@ -102,17 +125,30 @@ class PayOSPaymentServiceTest {
                 .status(GarageStatus.APPROVED)
                 .walletBalance(new BigDecimal("1000000.00"))
                 .build();
+        lenient().when(garageRepository.lockWalletBalance(any())).thenAnswer(inv -> Optional.of(garage.getWalletBalance()));
+        lenient().when(paymentTransactionRepository.findByCodeWithLock(any())).thenAnswer(inv -> paymentTransactionRepository.findByPayosOrderCode(inv.getArgument(0)));
+        lenient().when(paymentTransactionRepository.findRescueOrderIdByCode(any())).thenAnswer(inv -> paymentTransactionRepository.findByPayosOrderCode(inv.getArgument(0)).map(PaymentTransaction::getRescueOrderId));
     }
 
     @Test
     @DisplayName("UC-18 + UC-24: Khởi tạo thanh toán tự động lấy tỷ lệ hoa hồng từ UC-24 và tính đúng phí sàn / thực nhận Gara")
     void createPayment_AppliesActiveCommissionFromPhase1() {
-        when(garageRepository.findById(20L)).thenReturn(Optional.of(garage));
+        RescueOrder order = RescueOrder.builder()
+                .id(901L)
+                .customer(customer)
+                .garage(garage)
+                .orderType(OrderType.SINGLE_CROSSING)
+                .status(RescueOrderStatus.PAYMENT_PENDING)
+                .totalAmount(new BigDecimal("300000.00"))
+                .orderCode("#RC-901")
+                .build();
+
+        when(rescueOrderRepository.findByIdWithLock(901L)).thenReturn(Optional.of(order));
         when(commissionConfigRepository.findFirstByActiveTrueOrderByCreatedAtDesc())
                 .thenReturn(Optional.of(CommissionConfig.builder()
                         .id(1L)
                         .globalRate(new BigDecimal("12.50"))
-                        .singleCrossingRate(new BigDecimal("12.50"))
+                        .singleCrossingRate(new BigDecimal("10.00"))
                         .batchCrossingRate(new BigDecimal("10.00"))
                         .waterloggedRepairRate(new BigDecimal("15.00"))
                         .active(true)
@@ -127,8 +163,8 @@ class PayOSPaymentServiceTest {
                 .rescueOrderId(901L)
                 .garageId(20L)
                 .rescueCode("#RC-901")
-                .orderType("BATCH_CROSSING")
-                .amount(new BigDecimal("300000"))
+                .orderType("SINGLE_CROSSING")
+                .amount(new BigDecimal("300000.00"))
                 .paymentMethod(PaymentMethod.PAYOS_VIETQR)
                 .build();
 
@@ -144,8 +180,18 @@ class PayOSPaymentServiceTest {
     }
 
     @Test
-    @DisplayName("UC-18 + UC-26: Webhook PayOS hợp lệ tự động cộng tiền thực nhận vào Ví Gara và ghi sổ WalletTransaction")
+    @DisplayName("UC-18 + UC-26: Webhook PayOS hợp lệ tự động cộng tiền thực nhận vào Ví Gara, ghi sổ WalletTransaction và hoàn tất đơn cứu hộ")
     void handlePayOSWebhook_ValidSignature_CreditsGarageWallet() {
+        RescueOrder order = RescueOrder.builder()
+                .id(902L)
+                .customer(customer)
+                .garage(garage)
+                .orderType(OrderType.SINGLE_CROSSING)
+                .status(RescueOrderStatus.PAYMENT_PENDING)
+                .totalAmount(new BigDecimal("400000.00"))
+                .orderCode("#RC-902")
+                .build();
+
         PaymentTransaction pendingTx = PaymentTransaction.builder()
                 .id(501L)
                 .rescueOrderId(902L)
@@ -158,14 +204,15 @@ class PayOSPaymentServiceTest {
                 .platformFee(new BigDecimal("50000.00"))
                 .netGarageAmount(new BigDecimal("350000.00"))
                 .paymentMethod(PaymentMethod.PAYOS_VIETQR)
-                .paymentContent("RESCUE 88990011")
+                .simulation(true).paymentContent("RESCUE 88990011")
                 .status(PaymentStatus.PENDING)
                 .build();
 
+        when(rescueOrderRepository.findByIdWithLock(902L)).thenReturn(Optional.of(order));
         when(paymentTransactionRepository.findByPayosOrderCode(88990011L)).thenReturn(Optional.of(pendingTx));
         when(paymentTransactionRepository.save(any(PaymentTransaction.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentTransactionResponse settled = payOSPaymentService.simulatePayOSWebhook(88990011L);
+        PaymentTransactionResponse settled = payOSPaymentService.simulatePayOSWebhook(customer, 88990011L);
 
         assertEquals(PaymentStatus.SUCCESS, settled.getStatus());
         assertTrue(settled.isReconciled());
@@ -178,6 +225,11 @@ class PayOSPaymentServiceTest {
         assertEquals(WalletTransactionType.ORDER_INCOME, captor.getValue().getTransactionType());
         assertEquals(new BigDecimal("350000.00"), captor.getValue().getAmount());
         assertEquals(new BigDecimal("1350000.00"), captor.getValue().getBalanceAfter());
+
+        // Kiểm tra lệnh hoàn tất đơn cứu hộ
+        verify(rescueExecutionService, times(1)).markPaymentSuccessful(
+                eq(902L), eq(501L), eq(88990011L), eq("PAYOS"), eq(new BigDecimal("400000.00")), any()
+        );
     }
 
     @Test
@@ -198,11 +250,35 @@ class PayOSPaymentServiceTest {
         assertThrows(BadRequestException.class, () -> payOSPaymentService.handlePayOSWebhook(tamperedPayload));
         verify(garageRepository, never()).save(any(Garage.class));
         verify(walletTransactionRepository, never()).save(any(WalletTransaction.class));
+        verify(rescueExecutionService, never()).markPaymentSuccessful(any(), any(), any(), any(), any(), any());
     }
 
     @Test
-    @DisplayName("UC-18: Xác nhận thu tiền mặt tại hiện trường tự động khấu trừ hoa hồng nền tảng từ Ví Gara")
+    @DisplayName("UC-18: Xác nhận thu tiền mặt bởi Thợ phân công tự động khấu trừ hoa hồng nền tảng và hoàn tất đơn")
     void confirmCashPayment_DeductsCommissionFromGarageWallet() {
+        User mechanicUser = User.builder()
+                .id(30L)
+                .username("mechanic_01")
+                .fullName("Thợ Cứu Hộ")
+                .role(Role.FIELD_MECHANIC)
+                .build();
+
+        MechanicStaff staff = MechanicStaff.builder()
+                .id(40L)
+                .user(mechanicUser)
+                .build();
+
+        RescueOrder order = RescueOrder.builder()
+                .id(903L)
+                .customer(customer)
+                .garage(garage)
+                .mechanicStaff(staff)
+                .orderType(OrderType.SINGLE_CROSSING)
+                .status(RescueOrderStatus.PAYMENT_PENDING)
+                .totalAmount(new BigDecimal("200000.00"))
+                .orderCode("#RC-903")
+                .build();
+
         PaymentTransaction cashTx = PaymentTransaction.builder()
                 .id(502L)
                 .rescueOrderId(903L)
@@ -219,14 +295,18 @@ class PayOSPaymentServiceTest {
                 .build();
 
         when(paymentTransactionRepository.findByPayosOrderCode(88990022L)).thenReturn(Optional.of(cashTx));
+        when(rescueOrderRepository.findByIdWithLock(903L)).thenReturn(Optional.of(order));
         when(paymentTransactionRepository.save(any(PaymentTransaction.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentTransactionResponse confirmed = payOSPaymentService.confirmCashPayment(88990022L);
+        PaymentTransactionResponse confirmed = payOSPaymentService.confirmCashPayment(mechanicUser, 88990022L);
 
         assertEquals(PaymentStatus.SUCCESS, confirmed.getStatus());
         assertEquals(PaymentMethod.CASH, confirmed.getPaymentMethod());
         // Ví Gara ban đầu 1.000.000 - 20.000 phí hoa hồng sàn = 980.000
         assertEquals(new BigDecimal("980000.00"), garage.getWalletBalance());
         verify(walletTransactionRepository, times(1)).save(any(WalletTransaction.class));
+        verify(rescueExecutionService, times(1)).markPaymentSuccessful(
+                eq(903L), eq(502L), eq(88990022L), eq("CASH"), eq(new BigDecimal("200000.00")), any()
+        );
     }
 }

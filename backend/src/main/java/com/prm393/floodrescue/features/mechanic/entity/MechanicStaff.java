@@ -54,6 +54,16 @@ public class MechanicStaff {
     @Column(length = 200)
     private String speciality;
 
+    @Column(name = "has_crossing_capability", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean hasCrossingCapability = false;
+
+    @Column(name = "last_heartbeat_at")
+    private LocalDateTime lastHeartbeatAt;
+
+    @Column(name = "last_gps_updated_at")
+    private LocalDateTime lastGpsUpdatedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

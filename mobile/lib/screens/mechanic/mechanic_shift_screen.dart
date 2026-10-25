@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/services/location_service.dart';
 import '../../providers/mechanic_provider.dart';
 import 'mechanic_ui.dart';
 
@@ -10,7 +11,19 @@ Future<void> changeMechanicAvailability(BuildContext context) async {
   final profile = provider.myProfile;
   if (profile == null || profile.isBusy || provider.isLoading) return;
   final target = profile.isOnline ? 'OFFLINE' : 'AVAILABLE';
-  final ok = await provider.toggleStatus(status: target);
+  double? lat;
+  double? lon;
+  if (target == 'AVAILABLE') {
+    final loc = await LocationService.instance.getCurrentLocation();
+    if (loc != null) {
+      final age = DateTime.now().difference(loc.timestamp).inSeconds.abs();
+      if (age <= 30) {
+        lat = loc.latitude;
+        lon = loc.longitude;
+      }
+    }
+  }
+  final ok = await provider.toggleStatus(status: target, latitude: lat, longitude: lon);
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
