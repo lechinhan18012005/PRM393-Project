@@ -321,15 +321,17 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                             MaterialPageRoute(
                               builder: (_) => VietQRPaymentScreen(
                                 orderId: order.id,
+                                garageId: order.garageId,
                                 amount: order.totalAmount,
                                 orderCode: order.orderCode,
+                                rescueOrder: order,
                               ),
                             ),
                           );
                         },
                         icon: const Icon(Icons.qr_code_2),
                         label: Text(
-                          'Thanh toán ngay · ${order.totalAmount.toStringAsFixed(0)} ₫ (UC-18 preview)',
+                          'Thanh toán ngay · ${order.totalAmount.toStringAsFixed(0)} ₫',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),

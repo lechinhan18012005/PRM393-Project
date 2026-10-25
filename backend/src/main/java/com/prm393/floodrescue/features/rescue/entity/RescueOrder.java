@@ -159,6 +159,18 @@ public class RescueOrder {
     @Column(name = "service_completed_at")
     private LocalDateTime serviceCompletedAt;
 
+    @Column(name = "paid_at")
+    private LocalDateTime paidAt;
+
+    @Column(name = "payment_method", length = 30)
+    private String paymentMethod;
+
+    @Column(name = "payment_transaction_id")
+    private Long paymentTransactionId;
+
+    @Column(name = "payment_order_code")
+    private Long paymentOrderCode;
+
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
 

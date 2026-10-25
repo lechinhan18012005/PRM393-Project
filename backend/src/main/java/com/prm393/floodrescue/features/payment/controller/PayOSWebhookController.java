@@ -45,36 +45,41 @@ public class PayOSWebhookController {
     // UC-18: Simulate PayOS Webhook callback with valid HMAC-SHA256 signature (for local testing & demo)
     @PostMapping("/{orderCode}/simulate-webhook")
     public ResponseEntity<ApiResponse<PaymentTransactionResponse>> simulatePayOSWebhook(
+            @AuthenticationPrincipal User user,
             @PathVariable("orderCode") Long orderCode
     ) {
-        PaymentTransactionResponse response = payOSPaymentService.simulatePayOSWebhook(orderCode);
+        PaymentTransactionResponse response = payOSPaymentService.simulatePayOSWebhook(user, orderCode);
         return ResponseEntity.ok(ApiResponse.success("Đã xác nhận thanh toán VietQR PayOS và cộng tiền vào ví Gara!", response));
     }
 
     // UC-18: Confirm Cash payment at rescue site
     @PostMapping("/{orderCode}/confirm-cash")
     public ResponseEntity<ApiResponse<PaymentTransactionResponse>> confirmCashPayment(
+            @AuthenticationPrincipal User user,
             @PathVariable("orderCode") Long orderCode
     ) {
-        PaymentTransactionResponse response = payOSPaymentService.confirmCashPayment(orderCode);
+        PaymentTransactionResponse response = payOSPaymentService.confirmCashPayment(user, orderCode);
         return ResponseEntity.ok(ApiResponse.success("Đã xác nhận thu tiền mặt và khấu trừ hoa hồng nền tảng!", response));
     }
 
     // UC-18: Get payment transaction & electronic invoice details by PayOS orderCode
     @GetMapping("/{orderCode}")
     public ResponseEntity<ApiResponse<PaymentTransactionResponse>> getPaymentByOrderCode(
-            @PathVariable("orderCode") Long orderCode
+            @AuthenticationPrincipal User user,
+            @PathVariable("orderCode") Long orderCode,
+            @RequestParam(defaultValue = "false") boolean refresh
     ) {
-        PaymentTransactionResponse response = payOSPaymentService.getTransactionByOrderCode(orderCode);
+        PaymentTransactionResponse response = payOSPaymentService.getTransactionByOrderCode(user, orderCode, refresh);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     // UC-18: Get payments by rescueOrderId
     @GetMapping("/order/{rescueOrderId}")
     public ResponseEntity<ApiResponse<List<PaymentTransactionResponse>>> getPaymentsByRescueOrder(
+            @AuthenticationPrincipal User user,
             @PathVariable("rescueOrderId") Long rescueOrderId
     ) {
-        List<PaymentTransactionResponse> list = payOSPaymentService.getTransactionsByRescueOrder(rescueOrderId);
+        List<PaymentTransactionResponse> list = payOSPaymentService.getTransactionsByRescueOrder(user, rescueOrderId);
         return ResponseEntity.ok(ApiResponse.success(list));
     }
 

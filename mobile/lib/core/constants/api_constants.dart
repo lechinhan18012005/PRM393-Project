@@ -63,6 +63,10 @@ class ApiConstants {
 
   // PayOS Payment Endpoints (Luồng 5 - UC-18)
   static String get createPaymentUrl => '$baseUrl/payments/create';
+  static String paymentByOrderCodeUrl(int orderCode) =>
+      '$baseUrl/payments/$orderCode';
+  static String paymentsByRescueOrderUrl(int rescueOrderId) =>
+      '$baseUrl/payments/order/$rescueOrderId';
   static String simulateWebhookUrl(int orderCode) =>
       '$baseUrl/payments/$orderCode/simulate-webhook';
   static String confirmCashPaymentUrl(int orderCode) =>

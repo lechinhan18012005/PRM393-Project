@@ -19,14 +19,12 @@ public class CreatePaymentRequest {
     @NotNull(message = "Mã đơn cứu hộ (rescueOrderId) không được để trống")
     private Long rescueOrderId;
 
-    @NotNull(message = "Mã garage nhận đơn (garageId) không được để trống")
     private Long garageId;
 
     private String rescueCode;
 
     private String orderType;
 
-    @NotNull(message = "Số tiền thanh toán không được để trống")
     @DecimalMin(value = "1000.0", message = "Số tiền thanh toán tối thiểu là 1.000 VNĐ")
     private BigDecimal amount;
 

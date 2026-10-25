@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.prm393.floodrescue.common.exception.BadRequestException;
 import com.prm393.floodrescue.common.exception.ResourceNotFoundException;
 import com.prm393.floodrescue.config.PayOSConfig;
+import com.prm393.floodrescue.features.auth.entity.Role;
 import com.prm393.floodrescue.features.auth.entity.User;
 import com.prm393.floodrescue.features.finance.dto.CommissionConfigDto;
 import com.prm393.floodrescue.features.finance.entity.WalletTransaction;
@@ -21,8 +22,15 @@ import com.prm393.floodrescue.features.payment.entity.PaymentMethod;
 import com.prm393.floodrescue.features.payment.entity.PaymentStatus;
 import com.prm393.floodrescue.features.payment.entity.PaymentTransaction;
 import com.prm393.floodrescue.features.payment.repository.PaymentTransactionRepository;
+import com.prm393.floodrescue.features.rescue.entity.OrderType;
+import com.prm393.floodrescue.features.rescue.entity.RescueOrder;
+import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
+import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
+import com.prm393.floodrescue.features.rescue.service.RescueDispatchService;
+import com.prm393.floodrescue.features.rescue.service.RescueExecutionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +46,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
@@ -52,150 +61,22 @@ public class PayOSPaymentService {
     private final FinanceAdminService financeAdminService;
     private final PayOSConfig payOSConfig;
     private final ObjectMapper objectMapper;
+    private final RescueOrderRepository rescueOrderRepository;
+    private final RescueExecutionService rescueExecutionService;
+    private final RescueDispatchService rescueDispatchService;
+    private final PaymentAttemptService paymentAttemptService;
+    private final GatewayProvisionService gatewayProvisionService;
+    private final PaymentSettlementService settlementService;
 
     // =========================================================================
     // UC-18: Create Payment Link (PayOS VietQR or Cash) & Split Calculation
     // =========================================================================
 
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.SUPPORTS)
     public CreatePaymentLinkResponse createPayment(User currentUser, CreatePaymentRequest request) {
-        Garage garage = garageRepository.findById(request.getGarageId())
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy garage #" + request.getGarageId()));
-
-        if (request.getAmount() == null || request.getAmount().compareTo(new BigDecimal("1000")) < 0) {
-            throw new BadRequestException("Số tiền thanh toán tối thiểu là 1.000 VNĐ");
-        }
-
-        String orderType = (request.getOrderType() != null && !request.getOrderType().isBlank())
-                ? request.getOrderType().trim().toUpperCase()
-                : "SINGLE_CROSSING";
-
-        // Tích hợp Giai đoạn 1 (UC-24): Lấy tỷ lệ hoa hồng hiện hành từ cấu hình của Admin
-        BigDecimal commissionRate = resolveCommissionRate(orderType);
-        BigDecimal amount = request.getAmount().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal platformFee = amount.multiply(commissionRate)
-                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
-        BigDecimal netGarageAmount = amount.subtract(platformFee);
-
-        long payosOrderCode = generateUniqueOrderCode();
-        String rescueCode = (request.getRescueCode() != null && !request.getRescueCode().isBlank())
-                ? request.getRescueCode().trim()
-                : "#RC-" + request.getRescueOrderId();
-        String paymentContent = "RESCUE " + payosOrderCode;
-
-        PaymentMethod method = request.getPaymentMethod() != null
-                ? request.getPaymentMethod()
-                : PaymentMethod.PAYOS_VIETQR;
-
-        String signature = payOSConfig.createPaymentRequestSignature(
-                payosOrderCode,
-                amount.longValue(),
-                paymentContent
-        );
-
-        String qrCode = "https://img.vietqr.io/image/MB-038299482910-compact2.png?amount="
-                + amount.longValue() + "&addInfo=" + paymentContent.replace(" ", "%20");
-        String checkoutUrl = payOSConfig.getReturnUrl() + "?orderCode=" + payosOrderCode;
-        String bankName = "MB Bank (Ngân hàng Quân Đội)";
-        String accountNumber = "038299482910";
-        String accountHolder = "HE THONG CUU HO HYDRORESCUE";
-
-        if (method == PaymentMethod.PAYOS_VIETQR && payOSConfig.isRealGatewayConfigured()) {
-            try {
-                Map<String, Object> bodyMap = new HashMap<>();
-                bodyMap.put("orderCode", payosOrderCode);
-                bodyMap.put("amount", amount.longValue());
-                bodyMap.put("description", paymentContent);
-                bodyMap.put("cancelUrl", payOSConfig.getCancelUrl());
-                bodyMap.put("returnUrl", payOSConfig.getReturnUrl());
-                bodyMap.put("signature", signature);
-
-                HttpClient client = HttpClient.newBuilder()
-                        .connectTimeout(Duration.ofSeconds(4))
-                        .build();
-                HttpRequest httpRequest = HttpRequest.newBuilder()
-                        .uri(URI.create(payOSConfig.getEndpoint() + "/v2/payment-requests"))
-                        .timeout(Duration.ofSeconds(5))
-                        .header("Content-Type", "application/json")
-                        .header("x-client-id", payOSConfig.getClientId())
-                        .header("x-api-key", payOSConfig.getApiKey())
-                        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(bodyMap)))
-                        .build();
-
-                HttpResponse<String> response = client.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-                JsonNode root = objectMapper.readTree(response.body());
-                if (response.statusCode() == 200 && "00".equals(root.path("code").asText())) {
-                    JsonNode data = root.path("data");
-                    if (!data.path("qrCode").asText().isBlank()) {
-                        qrCode = data.path("qrCode").asText();
-                    }
-                    if (!data.path("checkoutUrl").asText().isBlank()) {
-                        checkoutUrl = data.path("checkoutUrl").asText();
-                    }
-                    if (!data.path("accountNumber").asText().isBlank()) {
-                        accountNumber = data.path("accountNumber").asText();
-                    }
-                    if (!data.path("accountName").asText().isBlank()) {
-                        accountHolder = data.path("accountName").asText();
-                    }
-                    log.info("Created real PayOS payment link for orderCode: {}", payosOrderCode);
-                } else {
-                    log.warn("PayOS gateway returned non-00 ({}): using dynamic VietQR fallback for orderCode {}",
-                            root.path("desc").asText(), payosOrderCode);
-                }
-            } catch (Exception ex) {
-                log.warn("Could not reach PayOS gateway ({}), using dynamic VietQR fallback for orderCode {}",
-                        ex.getMessage(), payosOrderCode);
-            }
-        }
-
-        PaymentTransaction tx = PaymentTransaction.builder()
-                .rescueOrderId(request.getRescueOrderId())
-                .rescueCode(rescueCode)
-                .orderType(orderType)
-                .garage(garage)
-                .customer(currentUser)
-                .payosOrderCode(payosOrderCode)
-                .amount(amount)
-                .commissionRate(commissionRate)
-                .platformFee(platformFee)
-                .netGarageAmount(netGarageAmount)
-                .paymentMethod(method)
-                .status(PaymentStatus.PENDING)
-                .reconciled(false)
-                .checksumValid(true)
-                .webhookSignature(signature)
-                .qrCode(qrCode)
-                .checkoutUrl(checkoutUrl)
-                .bankName(bankName)
-                .accountNumber(accountNumber)
-                .accountHolder(accountHolder)
-                .paymentContent(paymentContent)
-                .build();
-
-        PaymentTransaction saved = paymentTransactionRepository.save(tx);
-
-        return CreatePaymentLinkResponse.builder()
-                .transactionId(saved.getId())
-                .rescueOrderId(saved.getRescueOrderId())
-                .rescueCode(saved.getRescueCode())
-                .payosOrderCode(saved.getPayosOrderCode())
-                .amount(saved.getAmount())
-                .commissionRate(saved.getCommissionRate())
-                .platformFee(saved.getPlatformFee())
-                .netGarageAmount(saved.getNetGarageAmount())
-                .paymentMethod(saved.getPaymentMethod())
-                .status(saved.getStatus())
-                .qrCode(saved.getQrCode())
-                .checkoutUrl(saved.getCheckoutUrl())
-                .bankName(saved.getBankName())
-                .accountNumber(saved.getAccountNumber())
-                .accountHolder(saved.getAccountHolder())
-                .paymentContent(saved.getPaymentContent())
-                .createdAt(saved.getCreatedAt())
-                .build();
+        if (payOSConfig.isRealGatewayConfigured()) return gatewayProvisionService.create(currentUser, request);
+        return paymentAttemptService.prepare(currentUser, request);
     }
-
     // =========================================================================
     // UC-18 & UC-25: Handle PayOS Webhook, Verify HMAC & Settle Garage Wallet
     // =========================================================================
@@ -206,81 +87,64 @@ public class PayOSPaymentService {
             throw new BadRequestException("Dữ liệu Webhook PayOS không hợp lệ hoặc thiếu orderCode");
         }
 
-        Map<String, Object> dataMap = convertWebhookDataToMap(payload.getData());
+        PayOSWebhookPayload.WebhookData data = payload.getData();
+
+        Map<String, Object> dataMap = convertWebhookDataToMap(data);
         String expectedSignature = payOSConfig.createWebhookDataSignature(dataMap);
 
         if (payload.getSignature() == null || !expectedSignature.equalsIgnoreCase(payload.getSignature().trim())) {
             throw new BadRequestException("Chữ ký bảo mật Webhook PayOS (HMAC-SHA256) không hợp lệ");
         }
 
-        Long orderCode = payload.getData().getOrderCode();
+        Long orderCode = data.getOrderCode();
         PaymentTransaction tx = paymentTransactionRepository.findByPayosOrderCode(orderCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch với mã PayOS orderCode: " + orderCode));
 
-        // Idempotency: Nếu giao dịch đã SUCCESS trước đó thì không cộng tiền ví lần 2
-        if (tx.getStatus() == PaymentStatus.SUCCESS) {
-            return mapToResponse(tx);
+        if (tx.getGatewayLinkId() != null && !tx.getGatewayLinkId().equals(data.getPaymentLinkId())) {
+            throw new BadRequestException("Mã link PayOS không khớp giao dịch đã lưu");
         }
 
-        boolean isPaidSuccess = "00".equals(payload.getCode()) || Boolean.TRUE.equals(payload.getSuccess());
-        if (!isPaidSuccess) {
-            tx.setStatus(PaymentStatus.FAILED);
-            tx.setWebhookSignature(payload.getSignature());
-            try {
-                tx.setRawWebhookPayload(objectMapper.writeValueAsString(payload));
-            } catch (Exception ignored) {
-            }
-            return mapToResponse(paymentTransactionRepository.save(tx));
+        // 1. Kiểm tra đơn vị tiền tệ VND (Issue 4)
+        if (data.getCurrency() != null && !"VND".equalsIgnoreCase(data.getCurrency().trim())) {
+            throw new BadRequestException("Đơn vị tiền tệ trong Webhook không hợp lệ (yêu cầu VND, nhận: " + data.getCurrency() + ")");
         }
 
-        tx.setStatus(PaymentStatus.SUCCESS);
-        tx.setReconciled(true);
-        tx.setChecksumValid(true);
-        tx.setWebhookSignature(payload.getSignature());
-        tx.setPaidAt(LocalDateTime.now());
-        tx.setReconciledAt(LocalDateTime.now());
+        // 2. Kiểm tra số tiền trong webhook khớp với transaction
+        long webhookAmount = data.getAmount() != null ? data.getAmount() : 0L;
+        if (webhookAmount != tx.getAmount().longValue()) {
+            throw new BadRequestException(String.format("Số tiền thanh toán trong webhook (%s) không khớp với giao dịch (%s)!",
+                    webhookAmount, tx.getAmount().longValue()));
+        }
+
+        boolean paid = "00".equals(data.getCode()) && "00".equals(payload.getCode())
+                && Boolean.TRUE.equals(payload.getSuccess());
         try {
-            tx.setRawWebhookPayload(objectMapper.writeValueAsString(payload));
-        } catch (Exception ignored) {
+            return settlementService.apply(orderCode, paid, payload.getSignature(), objectMapper.writeValueAsString(payload));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new BadRequestException("Không thể ghi nhận chứng từ thanh toán");
         }
-
-        // Tích hợp Giai đoạn 1 (UC-26): Cộng tiền thực nhận (netGarageAmount) vào Ví Gara & ghi sổ WalletTransaction
-        Garage garage = tx.getGarage();
-        BigDecimal currentBalance = garage.getWalletBalance() != null ? garage.getWalletBalance() : BigDecimal.ZERO;
-        BigDecimal newBalance = currentBalance.add(tx.getNetGarageAmount());
-        garage.setWalletBalance(newBalance);
-        garageRepository.save(garage);
-
-        WalletTransaction walletTx = WalletTransaction.builder()
-                .garage(garage)
-                .amount(tx.getNetGarageAmount())
-                .balanceAfter(newBalance)
-                .transactionType(WalletTransactionType.ORDER_INCOME)
-                .referenceCode("PAYOS-" + tx.getPayosOrderCode())
-                .description(String.format(
-                        "Thu hộ PayOS đơn %s: Tổng %s đ - Hoa hồng sàn (%s%%): %s đ = Thực nhận +%s đ",
-                        tx.getRescueCode(),
-                        tx.getAmount().toPlainString(),
-                        tx.getCommissionRate().toPlainString(),
-                        tx.getPlatformFee().toPlainString(),
-                        tx.getNetGarageAmount().toPlainString()
-                ))
-                .build();
-        walletTransactionRepository.save(walletTx);
-
-        PaymentTransaction saved = paymentTransactionRepository.save(tx);
-        log.info("PayOS Webhook verified & settled orderCode {}: credited {} to garage {}",
-                orderCode, tx.getNetGarageAmount(), garage.getId());
-        return mapToResponse(saved);
     }
-
     /**
      * Giả lập bắn Webhook chuẩn chữ ký HMAC-SHA256 từ PayOS để phục vụ test tích hợp & demo local.
      */
     @Transactional
-    public PaymentTransactionResponse simulatePayOSWebhook(Long payosOrderCode) {
+    public PaymentTransactionResponse simulatePayOSWebhook(User currentUser, Long payosOrderCode) {
+        if (currentUser == null) throw new AccessDeniedException("Yêu cầu đăng nhập để giả lập thanh toán");
+        if (!payOSConfig.isSimulationEnabled()) {
+            throw new BadRequestException("Tính năng giả lập webhook bị vô hiệu hóa trên môi trường này!");
+        }
+
         PaymentTransaction tx = paymentTransactionRepository.findByPayosOrderCode(payosOrderCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch với mã PayOS orderCode: " + payosOrderCode));
+
+        if (currentUser != null && tx.getRescueOrderId() != null) {
+            RescueOrder order = rescueOrderRepository.findById(tx.getRescueOrderId()).orElse(null);
+            if (order != null) {
+                rescueDispatchService.validateOrderAccess(currentUser, order);
+            }
+        }
+
+        if (!tx.isSimulation()) throw new BadRequestException("Không được giả lập xác nhận cho giao dịch PayOS thật");
 
         PayOSWebhookPayload.WebhookData data = PayOSWebhookPayload.WebhookData.builder()
                 .orderCode(tx.getPayosOrderCode())
@@ -314,24 +178,63 @@ public class PayOSPaymentService {
     // =========================================================================
 
     @Transactional
-    public PaymentTransactionResponse confirmCashPayment(Long payosOrderCode) {
+    public PaymentTransactionResponse confirmCashPayment(User currentUser, Long payosOrderCode) {
+        if (currentUser == null) {
+            throw new BadRequestException("Yêu cầu đăng nhập");
+        }
+
         PaymentTransaction tx = paymentTransactionRepository.findByPayosOrderCode(payosOrderCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch với mã orderCode: " + payosOrderCode));
+
+        Long cashOrderId = tx.getRescueOrderId();
+        RescueOrder order = rescueOrderRepository.findByIdWithLock(cashOrderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn cứu hộ liên kết"));
+        tx = paymentTransactionRepository.findByCodeWithLock(payosOrderCode).orElseThrow();
+
+        // Phân quyền tiền mặt: Khách hàng KHÔNG được tự xác nhận nộp tiền mặt.
+        // Chỉ thợ được phân công phụ trách đơn, chủ garage, hoặc Admin mới có quyền xác nhận!
+        if (currentUser.getRole() == Role.CUSTOMER) {
+            throw new AccessDeniedException("Khách hàng không được tự xác nhận đã nộp tiền mặt!");
+        }
+
+        boolean isAssignedMechanic = order.getMechanicStaff() != null
+                && order.getMechanicStaff().getUser().getId().equals(currentUser.getId());
+        boolean isGarageOwner = order.getGarage() != null
+                && order.getGarage().getOwner() != null
+                && order.getGarage().getOwner().getId().equals(currentUser.getId());
+        boolean isAdminOrStaff = currentUser.getRole() == Role.ADMIN || currentUser.getRole() == Role.STAFF;
+
+        if (!isAssignedMechanic && !isGarageOwner && !isAdminOrStaff) {
+            throw new AccessDeniedException("Bạn không có quyền xác nhận thanh toán tiền mặt cho đơn này!");
+        }
+
+        if (order.getStatus() == RescueOrderStatus.COMPLETED) {
+            if (tx.getId().equals(order.getPaymentTransactionId())) {
+                return mapToResponse(tx);
+            }
+            throw new BadRequestException("Đơn cứu hộ đã được hoàn tất bởi giao dịch khác (Mã GD: " + order.getPaymentTransactionId() + "). Không thể xác nhận tiền mặt trùng lặp!");
+        }
 
         if (tx.getStatus() == PaymentStatus.SUCCESS) {
             return mapToResponse(tx);
         }
 
+        if (!tx.isSimulation() && tx.getPaymentMethod() != PaymentMethod.CASH) {
+            throw new BadRequestException("Link PayOS thật chưa được kết thúc; không thể chuyển trực tiếp sang xác nhận tiền mặt.");
+        }
+
+        LocalDateTime paidAt = LocalDateTime.now();
         tx.setPaymentMethod(PaymentMethod.CASH);
         tx.setStatus(PaymentStatus.SUCCESS);
         tx.setReconciled(true);
         tx.setChecksumValid(true);
-        tx.setPaidAt(LocalDateTime.now());
-        tx.setReconciledAt(LocalDateTime.now());
+        tx.setPaidAt(paidAt);
+        tx.setReconciledAt(paidAt);
 
         // Với đơn thu tiền mặt trực tiếp tại hiện trường, thợ đã cầm đủ amount -> Khấu trừ phí hoa hồng nền tảng từ Ví Gara
         Garage garage = tx.getGarage();
-        BigDecimal currentBalance = garage.getWalletBalance() != null ? garage.getWalletBalance() : BigDecimal.ZERO;
+        BigDecimal currentBalance = garageRepository.lockWalletBalance(garage.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ví gara"));
         BigDecimal newBalance = currentBalance.subtract(tx.getPlatformFee());
         garage.setWalletBalance(newBalance);
         garageRepository.save(garage);
@@ -352,6 +255,31 @@ public class PayOSPaymentService {
         walletTransactionRepository.save(walletTx);
 
         PaymentTransaction saved = paymentTransactionRepository.save(tx);
+
+        // Cập nhật trạng thái RescueOrder sang COMPLETED qua domain service
+        if (saved.getRescueOrderId() != null) {
+            rescueExecutionService.markPaymentSuccessful(
+                    saved.getRescueOrderId(),
+                    saved.getId(),
+                    saved.getPayosOrderCode(),
+                    "CASH",
+                    saved.getAmount(),
+                    paidAt
+            );
+
+            // Hủy các pending attempt khác của cùng rescueOrderId
+            List<PaymentTransaction> otherPending = paymentTransactionRepository
+                    .findByRescueOrderIdAndStatus(order.getId(), PaymentStatus.PENDING);
+            for (PaymentTransaction pendingOther : otherPending) {
+                if (!pendingOther.getId().equals(saved.getId())) {
+                    pendingOther.setStatus(PaymentStatus.CANCELLED);
+                    paymentTransactionRepository.save(pendingOther);
+                }
+            }
+        }
+
+        log.info("Cash payment confirmed for orderCode {}: deducted platform fee {} from garage {}, marked rescue order #{} COMPLETED",
+                payosOrderCode, tx.getPlatformFee(), garage.getId(), saved.getRescueOrderId());
         return mapToResponse(saved);
     }
 
@@ -360,17 +288,35 @@ public class PayOSPaymentService {
     // =========================================================================
 
     @Transactional(readOnly = true)
-    public PaymentTransactionResponse getTransactionByOrderCode(Long payosOrderCode) {
+    public PaymentTransactionResponse getTransactionByOrderCode(User currentUser, Long payosOrderCode) {
+        return getTransactionByOrderCode(currentUser, payosOrderCode, false);
+    }
+
+    @Transactional(readOnly = true)
+    public PaymentTransactionResponse getTransactionByOrderCode(User currentUser, Long payosOrderCode, boolean refresh) {
+        if (currentUser == null) throw new AccessDeniedException("Yêu cầu đăng nhập để kiểm tra thanh toán");
         PaymentTransaction tx = paymentTransactionRepository.findByPayosOrderCode(payosOrderCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch #" + payosOrderCode));
+        RescueOrder order = rescueOrderRepository.findById(tx.getRescueOrderId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn cứu hộ của giao dịch"));
+        rescueDispatchService.validateOrderAccess(currentUser, order);
+        if (!tx.isSimulation() && tx.getPaymentMethod() == PaymentMethod.PAYOS_VIETQR
+                && (tx.getStatus() == PaymentStatus.PENDING || tx.getStatus() == PaymentStatus.FAILED)) {
+            return gatewayProvisionService.synchronize(payosOrderCode, refresh);
+        }
         return mapToResponse(tx);
     }
 
     @Transactional(readOnly = true)
-    public List<PaymentTransactionResponse> getTransactionsByRescueOrder(Long rescueOrderId) {
+    public List<PaymentTransactionResponse> getTransactionsByRescueOrder(User currentUser, Long rescueOrderId) {
+        if (currentUser != null) {
+            RescueOrder order = rescueOrderRepository.findById(rescueOrderId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn cứu hộ: " + rescueOrderId));
+            rescueDispatchService.validateOrderAccess(currentUser, order);
+        }
         return paymentTransactionRepository.findByRescueOrderIdOrderByCreatedAtDesc(rescueOrderId)
                 .stream()
-                .map(this::mapToResponse)
+                .map(PayOSPaymentService::mapToResponse)
                 .collect(Collectors.toList());
     }
 
@@ -380,7 +326,7 @@ public class PayOSPaymentService {
                 ? paymentTransactionRepository.findByStatusOrderByCreatedAtDesc(status)
                 : paymentTransactionRepository.findAllByOrderByCreatedAtDesc();
         return list.stream()
-                .map(this::mapToResponse)
+                .map(PayOSPaymentService::mapToResponse)
                 .collect(Collectors.toList());
     }
 
@@ -395,7 +341,7 @@ public class PayOSPaymentService {
             }
         }
         return all.stream()
-                .map(this::mapToResponse)
+                .map(PayOSPaymentService::mapToResponse)
                 .collect(Collectors.toList());
     }
 
@@ -420,7 +366,7 @@ public class PayOSPaymentService {
         return cfg.getGlobalRate() != null ? cfg.getGlobalRate() : new BigDecimal("12.50");
     }
 
-    private long generateUniqueOrderCode() {
+    public static long generateUniqueOrderCode() {
         long timestampPart = System.currentTimeMillis() % 1000000000L;
         int randomPart = ThreadLocalRandom.current().nextInt(10, 99);
         return timestampPart * 100 + randomPart;
@@ -447,7 +393,30 @@ public class PayOSPaymentService {
         return map;
     }
 
-    private PaymentTransactionResponse mapToResponse(PaymentTransaction tx) {
+    public static CreatePaymentLinkResponse mapToCreatePaymentResponse(PaymentTransaction saved) {
+        return CreatePaymentLinkResponse.builder()
+                .transactionId(saved.getId())
+                .rescueOrderId(saved.getRescueOrderId())
+                .rescueCode(saved.getRescueCode())
+                .payosOrderCode(saved.getPayosOrderCode())
+                .amount(saved.getAmount())
+                .commissionRate(saved.getCommissionRate())
+                .platformFee(saved.getPlatformFee())
+                .netGarageAmount(saved.getNetGarageAmount())
+                .paymentMethod(saved.getPaymentMethod())
+                .status(saved.getStatus())
+                .isSimulation(saved.isSimulation())
+                .qrCode(saved.getQrCode())
+                .checkoutUrl(saved.getCheckoutUrl())
+                .bankName(saved.getBankName())
+                .accountNumber(saved.getAccountNumber())
+                .accountHolder(saved.getAccountHolder())
+                .paymentContent(saved.getPaymentContent())
+                .createdAt(saved.getCreatedAt())
+                .build();
+    }
+
+    public static PaymentTransactionResponse mapToResponse(PaymentTransaction tx) {
         Garage g = tx.getGarage();
         User c = tx.getCustomer();
         return PaymentTransactionResponse.builder()
@@ -467,6 +436,7 @@ public class PayOSPaymentService {
                 .netGarageAmount(tx.getNetGarageAmount())
                 .paymentMethod(tx.getPaymentMethod())
                 .status(tx.getStatus())
+                .isSimulation(tx.isSimulation())
                 .reconciled(tx.isReconciled())
                 .checksumValid(tx.isChecksumValid())
                 .webhookSignature(tx.getWebhookSignature())

@@ -170,6 +170,9 @@ public class FinanceAdminService {
         Garage garage = garageRepository.findByOwnerId(garageOwner.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ garage cho tài khoản này"));
 
+        garage.setWalletBalance(garageRepository.lockWalletBalance(garage.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ví gara")));
+
         if (garage.getStatus() != GarageStatus.APPROVED) {
             throw new BadRequestException("Garage chưa được phê duyệt kích hoạt nên chưa thể yêu cầu rút tiền");
         }
@@ -218,6 +221,10 @@ public class FinanceAdminService {
 
     @Transactional
     public PayoutRequestResponse processPayoutRequest(User admin, Long payoutId, ApprovePayoutDto dto) {
+        Long garageId = payoutRequestRepository.findGarageIdById(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy yêu cầu rút tiền #" + payoutId));
+        BigDecimal lockedBalance = garageRepository.lockWalletBalance(garageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ví gara"));
         PayoutRequest payout = payoutRequestRepository.findById(payoutId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy yêu cầu rút tiền #" + payoutId));
 
@@ -231,7 +238,8 @@ public class FinanceAdminService {
         }
 
         Garage garage = payout.getGarage();
-        BigDecimal currentWalletBalance = garage.getWalletBalance() != null ? garage.getWalletBalance() : BigDecimal.ZERO;
+        BigDecimal currentWalletBalance = lockedBalance;
+        garage.setWalletBalance(lockedBalance);
 
         if (targetStatus == PayoutStatus.APPROVED) {
             if (currentWalletBalance.compareTo(payout.getRequestedAmount()) < 0) {

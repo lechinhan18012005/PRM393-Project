@@ -94,6 +94,12 @@ public class RescueOrderResponse {
     private LocalDateTime cancelledAt;
     private String cancelReason;
 
+    // Thanh toán (PayOS / Cash)
+    private LocalDateTime paidAt;
+    private String paymentMethod;
+    private Long paymentTransactionId;
+    private Long paymentOrderCode;
+
     // Thông tin hotline hỗ trợ nếu cần
     private String supportHotline;
 }

@@ -6,6 +6,7 @@ public enum RescueOrderStatus {
     ARRIVED,          // Thợ đã tới điểm đón (< 30m)
     IN_PROGRESS,      // Đang thực hiện vận chuyển / chở xe
     PAYMENT_PENDING,  // Hoàn tất chở xe & nghiệm thu ảnh, chờ khách thanh toán (UC-18)
+    COMPLETED,        // Đã thanh toán thành công, hoàn tất trọn vẹn vòng đời đơn cứu hộ
     CANCELLED,        // Đơn đã hủy (khách hủy trước khi có thợ nhận)
     DISPATCH_FAILED   // Hết thợ khả dụng hoặc hết thời gian điều phối
 }

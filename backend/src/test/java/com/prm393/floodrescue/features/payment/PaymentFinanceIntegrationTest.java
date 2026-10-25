@@ -8,7 +8,15 @@ import com.prm393.floodrescue.features.auth.entity.User;
 import com.prm393.floodrescue.features.auth.repository.UserRepository;
 import com.prm393.floodrescue.features.garage.entity.Garage;
 import com.prm393.floodrescue.features.garage.entity.GarageStatus;
+import com.prm393.floodrescue.features.garage.entity.ServiceItem;
+import com.prm393.floodrescue.features.garage.entity.ServiceType;
 import com.prm393.floodrescue.features.garage.repository.GarageRepository;
+import com.prm393.floodrescue.features.garage.repository.ServiceItemRepository;
+import com.prm393.floodrescue.features.rescue.entity.OrderType;
+import com.prm393.floodrescue.features.rescue.entity.RescueOrder;
+import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
+import com.prm393.floodrescue.features.rescue.entity.TransportStage;
+import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,7 +30,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -45,6 +56,12 @@ class PaymentFinanceIntegrationTest {
     private GarageRepository garageRepository;
 
     @Autowired
+    private ServiceItemRepository serviceItemRepository;
+
+    @Autowired
+    private RescueOrderRepository rescueOrderRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -54,6 +71,8 @@ class PaymentFinanceIntegrationTest {
     private String garageOwnerToken;
     private String customerToken;
     private Long garageId;
+    private User savedCustomer;
+    private Garage savedGarage;
 
     @BeforeEach
     void setUp() {
@@ -77,7 +96,7 @@ class PaymentFinanceIntegrationTest {
                 .active(true)
                 .build());
 
-        User customer = userRepository.save(User.builder()
+        savedCustomer = userRepository.save(User.builder()
                 .username("customer_p2")
                 .email("customer_p2@test.com")
                 .phone("0922000003")
@@ -87,7 +106,7 @@ class PaymentFinanceIntegrationTest {
                 .active(true)
                 .build());
 
-        Garage savedGarage = garageRepository.save(Garage.builder()
+        savedGarage = garageRepository.save(Garage.builder()
                 .owner(owner)
                 .garageName("Trung Tâm Cứu Hộ Nam Sài Gòn")
                 .phone("0922000002")
@@ -98,7 +117,7 @@ class PaymentFinanceIntegrationTest {
 
         adminToken = jwtService.generateToken(admin);
         garageOwnerToken = jwtService.generateToken(owner);
-        customerToken = jwtService.generateToken(customer);
+        customerToken = jwtService.generateToken(savedCustomer);
     }
 
     @Test
@@ -126,17 +145,46 @@ class PaymentFinanceIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.singleCrossingRate").value(10.0));
 
-        // BƯỚC 2 (UC-18 - Giai đoạn 2): Khách tạo giao dịch thanh toán PayOS VietQR cho đơn cứu hộ 400.000 đ
+        // BƯỚC 2 (UC-18 - Giai đoạn 2): Tạo đơn cứu hộ thật và khách tạo giao dịch thanh toán PayOS VietQR
+        ServiceItem serviceItem = serviceItemRepository.save(ServiceItem.builder()
+                .garage(savedGarage)
+                .serviceName("Chở xe đơn lẻ")
+                .serviceType(ServiceType.CROSSING)
+                .standardPrice(new BigDecimal("370000.00"))
+                .active(true)
+                .build());
+
+        RescueOrder order = rescueOrderRepository.save(RescueOrder.builder()
+                .customer(savedCustomer)
+                .garage(savedGarage)
+                .serviceItem(serviceItem)
+                .vehiclePlate("59-P1 884.19")
+                .orderType(OrderType.SINGLE_CROSSING)
+                .status(RescueOrderStatus.PAYMENT_PENDING)
+                .serviceBasePrice(new BigDecimal("370000.00"))
+                .bookingFee(new BigDecimal("30000.00"))
+                .totalAmount(new BigDecimal("400000.00"))
+                .orderCode("SOS-PAY-88419")
+                .transportStage(TransportStage.HANDED_OVER)
+                .requestedAt(LocalDateTime.now())
+                .pickupAddress("123 Lê Văn Lương, Quận 7")
+                .dropoffAddress("456 Nguyễn Hữu Thọ, Quận 7")
+                .pickupLatitude(10.7300)
+                .pickupLongitude(106.7000)
+                .dropoffLatitude(10.7400)
+                .dropoffLongitude(106.7100)
+                .build());
+
         String createPaymentPayload = """
                 {
-                  "rescueOrderId": 88419,
+                  "rescueOrderId": %d,
                   "garageId": %d,
-                  "rescueCode": "#RC-88419",
+                  "rescueCode": "SOS-PAY-88419",
                   "orderType": "SINGLE_CROSSING",
                   "amount": 400000,
                   "paymentMethod": "PAYOS_VIETQR"
                 }
-                """.formatted(garageId);
+                """.formatted(order.getId(), garageId);
 
         String createPaymentRes = mvc.perform(post("/api/v1/payments/create")
                         .header("Authorization", "Bearer " + customerToken)
@@ -172,13 +220,19 @@ class PaymentFinanceIntegrationTest {
                         .content(invalidWebhookPayload))
                 .andExpect(status().isBadRequest());
 
-        // BƯỚC 4 (UC-18 Webhook PayOS hợp lệ): Xác thực chữ ký HMAC-SHA256, đổi trạng thái SUCCESS và cộng 360.000 đ vào ví Gara
+        // BƯỚC 4 (UC-18 Webhook PayOS hợp lệ): Xác thực chữ ký HMAC-SHA256, đổi trạng thái SUCCESS, cộng 360.000 đ vào ví Gara và RescueOrder thành COMPLETED
         mvc.perform(post("/api/v1/payments/" + payosOrderCode + "/simulate-webhook")
                         .header("Authorization", "Bearer " + customerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.reconciled").value(true))
                 .andExpect(jsonPath("$.data.checksumValid").value(true));
+
+        RescueOrder completedOrder = rescueOrderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(RescueOrderStatus.COMPLETED, completedOrder.getStatus());
+        assertNotNull(completedOrder.getPaidAt());
+        assertEquals("PAYOS", completedOrder.getPaymentMethod());
+        assertEquals(payosOrderCode, completedOrder.getPaymentOrderCode());
 
         // BƯỚC 5 (UC-25 - Giai đoạn 2): Admin kiểm tra danh sách giao dịch đối soát PayOS
         mvc.perform(get("/api/v1/finance/transactions")

@@ -24,6 +24,7 @@ public class PayOSConfig {
     private String endpoint = "https://api-merchant.payos.vn";
     private String returnUrl = "http://localhost:8080/api/v1/payments/payos/return";
     private String cancelUrl = "http://localhost:8080/api/v1/payments/payos/return?cancel=true";
+    private boolean simulationEnabled = false;
 
     public boolean isRealGatewayConfigured() {
         return clientId != null && !clientId.isBlank()

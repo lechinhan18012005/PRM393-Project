@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -197,9 +198,9 @@ public class RescueExecutionService {
 
         validateAssignedMechanic(order, mechanicUser);
 
-        // Idempotent: Nếu đã hoàn tất và đang ở PAYMENT_PENDING thì trả về kết quả hiện tại
-        if (order.getStatus() == RescueOrderStatus.PAYMENT_PENDING) {
-            log.info("Order {} is already PAYMENT_PENDING. Returning current state.", order.getOrderCode());
+        // Idempotent: Nếu đã hoàn tất và đang ở PAYMENT_PENDING hoặc COMPLETED thì trả về kết quả hiện tại
+        if (order.getStatus() == RescueOrderStatus.PAYMENT_PENDING || order.getStatus() == RescueOrderStatus.COMPLETED) {
+            log.info("Order {} is already {}. Returning current state.", order.getOrderCode(), order.getStatus());
             return dispatchService.mapToResponse(order);
         }
 
@@ -271,6 +272,64 @@ public class RescueExecutionService {
         log.info("Order {} completed by mechanic {}. Now PAYMENT_PENDING.", order.getOrderCode(), mechanicUser.getUsername());
 
         return dispatchService.mapToResponse(order);
+    }
+
+    /**
+     * Cập nhật trạng thái RescueOrder sang COMPLETED khi thanh toán thành công (PayOS / Cash)
+     */
+    @Transactional
+    public RescueOrder markPaymentSuccessful(
+            Long rescueOrderId,
+            Long paymentTransactionId,
+            Long paymentOrderCode,
+            String paymentMethod,
+            BigDecimal paidAmount,
+            LocalDateTime paidAt
+    ) {
+        RescueOrder order = rescueOrderRepository.findByIdWithLock(rescueOrderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn cứu hộ: " + rescueOrderId));
+
+        // Idempotency: nếu đã COMPLETED rồi thì kiểm tra khớp transaction và trả về
+        if (order.getStatus() == RescueOrderStatus.COMPLETED) {
+            if (paymentTransactionId != null && paymentTransactionId.equals(order.getPaymentTransactionId())) {
+                log.info("Order {} is already COMPLETED by matching transaction {}. Idempotent return.",
+                        order.getOrderCode(), paymentTransactionId);
+                return order;
+            }
+            log.warn("Order {} is already COMPLETED by transaction {}, rejecting duplicate completion by transaction {}",
+                    order.getOrderCode(), order.getPaymentTransactionId(), paymentTransactionId);
+            throw new BadRequestException(String.format("Đơn cứu hộ %s đã được hoàn tất bởi giao dịch #%s, không thể hoàn tất lại bởi giao dịch #%s!",
+                    order.getOrderCode(), order.getPaymentTransactionId(), paymentTransactionId));
+        }
+
+        if (order.getStatus() != RescueOrderStatus.PAYMENT_PENDING) {
+            throw new BadRequestException("Chỉ có thể xác nhận thanh toán khi đơn ở trạng thái PAYMENT_PENDING. Hiện tại: " + order.getStatus());
+        }
+
+        if (paidAmount == null || order.getTotalAmount() == null || paidAmount.compareTo(order.getTotalAmount()) != 0) {
+            throw new BadRequestException(String.format("Số tiền thanh toán (%s) không khớp với tổng tiền đơn cứu hộ (%s)!",
+                    paidAmount, order.getTotalAmount()));
+        }
+
+        RescueOrderStatus previousStatus = order.getStatus();
+        LocalDateTime resolvedPaidAt = paidAt != null ? paidAt : LocalDateTime.now();
+
+        order.setStatus(RescueOrderStatus.COMPLETED);
+        order.setPaidAt(resolvedPaidAt);
+        order.setPaymentMethod(paymentMethod != null ? paymentMethod : "PAYOS");
+        order.setPaymentTransactionId(paymentTransactionId);
+        order.setPaymentOrderCode(paymentOrderCode);
+
+        order = rescueOrderRepository.save(order);
+
+        dispatchService.recordAudit(order.getId(), previousStatus, RescueOrderStatus.COMPLETED,
+                null, "PAYMENT_GATEWAY", String.format("Thanh toán thành công qua %s (Mã GD: %s, Mã PayOS: %s, Số tiền: %s VND). Đơn cứu hộ hoàn tất.",
+                        order.getPaymentMethod(), paymentTransactionId, paymentOrderCode, paidAmount));
+
+        dispatchService.broadcastOrderUpdate(order);
+        log.info("Order {} marked COMPLETED after payment success. Paid at: {}", order.getOrderCode(), resolvedPaidAt);
+
+        return order;
     }
 
     private void validateStageTransition(TransportStage current, TransportStage next) {

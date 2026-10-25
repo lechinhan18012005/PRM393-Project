@@ -774,6 +774,10 @@ public class RescueDispatchService {
                 .serviceCompletedAt(o.getServiceCompletedAt())
                 .cancelledAt(o.getCancelledAt())
                 .cancelReason(o.getCancelReason())
+                .paidAt(o.getPaidAt())
+                .paymentMethod(o.getPaymentMethod())
+                .paymentTransactionId(o.getPaymentTransactionId())
+                .paymentOrderCode(o.getPaymentOrderCode())
                 .supportHotline(pricingService.getHotline())
                 .build();
     }

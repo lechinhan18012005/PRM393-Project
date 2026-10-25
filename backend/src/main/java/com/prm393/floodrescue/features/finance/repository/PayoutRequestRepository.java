@@ -9,9 +9,12 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface PayoutRequestRepository extends JpaRepository<PayoutRequest, Long> {
+    @Query("select p.garage.id from PayoutRequest p where p.id = :id")
+    Optional<Long> findGarageIdById(@Param("id") Long id);
     List<PayoutRequest> findByGarageIdOrderByCreatedAtDesc(Long garageId);
     List<PayoutRequest> findByStatusOrderByCreatedAtDesc(PayoutStatus status);
     List<PayoutRequest> findAllByOrderByCreatedAtDesc();

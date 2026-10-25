@@ -51,6 +51,7 @@ payos:
   endpoint: ${PAYOS_ENDPOINT:https://api-merchant.payos.vn}
   return-url: ${PAYOS_RETURN_URL:http://localhost:8080/api/v1/payments/payos/return}
   cancel-url: ${PAYOS_CANCEL_URL:http://localhost:8080/api/v1/payments/payos/return?cancel=true}
+  simulation-enabled: ${PAYOS_SIMULATION_ENABLED:false}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:*,http://127.0.0.1:*}

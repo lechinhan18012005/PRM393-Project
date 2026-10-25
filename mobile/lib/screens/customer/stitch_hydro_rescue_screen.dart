@@ -480,8 +480,10 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
       actionLabel = 'Thanh toán đơn cứu hộ';
       onAction = () => _open(VietQRPaymentScreen(
         orderId: order.id,
+        garageId: order.garageId,
         amount: order.totalAmount,
         orderCode: order.orderCode,
+        rescueOrder: order,
       ));
     } else {
       badgeColor = Colors.green;

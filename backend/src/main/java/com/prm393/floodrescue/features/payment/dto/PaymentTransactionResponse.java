@@ -41,6 +41,7 @@ public class PaymentTransactionResponse {
     private String accountHolder;
     private String paymentContent;
     private String rawWebhookPayload;
+    private Boolean isSimulation;
     private LocalDateTime createdAt;
     private LocalDateTime paidAt;
     private LocalDateTime reconciledAt;

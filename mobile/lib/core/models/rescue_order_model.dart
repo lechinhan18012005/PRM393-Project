@@ -137,6 +137,12 @@ class RescueOrderModel {
   final String? cancelReason;
   final String? supportHotline;
 
+  // Thanh toán
+  final String? paidAt;
+  final String? paymentMethod;
+  final int? paymentTransactionId;
+  final int? paymentOrderCode;
+
   RescueOrderModel({
     required this.id,
     required this.orderCode,
@@ -192,6 +198,10 @@ class RescueOrderModel {
     this.cancelledAt,
     this.cancelReason,
     this.supportHotline,
+    this.paidAt,
+    this.paymentMethod,
+    this.paymentTransactionId,
+    this.paymentOrderCode,
   });
 
   factory RescueOrderModel.fromJson(Map<String, dynamic> json) {
@@ -250,6 +260,10 @@ class RescueOrderModel {
       cancelledAt: json['cancelledAt'] as String?,
       cancelReason: json['cancelReason'] as String?,
       supportHotline: json['supportHotline'] as String? ?? '1900-6868',
+      paidAt: json['paidAt'] as String?,
+      paymentMethod: json['paymentMethod'] as String?,
+      paymentTransactionId: (json['paymentTransactionId'] as num?)?.toInt(),
+      paymentOrderCode: (json['paymentOrderCode'] as num?)?.toInt(),
     );
   }
 

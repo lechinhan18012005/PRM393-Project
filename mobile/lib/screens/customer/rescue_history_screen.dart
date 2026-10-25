@@ -46,8 +46,10 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
     } else if (order.status == 'PAYMENT_PENDING') {
       _openScreen(VietQRPaymentScreen(
         orderId: order.id,
+        garageId: order.garageId,
         amount: order.totalAmount,
         orderCode: order.orderCode,
+        rescueOrder: order,
       ));
     } else if (['DISPATCHED', 'ARRIVED', 'IN_PROGRESS'].contains(order.status)) {
       _openScreen(LiveTrackingScreen(orderId: order.id));

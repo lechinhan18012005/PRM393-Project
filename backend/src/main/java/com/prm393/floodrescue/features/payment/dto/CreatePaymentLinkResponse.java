@@ -31,5 +31,6 @@ public class CreatePaymentLinkResponse {
     private String accountNumber;
     private String accountHolder;
     private String paymentContent;
+    private Boolean isSimulation;
     private LocalDateTime createdAt;
 }

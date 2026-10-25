@@ -64,6 +64,7 @@ public class RescueTrackingService {
 
         // C03: Đơn đã kết thúc không nhận cập nhật vị trí trực tiếp
         if (order.getStatus() == RescueOrderStatus.PAYMENT_PENDING
+                || order.getStatus() == RescueOrderStatus.COMPLETED
                 || order.getStatus() == RescueOrderStatus.CANCELLED
                 || order.getStatus() == RescueOrderStatus.DISPATCH_FAILED) {
             throw new BadRequestException("Đơn cứu hộ đã kết thúc hành trình, không còn nhận cập nhật vị trí trực tiếp!");
@@ -187,6 +188,8 @@ public class RescueTrackingService {
             statusMsg = "Đang chở xe qua điểm ngập tới nơi khô ráo";
         } else if (order.getStatus() == RescueOrderStatus.PAYMENT_PENDING) {
             statusMsg = "Đã hoàn thành vận chuyển, đang chờ thanh toán";
+        } else if (order.getStatus() == RescueOrderStatus.COMPLETED) {
+            statusMsg = "Đã hoàn tất cứu hộ và thanh toán thành công";
         } else {
             statusMsg = "Trạng thái: " + order.getStatus();
         }
