@@ -34,7 +34,10 @@ public class MechanicController {
     }
 
     // UC-07: Toggle Online / Offline Status
-    @PatchMapping("/me/status")
+    @RequestMapping(
+            value = {"/me/status", "/me/heartbeat"},
+            method = {RequestMethod.PATCH, RequestMethod.POST}
+    )
     @Operation(summary = "UC-07: Bật/tắt trạng thái trực tuyến nhận cứu hộ (AVAILABLE / OFFLINE)")
     public ResponseEntity<ApiResponse<MechanicStaffResponse>> toggleStatus(
             @AuthenticationPrincipal User mechanicUser,

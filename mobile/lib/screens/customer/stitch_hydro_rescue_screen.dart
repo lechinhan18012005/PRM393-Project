@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/models/rescue_order_model.dart';
+import '../../core/services/rescue_service.dart';
 import '../../core/widgets/rescue_ui.dart';
 import '../../core/widgets/rescue_map_painter.dart';
 import '../../providers/auth_provider.dart';
@@ -12,6 +14,9 @@ import 'rescue_history_screen.dart';
 import 'vehicle_profile_screen.dart';
 import 'account_screen.dart';
 import 'customer_demo_data.dart';
+import 'radar_dispatch_screen.dart';
+import 'live_tracking_screen.dart';
+import 'vietqr_payment_screen.dart';
 import '../demo/demo_catalog_screen.dart';
 
 class StitchHydroRescueScreen extends StatefulWidget {
@@ -22,6 +27,9 @@ class StitchHydroRescueScreen extends StatefulWidget {
 }
 
 class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
+  final RescueService _rescueService = RescueService();
+  RescueOrderModel? _activeOrder;
+
   // Hot reload can retain a State created before these fields existed.
   // Read through defaults instead of relying on field initializers being rerun.
   int? _tab;
@@ -29,13 +37,36 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
   int _vehicle = 0;
   Set<int>? _visited;
   Set<int> get _visitedTabs => _visited ??= <int>{0};
-  void _select(int index) => setState(() {
-    _tab = index;
-    _visitedTabs.add(index);
-  });
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadActiveOrder());
+  }
+
+  Future<void> _loadActiveOrder() async {
+    try {
+      final order = await _rescueService.getActiveOrder();
+      if (mounted) {
+        setState(() => _activeOrder = order);
+      }
+    } catch (_) {}
+  }
+
+  void _select(int index) {
+    setState(() {
+      _tab = index;
+      _visitedTabs.add(index);
+    });
+    if (index == 0) {
+      _loadActiveOrder();
+    }
+  }
+
   void _open(Widget screen) =>
       Navigator.of(context)
-          .push(MaterialPageRoute<void>(builder: (_) => screen));
+          .push(MaterialPageRoute<void>(builder: (_) => screen))
+          .then((_) => _loadActiveOrder());
   void _chooseVehicle() => showModalBottomSheet<void>(
     context: context,
     builder: (sheet) => SafeArea(
@@ -193,6 +224,10 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                 ],
               ),
             ),
+            if (_activeOrder != null && _activeOrder!.isActive) ...[
+              const RescueSection('Đơn cứu hộ đang phục vụ'),
+              _activeOrderCard(_activeOrder!),
+            ],
             const RescueSection('Yêu cầu cứu hộ'),
             RescuePanel(
               child: Column(
@@ -427,6 +462,88 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _activeOrderCard(RescueOrderModel order) {
+    Color badgeColor = AppColors.primary;
+    String actionLabel = 'Xem trạng thái đơn';
+    VoidCallback onAction;
+
+    if (order.isRequested) {
+      badgeColor = Colors.orange;
+      actionLabel = 'Theo dõi tìm kiếm cứu hộ';
+      onAction = () => _open(RadarDispatchScreen(orderId: order.id));
+    } else if (order.status == 'PAYMENT_PENDING') {
+      badgeColor = Colors.purple;
+      actionLabel = 'Thanh toán đơn cứu hộ';
+      onAction = () => _open(VietQRPaymentScreen(
+        orderId: order.id,
+        amount: order.totalAmount,
+        orderCode: order.orderCode,
+      ));
+    } else {
+      badgeColor = Colors.green;
+      actionLabel = 'Theo dõi trực tiếp xe cứu hộ';
+      onAction = () => _open(LiveTrackingScreen(orderId: order.id));
+    }
+
+    return RescuePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              RescueLabel(
+                'ĐƠN ĐANG THỰC HIỆN',
+                color: badgeColor,
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20, color: AppColors.secondary),
+                tooltip: 'Làm mới',
+                onPressed: _loadActiveOrder,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${order.serviceName} · #${order.orderCode}',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Trạng thái: ${order.statusDescription}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: badgeColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          RescueInfo(
+            icon: Icons.location_on_outlined,
+            title: 'Điểm đón',
+            value: order.pickupAddress,
+          ),
+          const SizedBox(height: 4),
+          RescueInfo(
+            icon: Icons.wb_sunny_outlined,
+            title: 'Điểm trả',
+            value: order.dropoffAddress,
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: badgeColor,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            onPressed: onAction,
+            icon: const Icon(Icons.navigation_outlined, size: 18),
+            label: Text(actionLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

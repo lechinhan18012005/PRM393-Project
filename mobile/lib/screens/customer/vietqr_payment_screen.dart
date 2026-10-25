@@ -5,7 +5,16 @@ import '../../core/widgets/rescue_ui.dart';
 import 'payment_success_screen.dart';
 
 class VietQRPaymentScreen extends StatefulWidget {
-  const VietQRPaymentScreen({super.key});
+  final int? orderId;
+  final double? amount;
+  final String? orderCode;
+
+  const VietQRPaymentScreen({
+    super.key,
+    this.orderId,
+    this.amount,
+    this.orderCode,
+  });
 
   @override
   State<VietQRPaymentScreen> createState() => _VietQRPaymentScreenState();
@@ -16,11 +25,16 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final displayAmount = widget.amount != null
+        ? '${widget.amount!.toStringAsFixed(0)} ₫'
+        : '150.000 ₫';
+    final displayOrderCode = widget.orderCode ?? 'RO-DEMO-8924';
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         title: const Text(
-          'Thanh toán',
+          'Thanh toán chuyến đi',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
@@ -31,15 +45,16 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const RescueIntro(
+            RescueIntro(
               eyebrow: 'HOÀN TẤT HÀNH TRÌNH',
-              title: 'Chọn cách thanh toán',
-              description: 'Kiểm tra thông tin và phương thức thanh toán.',
+              title: 'Thanh toán đơn #$displayOrderCode',
+              description: 'Kiểm tra thông tin chi phí niêm yết và phương thức thanh toán.',
             ),
             const SizedBox(height: 12),
             const RescueDemoNote(
-              'Mô phỏng · Chưa xử lý giao dịch hoặc gửi dữ liệu thật',
+              'UC-18 Preview Hợp đồng tích hợp · Chưa kết nối cổng PayOS hoặc thu tiền mặt thật',
             ),
+            const SizedBox(height: 12),
             // Payment method selector
             Container(
               padding: const EdgeInsets.all(4),
@@ -150,7 +165,6 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
                     child: const Wrap(
                       spacing: 8,
                       runSpacing: 8,
-
                       children: [
                         Icon(
                           Icons.timer,
@@ -225,13 +239,13 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
                   // Bank details
                   _buildBankRow(
                     'Số tiền thanh toán',
-                    '290.000 đ',
+                    displayAmount,
                     highlight: true,
                   ),
                   _buildBankRow('Ngân hàng thụ hưởng', 'MB Bank (Quân Đội)'),
                   _buildBankRow('Số tài khoản', '038299482910'),
                   _buildBankRow('Chủ tài khoản', 'HE THONG CUU HO HYDRORESCUE'),
-                  _buildBankRow('Nội dung chuyển khoản', 'RESCUE 8924'),
+                  _buildBankRow('Nội dung chuyển khoản', 'RESCUE $displayOrderCode'),
                 ],
               ),
             ),
@@ -254,7 +268,7 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen> {
                 ),
               ),
               child: const Text(
-                'Xác Nhận Đã Thanh Toán',
+                'Xác Nhận Đã Thanh Toán (Preview)',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ),
