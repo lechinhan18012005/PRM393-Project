@@ -217,3 +217,22 @@
  .app-main > div > div:first-child:has(h1) { flex-direction: column; align-items: flex-start; }
  .app-main > div > div:first-child:has(h1) > .flex { flex-wrap: wrap; }
 }
+
+/* Account provisioning and garage management panels. */
+.management-page { color: #26364a; }
+.management-page article, .management-page form.border { background: #fff; border-color: #e2e8f0; border-radius: 12px; }
+.management-page label { font-size: 13px; font-weight: 600; }
+.management-page input, .management-page select { background: #fff; border: 1px solid #d4dce6; border-radius: 8px; padding: 9px 12px; min-height: 40px; max-width: 100%; }
+.management-page button { border: 1px solid #e4e9ee; background: #fff; border-radius: 8px; padding: 9px 14px; font-weight: 600; font-size: 13px; }
+.management-page button[type=submit], .management-page form > button:not([type=button]) { background: #f56b24; color: #fff; border-color: #f56b24; }
+.management-page button:disabled { opacity: .5; cursor: not-allowed; }
+.management-page button:hover:not(:disabled) { filter: brightness(.96); }
+.management-page table { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
+.management-page th, .management-page td { padding: 14px; border-bottom: 1px solid #edf0f4; }
+.management-page th { color: #66758a; font-size: 12px; }
+.management-page code { display: block; background: #f3f6fa; border-radius: 6px; padding: 10px; }
+@media (max-width: 640px) {
+ .management-page { padding: 16px; }
+ .management-page table { display: block; overflow-x: auto; }
+ .management-page form.flex { flex-direction: column; align-items: stretch; }
+}

@@ -1,574 +1,622 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../core/widgets/logout_dialog.dart';
+import '../../core/models/rescue_order_model.dart';
+import '../../core/services/rescue_service.dart';
+import '../../core/widgets/rescue_ui.dart';
+import '../../core/widgets/rescue_map_painter.dart';
+import '../../providers/auth_provider.dart';
 import 'service_selection_screen.dart';
 import 'community_flood_report_screen.dart';
 import 'flood_map_screen.dart';
 import 'rescue_history_screen.dart';
 import 'vehicle_profile_screen.dart';
+import 'account_screen.dart';
+import 'customer_demo_data.dart';
+import 'radar_dispatch_screen.dart';
+import 'live_tracking_screen.dart';
+import 'vietqr_payment_screen.dart';
 import '../demo/demo_catalog_screen.dart';
 
-/// Compact customer dashboard: one primary rescue action, then nearby context.
 class StitchHydroRescueScreen extends StatefulWidget {
   const StitchHydroRescueScreen({super.key});
-
   @override
   State<StitchHydroRescueScreen> createState() =>
       _StitchHydroRescueScreenState();
 }
 
 class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
+  final RescueService _rescueService = RescueService();
+  RescueOrderModel? _activeOrder;
+
+  // Hot reload can retain a State created before these fields existed.
+  // Read through defaults instead of relying on field initializers being rerun.
+  int? _tab;
+  int get _currentTab => _tab ?? 0;
   int _vehicle = 0;
-  final _vehicles = const [
-    ('Honda SH 150i', '59-B1 892.44'),
-    ('Yamaha Exciter 150', '59-S3 481.09'),
-    ('Honda Wave Alpha', '59-X1 204.88'),
-  ];
+  Set<int>? _visited;
+  Set<int> get _visitedTabs => _visited ??= <int>{0};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadActiveOrder());
+  }
+
+  Future<void> _loadActiveOrder() async {
+    try {
+      final order = await _rescueService.getActiveOrder();
+      if (mounted) {
+        setState(() => _activeOrder = order);
+      }
+    } catch (_) {}
+  }
+
+  void _select(int index) {
+    setState(() {
+      _tab = index;
+      _visitedTabs.add(index);
+    });
+    if (index == 0) {
+      _loadActiveOrder();
+    }
+  }
 
   void _open(Widget screen) =>
       Navigator.of(context)
-          .push(MaterialPageRoute<void>(builder: (_) => screen));
-
-  void _chooseVehicle() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Chọn xe', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 16),
-              for (int i = 0; i < _vehicles.length; i++)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: AppColors.surfaceContainerLow,
-                    child: Icon(Icons.two_wheeler, color: AppColors.secondary),
-                  ),
-                  title: Text(_vehicles[i].$1),
-                  subtitle: Text(_vehicles[i].$2),
-                  trailing: _vehicle == i
-                      ? const Icon(
-                          Icons.check_circle,
-                          color: AppColors.primaryOrange,
-                        )
-                      : null,
-                  onTap: () {
-                    setState(() => _vehicle = i);
-                    Navigator.pop(sheetContext);
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showFloodDetails() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (_) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Ngập gần bạn',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 16),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  Icons.warning_amber_rounded,
-                  color: AppColors.error,
-                ),
-                title: Text('Nguyễn Hữu Cảnh'),
-                subtitle: Text('55 cm · Ngập sâu'),
-              ),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.water, color: AppColors.primaryOrange),
-                title: Text('Ung Văn Khiêm'),
-                subtitle: Text('45 cm · Hạn chế di chuyển'),
-              ),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.water, color: AppColors.tertiary),
-                title: Text('Quốc Hương'),
-                subtitle: Text('18 cm · Theo dõi mực nước'),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _open(const FloodMapScreen());
-                },
-                child: const Text('Mở bản đồ ngập'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Row(
+          .push(MaterialPageRoute<void>(builder: (_) => screen))
+          .then((_) => _loadActiveOrder());
+  void _chooseVehicle() => showModalBottomSheet<void>(
+    context: context,
+    builder: (sheet) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.waves_rounded, color: AppColors.primaryOrange, size: 26),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                'HydroRescue',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            Text('Chọn xe', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            const RescueDemoNote(
+              'Xe minh họa · Lựa chọn chỉ lưu trong phiên này',
+            ),
+            ...customerDemoVehicles.indexed.map(
+              (entry) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.primaryContainer,
+                  child: Icon(Icons.two_wheeler, color: AppColors.primary),
+                ),
+                title: Text(entry.$2.name),
+                subtitle: Text(entry.$2.plate),
+                trailing: _vehicle == entry.$1
+                    ? const Icon(Icons.check_circle, color: AppColors.primary)
+                    : null,
+                onTap: () {
+                  setState(() => _vehicle = entry.$1);
+                  Navigator.pop(sheet);
+                },
               ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Khám phá ứng dụng mẫu',
-            onPressed: () => _open(const DemoCatalogScreen()),
-            icon: const Icon(Icons.apps_rounded),
-          ),
-          IconButton(
-            key: const Key('customer-logout-btn'),
-            tooltip: 'Đăng xuất',
-            icon: const Icon(Icons.logout, color: AppColors.error),
-            onPressed: () => showLogoutConfirmationDialog(context),
-          ),
-        ],
       ),
-      body: SafeArea(
-        bottom: false,
+    ),
+  );
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.background,
+    appBar: _currentTab == 0
+        ? AppBar(
+            title: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'FLOOD RESCUE / KHÁCH HÀNG',
+                  style: TextStyle(
+                    fontSize: 9,
+                    letterSpacing: 1.4,
+                    color: AppColors.secondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'Trang chủ',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                key: const Key('open-account'),
+                tooltip: 'Tài khoản',
+                onPressed: () => _select(4),
+                icon: const Icon(
+                  Icons.person_outline,
+                  color: AppColors.secondary,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Khám phá ứng dụng mẫu',
+                onPressed: () => _open(const DemoCatalogScreen()),
+                icon: const Icon(Icons.apps_rounded, color: AppColors.primary),
+              ),
+            ],
+          )
+        : null,
+    body: IndexedStack(
+      index: _currentTab,
+      children: [
+        _home(),
+        _visitedTabs.contains(1)
+            ? const FloodMapScreen()
+            : const SizedBox.shrink(),
+        _visitedTabs.contains(2)
+            ? const RescueHistoryScreen()
+            : const SizedBox.shrink(),
+        _visitedTabs.contains(3)
+            ? VehicleProfileScreen(
+                selectedVehicle: _vehicle,
+                onSelectVehicle: (i) => setState(() => _vehicle = i),
+              )
+            : const SizedBox.shrink(),
+        _visitedTabs.contains(4)
+            ? const AccountScreen()
+            : const SizedBox.shrink(),
+      ],
+    ),
+    bottomNavigationBar: NavigationBar(
+      selectedIndex: _currentTab,
+      onDestinationSelected: _select,
+      backgroundColor: Colors.white,
+      indicatorColor: AppColors.primaryContainer,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home_rounded, color: AppColors.primary),
+          label: 'Trang chủ',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.map_outlined),
+          selectedIcon: Icon(Icons.map, color: AppColors.primary),
+          label: 'Bản đồ',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.history_outlined),
+          selectedIcon: Icon(Icons.history, color: AppColors.primary),
+          label: 'Lịch sử',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.two_wheeler_outlined),
+          selectedIcon: Icon(Icons.two_wheeler, color: AppColors.primary),
+          label: 'Xe của tôi',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.person_outline),
+          selectedIcon: Icon(Icons.person, color: AppColors.primary),
+          label: 'Tài khoản',
+        ),
+      ],
+    ),
+  );
+  Widget _home() {
+    final name = context.watch<AuthProvider?>()?.user?.fullName;
+    final vehicle = customerDemoVehicles[_vehicle];
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
           children: [
-            Text(
-              'Bạn cần hỗ trợ?',
-              style: Theme.of(context).textTheme.headlineLarge,
+            RescueIntro(
+              eyebrow: 'AN TÂM TRÊN MỌI HÀNH TRÌNH',
+              title: name == null ? 'Bạn cần hỗ trợ?' : 'Xin chào, $name',
+              description: 'Cứu hộ xe máy và theo dõi điểm ngập trong cùng một ứng dụng.',
+              trailing: const Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  RescueLabel('Cứu hộ xe máy', color: Color(0xFF76D6B5)),
+                  RescueLabel('Kết nối đội hỗ trợ', color: Color(0xFFB9CEDB)),
+                ],
+              ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Cứu hộ xe máy, ngay gần bạn.',
-              style: Theme.of(context).textTheme.bodyMedium
-                  ?.copyWith(color: AppColors.secondary),
+            if (_activeOrder != null && _activeOrder!.isActive) ...[
+              const RescueSection('Đơn cứu hộ đang phục vụ'),
+              _activeOrderCard(_activeOrder!),
+            ],
+            const RescueSection('Yêu cầu cứu hộ'),
+            RescuePanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const RescueLabel(
+                    'Thông tin vị trí & xe minh họa',
+                    color: AppColors.secondary,
+                  ),
+                  const SizedBox(height: 6),
+                  const RescueInfo(
+                    icon: Icons.location_on_outlined,
+                    title: 'Điểm cứu hộ mẫu',
+                    value: '142 Nguyễn Gia Trí, Bình Thạnh, TP.HCM',
+                  ),
+                  const Divider(height: 22),
+                  InkWell(
+                    key: const Key('choose-vehicle'),
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: _chooseVehicle,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryContainer,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.two_wheeler,
+                              color: AppColors.primary,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  vehicle.name,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  vehicle.plate,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.secondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.unfold_more_rounded,
+                            color: AppColors.secondary,
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    key: const Key('request-rescue'),
+                    onPressed: () => _open(
+                      ServiceSelectionScreen(
+                        vehicleName: vehicle.name,
+                        vehiclePlate: vehicle.plate,
+                      ),
+                    ),
+                    icon: const Icon(Icons.sos_rounded, size: 24),
+                    label: const Text('Gọi cứu hộ'),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Xem dịch vụ và giá mẫu trước khi tiếp tục.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 11, color: AppColors.secondary),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 22),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+            const RescueSection('Dịch vụ hỗ trợ'),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final tiles = [
+                  _service(
+                    Icons.local_shipping_outlined,
+                    'Chở qua ngập',
+                    'Ghép chuyến',
+                    0,
+                  ),
+                  _service(
+                    Icons.build_outlined,
+                    'Sửa tại chỗ',
+                    'Kiểm tra xe',
+                    1,
+                  ),
+                  _service(
+                    Icons.car_repair_outlined,
+                    'Kéo về gara',
+                    'Vận chuyển xe',
+                    2,
+                  ),
+                ];
+                if (constraints.maxWidth < 330 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+                  return Column(
+                    children: [
+                      for (final tile in tiles)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: tile,
+                        ),
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.location_on_outlined,
+                    for (var i = 0; i < tiles.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 8),
+                      Expanded(child: tiles[i]),
+                    ],
+                  ],
+                );
+              },
+            ),
+            RescueSection(
+              'Theo dõi điểm ngập',
+              action: TextButton(
+                onPressed: () => _select(1),
+                child: const Text('Xem bản đồ'),
+              ),
+            ),
+            RescuePanel(
+              padding: 0,
+              child: InkWell(
+                onTap: () => _select(1),
+                child: SizedBox(
+                  height: 165,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(painter: RescueMapPainter()),
+                      ),
+                      const Positioned(
+                        top: 12,
+                        left: 12,
+                        child: RescueLabel(
+                          'BẢN ĐỒ MINH HỌA',
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                      const Align(
+                        alignment: Alignment(.5, -.1),
+                        child: Icon(
+                          Icons.location_on,
+                          color: AppColors.primary,
+                          size: 38,
+                        ),
+                      ),
+                      const Align(
+                        alignment: Alignment(-.3, .4),
+                        child: Icon(
+                          Icons.location_on,
                           color: AppColors.tertiary,
-                          size: 22,
+                          size: 32,
                         ),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Vị trí hiện tại',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.secondary,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                '142 Nguyễn Gia Trí',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                'Bình Thạnh, TP. Hồ Chí Minh',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.secondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 30),
-                    Semantics(
-                      button: true,
-                      label: 'Chọn xe',
-                      child: InkWell(
-                        key: const Key('choose-vehicle'),
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: _chooseVehicle,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.two_wheeler_rounded,
-                                color: AppColors.secondary,
-                                size: 22,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _vehicles[_vehicle].$1,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text(
-                                      _vehicles[_vehicle].$2,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.secondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons.unfold_more_rounded,
-                                size: 20,
-                                color: AppColors.secondary,
-                              ),
-                            ],
+                      ),
+                      const Positioned(
+                        right: 12,
+                        bottom: 12,
+                        child: CircleAvatar(
+                          radius: 17,
+                          backgroundColor: Colors.white,
+                          child: Icon(
+                            Icons.open_in_full,
+                            size: 16,
+                            color: AppColors.secondary,
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 18),
-                    FilledButton.icon(
-                      key: const Key('request-rescue'),
-                      onPressed: () => _open(const ServiceSelectionScreen()),
-                      icon: const Icon(Icons.sos_rounded, size: 25),
-                      label: const Text('Gọi cứu hộ'),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(56),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Chọn dịch vụ và xem giá trước khi đặt.',
-                      textAlign: TextAlign.center,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            RescuePanel(
+              padding: 12,
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppColors.tertiary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Mở bản đồ để tải danh sách điểm ngập từ hệ thống.',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.secondary,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Ngập gần bạn',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                TextButton(
-                  onPressed: () => _open(const FloodMapScreen()),
-                  child: const Text('Xem bản đồ'),
-                ),
-              ],
+            const RescueSection('Tiện ích hành trình'),
+            _shortcut(
+              Icons.add_location_alt_outlined,
+              'Báo ngập cộng đồng',
+              'Chia sẻ tình trạng đường với mọi người',
+              () => _open(const CommunityFloodReportScreen()),
             ),
             const SizedBox(height: 8),
-            _mapPreview(),
-            const SizedBox(height: 12),
-            Card(
-              color: const Color(0xFFFFF7EA),
-              child: InkWell(
-                onTap: _showFloodDetails,
-                borderRadius: BorderRadius.circular(18),
-                child: const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Icon(Icons.water_rounded, color: Color(0xFFAB731F)),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Nguyễn Hữu Cảnh · 55 cm',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            SizedBox(height: 3),
-                            Text(
-                              'Ngập sâu, tránh di chuyển qua khu vực.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF8C6B3A),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: Color(0xFFAB731F),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text('Tiện ích', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final actions = [
-                  _quickAction(
-                    Icons.add_location_alt_outlined,
-                    'Báo ngập',
-                    () => _open(const CommunityFloodReportScreen()),
-                  ),
-                  _quickAction(
-                    Icons.receipt_long_outlined,
-                    'Lịch sử cứu hộ',
-                    () => _open(const RescueHistoryScreen()),
-                  ),
-                ];
-                if (constraints.maxWidth < 300 ||
-                    MediaQuery.textScalerOf(context).scale(1) > 1.3) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      actions[0],
-                      const SizedBox(height: 12),
-                      actions[1],
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: actions[0]),
-                    const SizedBox(width: 12),
-                    Expanded(child: actions[1]),
-                  ],
-                );
-              },
+            _shortcut(
+              Icons.receipt_long_outlined,
+              'Lịch sử cứu hộ',
+              'Xem lại thông tin các lần hỗ trợ mẫu',
+              () => _select(2),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: 0,
-        onDestinationSelected: (index) {
-          if (index == 1) _open(const FloodMapScreen());
-          if (index == 2) _open(const RescueHistoryScreen());
-          if (index == 3) _open(const VehicleProfileScreen());
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Trang chủ',
+    );
+  }
+
+  Widget _activeOrderCard(RescueOrderModel order) {
+    Color badgeColor = AppColors.primary;
+    String actionLabel = 'Xem trạng thái đơn';
+    VoidCallback onAction;
+
+    if (order.isRequested) {
+      badgeColor = Colors.orange;
+      actionLabel = 'Theo dõi tìm kiếm cứu hộ';
+      onAction = () => _open(RadarDispatchScreen(orderId: order.id));
+    } else if (order.status == 'PAYMENT_PENDING') {
+      badgeColor = Colors.purple;
+      actionLabel = 'Thanh toán đơn cứu hộ';
+      onAction = () => _open(VietQRPaymentScreen(
+        orderId: order.id,
+        garageId: order.garageId,
+        amount: order.totalAmount,
+        orderCode: order.orderCode,
+        rescueOrder: order,
+      ));
+    } else {
+      badgeColor = Colors.green;
+      actionLabel = 'Theo dõi trực tiếp xe cứu hộ';
+      onAction = () => _open(LiveTrackingScreen(orderId: order.id));
+    }
+
+    return RescuePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              RescueLabel(
+                'ĐƠN ĐANG THỰC HIỆN',
+                color: badgeColor,
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20, color: AppColors.secondary),
+                tooltip: 'Làm mới',
+                onPressed: _loadActiveOrder,
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            label: 'Bản đồ',
+          const SizedBox(height: 8),
+          Text(
+            '${order.serviceName} · #${order.orderCode}',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.history_rounded),
-            label: 'Lịch sử',
+          const SizedBox(height: 4),
+          Text(
+            'Trạng thái: ${order.statusDescription}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: badgeColor,
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.two_wheeler_outlined),
-            label: 'Xe của tôi',
+          const SizedBox(height: 8),
+          RescueInfo(
+            icon: Icons.location_on_outlined,
+            title: 'Điểm đón',
+            value: order.pickupAddress,
+          ),
+          const SizedBox(height: 4),
+          RescueInfo(
+            icon: Icons.wb_sunny_outlined,
+            title: 'Điểm trả',
+            value: order.dropoffAddress,
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: badgeColor,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            onPressed: onAction,
+            icon: const Icon(Icons.navigation_outlined, size: 18),
+            label: Text(actionLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  Widget _quickAction(IconData icon, String label, VoidCallback onTap) => Card(
+  Widget _service(
+    IconData icon,
+    String title,
+    String subtitle,
+    int index,
+  ) => RescuePanel(
+    padding: 0,
     child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      onTap: () => _open(
+        ServiceSelectionScreen(
+          initialService: index,
+          vehicleName: customerDemoVehicles[_vehicle].name,
+          vehiclePlate: customerDemoVehicles[_vehicle].plate,
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Row(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: AppColors.tertiary, size: 23),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
+            Icon(icon, color: AppColors.primary, size: 23),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 10, color: AppColors.secondary),
             ),
           ],
         ),
       ),
     ),
   );
-
-  Widget _mapPreview() => Semantics(
-    label: 'Bản đồ minh họa các điểm ngập gần bạn. Nhấn để xem bản đồ ngập.',
-    button: true,
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: Material(
-        color: const Color(0xFFEAF1EC),
-        child: InkWell(
-          onTap: () => _open(const FloodMapScreen()),
-          child: SizedBox(
-            height: 180,
-            child: Stack(
-              children: [
-                Positioned.fill(child: CustomPaint(painter: _GisMapPainter())),
-                Positioned(
-                  top: 13,
-                  left: 13,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'Bản đồ minh họa',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.secondary,
-                      ),
-                    ),
-                  ),
-                ),
-                const Align(
-                  alignment: Alignment(.48, -.15),
-                  child: Icon(
-                    Icons.location_on_rounded,
-                    color: AppColors.error,
-                    size: 36,
-                  ),
-                ),
-                const Align(
-                  alignment: Alignment(-.28, .48),
-                  child: Icon(
-                    Icons.location_on_rounded,
-                    color: AppColors.primaryOrange,
-                    size: 32,
-                  ),
-                ),
-                Align(
-                  alignment: const Alignment(-.3, -.05),
-                  child: Container(
-                    width: 23,
-                    height: 23,
-                    decoration: BoxDecoration(
-                      color: AppColors.tertiary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 4),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 12,
-                  bottom: 12,
-                  child: Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: const Icon(
-                      Icons.open_in_full_rounded,
-                      size: 17,
-                      color: AppColors.secondary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+  Widget _shortcut(
+    IconData icon,
+    String title,
+    String subtitle,
+    VoidCallback action,
+  ) => RescuePanel(
+    padding: 0,
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.primaryContainer,
+          borderRadius: BorderRadius.circular(10),
         ),
+        child: Icon(icon, color: AppColors.primary, size: 21),
       ),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(fontSize: 11, color: AppColors.secondary),
+      ),
+      trailing: const Icon(
+        Icons.chevron_right,
+        size: 18,
+        color: AppColors.secondary,
+      ),
+      onTap: action,
     ),
   );
-}
-
-class _GisMapPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final road = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 9;
-    for (var i = 1; i < 5; i++) {
-      canvas.drawLine(
-        Offset(size.width * i / 5 - 30, 0),
-        Offset(size.width * i / 5 + 35, size.height),
-        road,
-      );
-    }
-    for (var i = 1; i < 4; i++) {
-      canvas.drawLine(
-        Offset(0, size.height * i / 4 + 15),
-        Offset(size.width, size.height * i / 4 - 10),
-        road,
-      );
-    }
-    final river = Path()
-      ..moveTo(size.width * .65, -20)
-      ..cubicTo(
-        size.width * .15,
-        size.height * .4,
-        size.width,
-        size.height * .5,
-        size.width * .7,
-        size.height + 20,
-      );
-    canvas.drawPath(
-      river,
-      Paint()
-        ..color = const Color(0xFFB8D9E3)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 26,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

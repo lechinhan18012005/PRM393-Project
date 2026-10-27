@@ -1,16 +1,64 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/models/payment_transaction_model.dart';
+import '../../core/models/rescue_order_model.dart';
+import '../../core/widgets/rescue_ui.dart';
 import 'electronic_invoice_screen.dart';
 import 'rating_review_screen.dart';
 
 class PaymentSuccessScreen extends StatelessWidget {
-  const PaymentSuccessScreen({super.key});
+  final PaymentTransactionModel? transaction;
+  final RescueOrderModel? order;
+  final int? orderId;
+  final String? rescueCode;
+  final double? amount;
+
+  const PaymentSuccessScreen({
+    super.key,
+    this.transaction,
+    this.order,
+    this.orderId,
+    this.rescueCode,
+    this.amount,
+  });
+
+  bool get _isReal => transaction != null || order != null;
+
+  String _formatVnd(double val) {
+    final intVal = val.round();
+    final str = intVal.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < str.length; i++) {
+      if (i > 0 && (str.length - i) % 3 == 0) {
+        buffer.write('.');
+      }
+      buffer.write(str[i]);
+    }
+    return '${buffer.toString()} đ';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final code = transaction?.rescueCode ??
+        order?.orderCode ??
+        rescueCode ??
+        (orderId != null ? 'SOS-$orderId' : '#PRM-8924');
+    final displayAmount = transaction?.amount ??
+        order?.totalAmount ??
+        amount ??
+        150000.0;
+    final methodStr = (transaction?.paymentMethod == 'CASH')
+        ? 'Tiền mặt tại hiện trường'
+        : 'PayOS VietQR (${transaction?.bankName ?? "MB Bank"})';
+    final garageName = transaction?.garageName ??
+        order?.garageName ??
+        'Trung tâm cứu hộ liên kết';
+    final mechanicName = order?.mechanicName ?? 'Thợ cứu hộ phụ trách';
+    final paidAtStr = transaction?.paidAt ?? order?.paidAt ?? 'Đã xác nhận';
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
           'Thanh toán thành công',
@@ -24,7 +72,11 @@ class PaymentSuccessScreen extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            const SizedBox(height: 20),
+            if (!_isReal)
+              const RescueDemoNote(
+                'Kết quả thanh toán minh họa · Chưa có giao dịch thật',
+              ),
+            const SizedBox(height: 16),
             // Success Check Icon
             Container(
               width: 80,
@@ -50,10 +102,10 @@ class PaymentSuccessScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Đã nhận thanh toán cho đơn #PRM-8924.',
+            Text(
+              'Đã xác nhận thanh toán cho đơn $code',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: AppColors.secondary),
+              style: const TextStyle(fontSize: 13, color: AppColors.secondary),
             ),
             const SizedBox(height: 24),
 
@@ -65,114 +117,45 @@ class PaymentSuccessScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppColors.surfaceContainerHigh),
               ),
-              child: const Column(
+              child: Column(
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Số tiền thanh toán:',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                      Text(
-                        '290.000 đ',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryOrange,
-                        ),
-                      ),
-                    ],
+                  _buildReceiptRow(
+                    'Số tiền thanh toán:',
+                    _formatVnd(displayAmount),
+                    isAmount: true,
                   ),
-                  SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Phương thức:',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                      Text(
-                        'PayOS VietQR (MB Bank)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Thợ thực hiện:',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                      Text(
-                        'Phạm Tuấn Anh (Gara Q.7)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Bảo hành dịch vụ:',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                      Text(
-                        '30 Ngày (đến 11/11/2026)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
+                  const SizedBox(height: 10),
+                  _buildReceiptRow('Phương thức:', methodStr),
+                  const SizedBox(height: 10),
+                  _buildReceiptRow('Đơn vị thực hiện:', garageName),
+                  const SizedBox(height: 10),
+                  _buildReceiptRow('Thợ thực hiện:', mechanicName),
+                  if (transaction?.payosOrderCode != null && transaction!.payosOrderCode > 0) ...[
+                    const SizedBox(height: 10),
+                    _buildReceiptRow('Mã giao dịch PayOS:', '#${transaction!.payosOrderCode}'),
+                  ],
+                  const SizedBox(height: 10),
+                  _buildReceiptRow('Thời gian:', paidAtStr),
                 ],
               ),
             ),
             const SizedBox(height: 32),
 
-            // Button 1: Xem hóa đơn & bảo hành
+            // Button 1: Xem biên nhận thanh toán
             ElevatedButton.icon(
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => const ElectronicInvoiceScreen(),
+                    builder: (_) => ElectronicInvoiceScreen(
+                      transaction: transaction,
+                      order: order,
+                    ),
                   ),
                 );
               },
-              icon: const Icon(Icons.receipt, size: 18),
+              icon: const Icon(Icons.receipt_long, size: 18),
               label: const Text(
-                'Hóa đơn & bảo hành',
+                'Biên nhận thanh toán',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
@@ -186,7 +169,7 @@ class PaymentSuccessScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Button 2: Đánh giá thợ cứu hộ
+            // Button 2: Đánh giá thợ cứu hộ (Xem trước UI)
             OutlinedButton.icon(
               onPressed: () {
                 Navigator.of(context).push(
@@ -195,7 +178,7 @@ class PaymentSuccessScreen extends StatelessWidget {
               },
               icon: const Icon(Icons.star, color: Colors.amber, size: 20),
               label: const Text(
-                'Đánh giá cứu hộ',
+                'Đánh giá dịch vụ (Xem trước UI)',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               style: OutlinedButton.styleFrom(
@@ -205,9 +188,41 @@ class PaymentSuccessScreen extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+
+            // Button 3: Về trang chủ
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              },
+              child: const Text('Về màn hình chính'),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildReceiptRow(String label, String value, {bool isAmount = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              fontSize: isAmount ? 16 : 12,
+              fontWeight: FontWeight.bold,
+              color: isAmount ? AppColors.primaryOrange : AppColors.onSurface,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../providers/auth_provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/logout_dialog.dart';
@@ -24,13 +27,6 @@ import '../mechanic/route_navigation_screen.dart';
 import '../mechanic/quotation_builder_screen.dart';
 import '../mechanic/repair_execution_screen.dart';
 import '../mechanic/mechanic_shift_screen.dart';
-
-// Garage Owner Screens
-import '../garage/batch_transport_manage_screen.dart';
-import '../garage/team_allocation_screen.dart';
-import '../garage/branch_management_screen.dart';
-import '../garage/garage_revenue_screen.dart';
-import '../garage/garage_wallet_payout_screen.dart';
 
 class DemoCatalogScreen extends StatelessWidget {
   const DemoCatalogScreen({super.key});
@@ -58,155 +54,126 @@ class DemoCatalogScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Section 1: Customer
-          _buildCategoryHeader('Khách hàng', Icons.person, Colors.blue),
-          _buildScreenTile(
-            context,
-            'Trang chủ',
-            'Bản đồ ngập GIS, nút SOS khẩn cấp, KTV Nam',
-            const StitchHydroRescueScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Chọn dịch vụ',
-            'Gom xe vượt ngập / Khám xe / Kéo xe',
-            const ServiceSelectionScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Tìm cứu hộ',
-            'Hiệu ứng radar quét tìm thợ gần nhất 3km',
-            const RadarDispatchScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Theo dõi cứu hộ',
-            'Bản đồ di chuyển và ETA đến hiện trường',
-            const LiveTrackingScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Duyệt báo giá',
-            'Bảng kê phụ tùng, sấy bugi, thay nhớt',
-            const ReviewQuotationScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Thanh toán',
-            'Mã QR động MB Bank NAPAS 247',
-            const VietQRPaymentScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Thanh toán thành công',
-            'Biên lai giao dịch PayOS Webhook tự động',
-            const PaymentSuccessScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Hóa đơn & bảo hành',
-            'Phiếu bảo hành 30 ngày & mã tra cứu QR',
-            const ElectronicInvoiceScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Đánh giá cứu hộ',
-            'Bình chọn 1-5 sao, chọn tag đánh giá',
-            const RatingReviewScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Báo ngập',
-            'Gửi tọa độ ngập, độ sâu và hình ảnh',
-            const CommunityFloodReportScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Bản đồ ngập',
-            'Bản đồ nhiệt GIS và các điểm ngập sâu',
-            const FloodMapScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Xe của tôi',
-            'Quản lý nhiều xe (SH, Exciter, Wave)',
-            const VehicleProfileScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Lịch sử cứu hộ',
-            'Danh sách các đơn cứu hộ trước đây',
-            const RescueHistoryScreen(),
-          ),
+          if (context.watch<AuthProvider>().user?.role == 'CUSTOMER') ...[
+            // Section 1: Customer
+            _buildCategoryHeader('Khách hàng', Icons.person, Colors.blue),
+            _buildScreenTile(
+              context,
+              'Trang chủ',
+              'Bản đồ ngập GIS, nút SOS khẩn cấp, KTV Nam',
+              const StitchHydroRescueScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Chọn dịch vụ',
+              'Gom xe vượt ngập / Khám xe / Kéo xe',
+              const ServiceSelectionScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Tìm cứu hộ',
+              'Hiệu ứng radar quét tìm thợ gần nhất 3km',
+              const RadarDispatchScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Theo dõi cứu hộ',
+              'Bản đồ di chuyển và ETA đến hiện trường',
+              const LiveTrackingScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Duyệt báo giá',
+              'Bảng kê phụ tùng, sấy bugi, thay nhớt',
+              const ReviewQuotationScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Thanh toán',
+              'Mã QR động MB Bank NAPAS 247',
+              const VietQRPaymentScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Thanh toán thành công',
+              'Biên lai giao dịch PayOS Webhook tự động',
+              const PaymentSuccessScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Hóa đơn & bảo hành',
+              'Phiếu bảo hành 30 ngày & mã tra cứu QR',
+              const ElectronicInvoiceScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Đánh giá cứu hộ',
+              'Bình chọn 1-5 sao, chọn tag đánh giá',
+              const RatingReviewScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Báo ngập',
+              'Gửi tọa độ ngập, độ sâu và hình ảnh',
+              const CommunityFloodReportScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Bản đồ ngập',
+              'Bản đồ nhiệt GIS và các điểm ngập sâu',
+              const FloodMapScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Xe của tôi',
+              'Quản lý nhiều xe (SH, Exciter, Wave)',
+              const VehicleProfileScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Lịch sử cứu hộ',
+              'Danh sách các đơn cứu hộ trước đây',
+              const RescueHistoryScreen(),
+            ),
 
-          const SizedBox(height: 16),
-          // Section 2: Mechanic
-          _buildCategoryHeader('Thợ cứu hộ', Icons.build, Colors.orange),
-          _buildScreenTile(
-            context,
-            'Nhận yêu cầu cứu hộ',
-            'Bộ đếm ngược 45s và chi tiết cứu hộ',
-            const IncomingDispatchScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Đường đến khách',
-            'Chỉ đường Turn-by-Turn né vùng ngập',
-            const RouteNavigationScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Lập báo giá',
-            'Chọn phụ tùng từ catalog Gara Toàn Thắng',
-            const QuotationBuilderScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Sửa chữa & bàn giao',
-            'Checklist kỹ thuật và chụp ảnh xe nổ',
-            const RepairExecutionScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Ca trực',
-            'Lịch trực bão và bàn giao thiết bị',
-            const MechanicShiftScreen(),
-          ),
+            const SizedBox(height: 16),
+          ],
+          if (context.watch<AuthProvider>().user?.role == 'FIELD_MECHANIC') ...[
+            // Section 2: Mechanic
+            _buildCategoryHeader('Thợ cứu hộ', Icons.build, Colors.orange),
+            _buildScreenTile(
+              context,
+              'Nhận yêu cầu cứu hộ',
+              'Bộ đếm ngược 45s và chi tiết cứu hộ',
+              const IncomingDispatchScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Đường đến khách',
+              'Chỉ đường Turn-by-Turn né vùng ngập',
+              const RouteNavigationScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Lập báo giá',
+              'Chọn phụ tùng từ catalog Gara Toàn Thắng',
+              const QuotationBuilderScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Sửa chữa & bàn giao',
+              'Checklist kỹ thuật và chụp ảnh xe nổ',
+              const RepairExecutionScreen(),
+            ),
+            _buildScreenTile(
+              context,
+              'Ca trực',
+              'Lịch trực bão và bàn giao thiết bị',
+              const MechanicShiftScreen(),
+            ),
 
-          const SizedBox(height: 16),
-          // Section 3: Garage Owner
-          _buildCategoryHeader('Chủ gara', Icons.store, Colors.green),
-          _buildScreenTile(
-            context,
-            'Chuyến chở xe',
-            'Quản lý xe tải/ba gác gom 4-6 xe',
-            const BatchTransportManageScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Phân công thợ',
-            'Điều động thợ trực chiến sang điểm ngập',
-            const TeamAllocationScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Chi nhánh',
-            'Danh sách chi nhánh Q.7, Q.8, Bình Thạnh',
-            const BranchManagementScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Doanh thu',
-            'Báo cáo doanh thu, GMV và chiết khấu sàn',
-            const GarageRevenueScreen(),
-          ),
-          _buildScreenTile(
-            context,
-            'Ví & rút tiền',
-            'Số dư ví Gara và lệnh chuyển khoản ngân hàng',
-            const GarageWalletPayoutScreen(),
-          ),
-          const SizedBox(height: 30),
+            const SizedBox(height: 16),
+          ],
         ],
       ),
     );

@@ -54,7 +54,7 @@ public class StaffGarageController {
     }
 
     @PatchMapping("/{id}/moderate")
-    @Operation(summary = "UC-03: Thẩm định và duyệt hồ sơ Garage (APPROVED / REJECTED / NEEDS_UPDATE)")
+    @Operation(summary = "UC-03: Thẩm định và duyệt hồ sơ Garage (APPROVED / REJECTED / SUSPENDED)")
     public ResponseEntity<ApiResponse<GarageResponse>> moderateGarage(
             @PathVariable("id") Long id,
             @Valid @RequestBody ApproveGarageRequest request

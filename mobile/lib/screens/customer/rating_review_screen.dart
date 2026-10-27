@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/rescue_ui.dart';
 import 'stitch_hydro_rescue_screen.dart';
 
 class RatingReviewScreen extends StatefulWidget {
@@ -36,7 +37,7 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
       appBar: AppBar(
         title: const Text(
           'Đánh giá cứu hộ',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -46,20 +47,18 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const RescueIntro(
+              eyebrow: 'CHẤT LƯỢNG HỖ TRỢ',
+              title: 'Chia sẻ trải nghiệm',
+              description: 'Đánh giá sự hỗ trợ của đội cứu hộ.',
+            ),
+            const SizedBox(height: 12),
+            const RescueDemoNote(
+              'Mô phỏng · Chưa xử lý giao dịch hoặc gửi dữ liệu thật',
+            ),
             // Mechanic Portrait Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x05000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
+            RescuePanel(
+              padding: 16,
               child: Column(
                 children: [
                   const CircleAvatar(
@@ -178,7 +177,7 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
-                      'Cảm ơn bạn đã gửi đánh giá! Điểm uy tín của thợ đã được cập nhật.',
+                      'Đã hoàn tất đánh giá minh họa. Dữ liệu chưa được gửi lên hệ thống.',
                     ),
                   ),
                 );

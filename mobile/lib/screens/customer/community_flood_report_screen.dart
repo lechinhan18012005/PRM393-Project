@@ -1,8 +1,10 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/rescue_ui.dart';
 import '../../providers/flood_report_provider.dart';
 
 class CommunityFloodReportScreen extends StatefulWidget {
@@ -21,7 +23,7 @@ class _CommunityFloodReportScreenState
   );
   final _noteController = TextEditingController();
   final List<String> _attachedPhotos = [
-    'https://res.cloudinary.com/demo/image/upload/v1/floodrescue/flood_sample_01.jpg'
+    'https://res.cloudinary.com/demo/image/upload/v1/floodrescue/flood_sample_01.jpg',
   ];
 
   @override
@@ -72,7 +74,7 @@ class _CommunityFloodReportScreenState
       appBar: AppBar(
         title: const Text(
           'Báo ngập',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -82,26 +84,10 @@ class _CommunityFloodReportScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Warning Banner
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info, color: Colors.blue, size: 24),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Chia sẻ vị trí và mực nước để cảnh báo cộng đồng và các đội cứu hộ.',
-                      style: TextStyle(fontSize: 11, color: Colors.blue),
-                    ),
-                  ),
-                ],
-              ),
+            const RescueIntro(
+              eyebrow: 'CỘNG ĐỒNG ĐỒNG HÀNH',
+              title: 'Chia sẻ điểm ngập',
+              description: 'Cung cấp địa chỉ và mực nước để hỗ trợ cộng đồng theo dõi đường đi.',
             ),
             const SizedBox(height: 16),
 
@@ -126,7 +112,8 @@ class _CommunityFloodReportScreenState
                   icon: const Icon(Icons.my_location, color: Colors.blue),
                   onPressed: () {
                     setState(() {
-                      _addressController.text = 'Đường Mễ Cốc, Phường 15, Quận 8';
+                      _addressController.text =
+                          'Đường Mễ Cốc, Phường 15, Quận 8';
                     });
                   },
                 ),
@@ -151,7 +138,12 @@ class _CommunityFloodReportScreenState
             const SizedBox(height: 8),
             Row(
               children: [
-                _buildDepthOption(1, '20cm', 'Ngập mắt cá chân', Colors.amber.shade700),
+                _buildDepthOption(
+                  1,
+                  '20cm',
+                  'Ngập mắt cá chân',
+                  Colors.amber.shade700,
+                ),
                 const SizedBox(width: 8),
                 _buildDepthOption(2, '40cm', 'Ngập nửa bánh xe', Colors.orange),
                 const SizedBox(width: 8),
@@ -212,21 +204,25 @@ class _CommunityFloodReportScreenState
                 onPressed: () async {
                   if (_addressController.text.trim().isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Vui lòng nhập địa chỉ điểm ngập!')),
+                      const SnackBar(
+                        content: Text('Vui lòng nhập địa chỉ điểm ngập!'),
+                      ),
                     );
                     return;
                   }
 
-                  final success = await context.read<FloodReportProvider>().submitFloodReport(
-                    latitude: 10.7420 + (0.005 * (_depthLevel)),
-                    longitude: 106.7020 + (0.005 * (_depthLevel)),
-                    address: _addressController.text.trim(),
-                    waterDepthLevel: _getDepthEnum(),
-                    description: _noteController.text.trim().isNotEmpty
-                        ? _noteController.text.trim()
-                        : 'Triều cường dâng nhanh gây cản trở lưu thông xe máy.',
-                    imageUrls: _attachedPhotos.join(','),
-                  );
+                  final success = await context
+                      .read<FloodReportProvider>()
+                      .submitFloodReport(
+                        latitude: 10.7420 + (0.005 * (_depthLevel)),
+                        longitude: 106.7020 + (0.005 * (_depthLevel)),
+                        address: _addressController.text.trim(),
+                        waterDepthLevel: _getDepthEnum(),
+                        description: _noteController.text.trim().isNotEmpty
+                            ? _noteController.text.trim()
+                            : 'Triều cường dâng nhanh gây cản trở lưu thông xe máy.',
+                        imageUrls: _attachedPhotos.join(','),
+                      );
 
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(

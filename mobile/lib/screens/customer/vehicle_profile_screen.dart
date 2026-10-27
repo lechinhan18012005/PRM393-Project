@@ -1,221 +1,172 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../core/widgets/logout_dialog.dart';
+import '../../core/widgets/rescue_ui.dart';
+import 'customer_demo_data.dart';
 
-class VehicleProfileScreen extends StatelessWidget {
-  const VehicleProfileScreen({super.key});
+class VehicleProfileScreen extends StatefulWidget {
+  const VehicleProfileScreen({
+    super.key,
+    this.selectedVehicle = 0,
+    this.onSelectVehicle,
+  });
+  final int selectedVehicle;
+  final ValueChanged<int>? onSelectVehicle;
+  @override
+  State<VehicleProfileScreen> createState() => _VehicleProfileScreenState();
+}
+
+class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
+  late int _selected;
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.selectedVehicle;
+  }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: const Text(
-          'Xe của tôi',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            key: const Key('vehicle-profile-logout-btn'),
-            icon: const Icon(Icons.logout, color: AppColors.error),
-            tooltip: 'Đăng xuất',
-            onPressed: () => showLogoutConfirmationDialog(context),
-          ),
-        ],
+  void didUpdateWidget(covariant VehicleProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedVehicle != widget.selectedVehicle) {
+      _selected = widget.selectedVehicle;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.background,
+    appBar: AppBar(
+      title: const Text(
+        'Xe của tôi',
+        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    ),
+    body: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
           children: [
-            const Text(
-              'DANH SÁCH XE MÁY ĐÃ ĐĂNG KÝ (1 KHÁCH - N XE)',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppColors.outline,
+            RescueIntro(
+              eyebrow: 'PHƯƠNG TIỆN CỦA BẠN',
+              title: 'Sẵn sàng cho hành trình',
+              description:
+                  'Chọn phương tiện để điền nhanh thông tin khi cần hỗ trợ.',
+              trailing: RescueLabel(
+                '${customerDemoVehicles.length} xe minh họa',
+                color: const Color(0xFFB9CEDB),
               ),
             ),
-            const SizedBox(height: 10),
-
-            // Bike 1: Default SH
-            _buildBikeCard(
-              brand: 'Honda SH 150i ABS',
-              plate: '59-P1 999.88',
-              type: 'Xe Tay Ga Cao Cấp',
-              airIntakeHeight: 'Cổ hút gió: 45cm (Dễ ngập bô)',
-              isDefault: true,
-            ),
-            const SizedBox(height: 12),
-
-            // Bike 2: Exciter
-            _buildBikeCard(
-              brand: 'Yamaha Exciter 155 VVA',
-              plate: '59-N2 123.45',
-              type: 'Xe Côn Tay Thể Thao',
-              airIntakeHeight: 'Cổ hút gió: 55cm (Gầm cao)',
-              isDefault: false,
-            ),
-            const SizedBox(height: 12),
-
-            // Bike 3: Wave Alpha
-            _buildBikeCard(
-              brand: 'Honda Wave Alpha 110',
-              plate: '59-S1 678.90',
-              type: 'Xe Số Tiết Kiệm',
-              airIntakeHeight: 'Cổ hút gió: 40cm (Chế hòa khí)',
-              isDefault: false,
-            ),
-            const SizedBox(height: 24),
-
-            OutlinedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Mở form đăng ký thêm xe máy mới'),
+            const RescueSection('Danh sách xe'),
+            const RescueDemoNote('Dữ liệu mẫu · Chưa lưu xe lên hệ thống'),
+            ...customerDemoVehicles.indexed.map((entry) {
+              final v = entry.$2;
+              final selected = entry.$1 == _selected;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: RescuePanel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? AppColors.primaryContainer
+                                  : AppColors.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.two_wheeler,
+                              color: selected
+                                  ? AppColors.primary
+                                  : AppColors.secondary,
+                              size: 25,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  v.name,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  v.type,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.secondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          RescueLabel(v.plate, color: AppColors.secondary),
+                          if (selected) const RescueLabel('Đang chọn'),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        v.clearance,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          key: ValueKey('select-vehicle-${entry.$1}'),
+                          onPressed: selected
+                              ? null
+                              : () {
+                                  setState(() => _selected = entry.$1);
+                                  widget.onSelectVehicle?.call(entry.$1);
+                                },
+                          icon: Icon(
+                            selected
+                                ? Icons.check_circle_outline
+                                : Icons.touch_app_outlined,
+                            size: 17,
+                          ),
+                          label: Text(
+                            selected ? 'Xe đang chọn' : 'Dùng xe này',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              },
-              icon: const Icon(Icons.add, color: AppColors.primaryOrange),
-              label: const Text(
-                '+ Thêm Xe Máy Mới',
-                style: TextStyle(
-                  color: AppColors.primaryOrange,
-                  fontWeight: FontWeight.bold,
                 ),
-              ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.tonalIcon(
-              key: const Key('logout-button-vehicle-profile'),
-              onPressed: () => showLogoutConfirmationDialog(context),
-              icon: const Icon(Icons.logout, color: AppColors.error),
-              label: const Text(
-                'Đăng xuất tài khoản',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.error.withValues(alpha: 0.1),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+              );
+            }),
+            const SizedBox(height: 4),
+            const RescuePanel(
+              child: RescueInfo(
+                icon: Icons.info_outline,
+                title: 'Quản lý phương tiện',
+                value: 'Lựa chọn chỉ áp dụng trong phiên hiện tại. Chức năng thêm, sửa và đồng bộ xe đang được phát triển.',
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildBikeCard({
-    required String brand,
-    required String plate,
-    required String type,
-    required String airIntakeHeight,
-    required bool isDefault,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDefault ? AppColors.primaryOrange : Colors.grey.shade300,
-          width: isDefault ? 1.5 : 1,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x05000000),
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.spaceBetween,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  const Icon(
-                    Icons.two_wheeler,
-                    color: AppColors.primaryOrange,
-                    size: 26,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    brand,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-              if (isDefault)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryOrange,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text(
-                    'Mặc định',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Biển số: $plate • Loại: $type',
-            style: const TextStyle(fontSize: 12, color: AppColors.secondary),
-          ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              const Icon(Icons.water, size: 14, color: Colors.blue),
-              const SizedBox(width: 4),
-              Text(
-                airIntakeHeight,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Colors.blue,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
 }

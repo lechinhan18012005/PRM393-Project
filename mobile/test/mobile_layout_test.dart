@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile/providers/auth_provider.dart';
 import 'package:mobile/providers/flood_report_provider.dart';
-import 'package:mobile/providers/garage_provider.dart';
 import 'package:mobile/providers/mechanic_provider.dart';
 import 'package:mobile/core/theme/app_theme.dart';
 import 'package:mobile/screens/customer/community_flood_report_screen.dart';
@@ -24,12 +23,6 @@ import 'package:mobile/screens/mechanic/mechanic_shift_screen.dart';
 import 'package:mobile/screens/mechanic/quotation_builder_screen.dart';
 import 'package:mobile/screens/mechanic/repair_execution_screen.dart';
 import 'package:mobile/screens/mechanic/route_navigation_screen.dart';
-import 'package:mobile/screens/garage/batch_transport_manage_screen.dart';
-import 'package:mobile/screens/garage/branch_management_screen.dart';
-import 'package:mobile/screens/garage/garage_revenue_screen.dart';
-import 'package:mobile/screens/garage/garage_wallet_payout_screen.dart';
-import 'package:mobile/screens/garage/team_allocation_screen.dart';
-import 'package:mobile/screens/home/garage_home_screen.dart';
 import 'package:mobile/screens/home/mechanic_home_screen.dart';
 import 'package:mobile/screens/auth/login_screen.dart';
 import 'package:mobile/screens/auth/register_screen.dart';
@@ -55,12 +48,6 @@ void main() {
     'QuotationBuilderScreen': const QuotationBuilderScreen(),
     'RepairExecutionScreen': const RepairExecutionScreen(),
     'RouteNavigationScreen': const RouteNavigationScreen(),
-    'BatchTransportManageScreen': const BatchTransportManageScreen(),
-    'BranchManagementScreen': const BranchManagementScreen(),
-    'GarageRevenueScreen': const GarageRevenueScreen(),
-    'GarageWalletPayoutScreen': const GarageWalletPayoutScreen(),
-    'TeamAllocationScreen': const TeamAllocationScreen(),
-    'GarageHomeScreen': const GarageHomeScreen(),
     'MechanicHomeScreen': const MechanicHomeScreen(),
     'LoginScreen': const LoginScreen(),
     'RegisterScreen': const RegisterScreen(),
@@ -80,7 +67,6 @@ void main() {
         MultiProvider(
           providers: [
             ChangeNotifierProvider(create: (_) => AuthProvider()),
-            ChangeNotifierProvider(create: (_) => GarageProvider()),
             ChangeNotifierProvider(create: (_) => MechanicProvider()),
             ChangeNotifierProvider(create: (_) => FloodReportProvider()),
           ],

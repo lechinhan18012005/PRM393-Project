@@ -17,3 +17,11 @@ cloudinary:
   api-key: demo
   api-secret: demo
 
+payos:
+  client-id: test_payos_client_id
+  api-key: test_payos_api_key
+  checksum-key: 0cd5516e4494a92daf356b2bc8edfe4c31fc9db635fda074cb262be43f67964e
+  endpoint: https://api-merchant.payos.vn
+  return-url: http://localhost:8080/api/v1/payments/payos/return
+  cancel-url: http://localhost:8080/api/v1/payments/payos/return?cancel=true
+  simulation-enabled: true

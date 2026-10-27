@@ -4,6 +4,11 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { AuthProvider, DEMO_MODE, useAuth } from './context/AuthContext';
 import { canAccessModule, canAccessScreen, screenModule } from './permissions';
+import { GarageAccessGate } from './components/views/GarageAccessGate';
+import { GarageManagementView } from './components/views/GarageManagementView';
+import { StaffAccountsView } from './components/views/StaffAccountsView';
+import { InvitationActivationView } from './components/views/InvitationActivationView';
+import { GarageOperationsView } from './components/views/GarageOperationsView';
 import { LoginView } from './components/views/LoginView';
 import { RegisterView } from './components/views/RegisterView';
 
@@ -44,7 +49,7 @@ interface ToastItem {
 
 function MainDashboard() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'activate'>('login');
 
   const [currentModule, setCurrentModule] = useState<ModuleType>('admin');
   const [currentScreen, setCurrentScreen] = useState<ScreenId>('payos-reconciliation');
@@ -111,14 +116,22 @@ function MainDashboard() {
   }
 
   if (!isAuthenticated) {
+    if (authMode === 'activate') return <InvitationActivationView onBack={() => setAuthMode('login')} />;
     if (authMode === 'register') {
       return <RegisterView onSwitchToLogin={() => setAuthMode('login')} />;
     }
-    return <LoginView onSwitchToRegister={() => setAuthMode('register')} />;
+    return <LoginView onSwitchToRegister={() => setAuthMode('register')} onActivate={() => setAuthMode('activate')} />;
   }
 
   if (!user || !canAccessModule(user.role, currentModule)) {
-    return <div className="min-h-screen p-8 bg-slate-950 text-white">Tài khoản này chưa có quyền truy cập web portal. Vui lòng dùng ứng dụng mobile hoặc liên hệ quản trị viên. <button className="underline ml-2" onClick={logout}>Đăng xuất</button></div>;
+    return (
+      <div className="min-h-screen p-8 bg-slate-950 text-white">
+        Tài khoản này chưa có quyền truy cập web portal. Vui lòng dùng ứng dụng mobile hoặc liên hệ quản trị viên.{' '}
+        <button className="underline ml-2" onClick={logout}>
+          Đăng xuất
+        </button>
+      </div>
+    );
   }
 
   const urgentAlerts = [
@@ -145,7 +158,7 @@ function MainDashboard() {
     }
   ];
 
-  return (
+  const dashboard = (
     <div className="min-h-screen bg-surface font-body-md text-on-surface flex flex-col antialiased selection:bg-primary-container selection:text-on-primary-container">
       {/* Top Application Header */}
       <Header
@@ -168,14 +181,16 @@ function MainDashboard() {
 
         {/* Primary Content View Area */}
         <main className="app-main">
+          {currentScreen === 'staff-accounts' && user.role === 'ADMIN' && <StaffAccountsView />}
+          {currentScreen === 'garage-team' && user.role === 'GARAGE_OWNER' && <GarageManagementView />}
+          {currentScreen === 'garage-finance' && <GarageOperationsView mode="finance" />}
+          {currentScreen === 'garage-transport' && <GarageOperationsView mode="transport" />}
           {/* Module A Views */}
           {currentScreen === 'overview' && (
             <OverviewGMVView onSelectScreen={handleSelectScreen} onShowToast={showToast} />
           )}
 
-          {currentScreen === 'commission-settings' && (
-            <CommissionSettingsView onShowToast={showToast} />
-          )}
+          {currentScreen === 'commission-settings' && <CommissionSettingsView onShowToast={showToast} />}
 
           {currentScreen === 'payos-reconciliation' && (
             <PayOSReconciliationView
@@ -185,13 +200,9 @@ function MainDashboard() {
             />
           )}
 
-          {currentScreen === 'payouts' && (
-            <PayoutsView payouts={payouts} onShowToast={showToast} />
-          )}
+          {currentScreen === 'payouts' && <PayoutsView payouts={payouts} onShowToast={showToast} />}
 
-          {currentScreen === 'refunds' && (
-            <RefundsView disputes={disputes} onShowToast={showToast} />
-          )}
+          {currentScreen === 'refunds' && <RefundsView disputes={disputes} onShowToast={showToast} />}
 
           {currentScreen === 'reports' && (
             <FinancialReportsView onSelectScreen={handleSelectScreen} onShowToast={showToast} />
@@ -206,16 +217,10 @@ function MainDashboard() {
             <GarageVerificationView applicants={applicants} onShowToast={showToast} />
           )}
 
-          {currentScreen === 'moderation' && (
-            <GISFloodMapView floodPoints={floodPoints} onShowToast={showToast} />
-          )}
+          {currentScreen === 'moderation' && <GISFloodMapView floodPoints={floodPoints} onShowToast={showToast} />}
 
           {currentScreen === 'disputes' && (
-            <DisputeFraudView
-              disputes={disputes}
-              onSelectScreen={handleSelectScreen}
-              onShowToast={showToast}
-            />
+            <DisputeFraudView disputes={disputes} onSelectScreen={handleSelectScreen} onShowToast={showToast} />
           )}
 
           {currentScreen === 'monitoring' && (
@@ -262,8 +267,8 @@ function MainDashboard() {
                         alt.level === 'CRITICAL'
                           ? 'bg-red-100 text-red-800'
                           : alt.level === 'WARNING'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-blue-100 text-blue-800'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-blue-100 text-blue-800'
                       }`}
                     >
                       {alt.level}
@@ -305,10 +310,10 @@ function MainDashboard() {
               toast.type === 'success'
                 ? 'bg-surface-container-lowest border-emerald-500/30 text-on-surface'
                 : toast.type === 'error'
-                ? 'bg-surface-container-lowest border-red-500/30 text-on-surface'
-                : toast.type === 'warning'
-                ? 'bg-surface-container-lowest border-amber-500/30 text-on-surface'
-                : 'bg-surface-container-lowest border-blue-500/30 text-on-surface'
+                  ? 'bg-surface-container-lowest border-red-500/30 text-on-surface'
+                  : toast.type === 'warning'
+                    ? 'bg-surface-container-lowest border-amber-500/30 text-on-surface'
+                    : 'bg-surface-container-lowest border-blue-500/30 text-on-surface'
             }`}
           >
             <span
@@ -316,19 +321,19 @@ function MainDashboard() {
                 toast.type === 'success'
                   ? 'text-emerald-600'
                   : toast.type === 'error'
-                  ? 'text-red-600'
-                  : toast.type === 'warning'
-                  ? 'text-amber-600'
-                  : 'text-blue-600'
+                    ? 'text-red-600'
+                    : toast.type === 'warning'
+                      ? 'text-amber-600'
+                      : 'text-blue-600'
               }`}
             >
               {toast.type === 'success'
                 ? 'check_circle'
                 : toast.type === 'error'
-                ? 'error'
-                : toast.type === 'warning'
-                ? 'warning'
-                : 'info'}
+                  ? 'error'
+                  : toast.type === 'warning'
+                    ? 'warning'
+                    : 'info'}
             </span>
             <div className="flex-1">
               <h5 className="font-label-lg text-label-lg font-bold leading-snug">{toast.title}</h5>
@@ -338,6 +343,11 @@ function MainDashboard() {
         ))}
       </div>
     </div>
+  );
+  return user.role === 'GARAGE_OWNER' ? (
+    <GarageAccessGate screen={currentScreen}>{dashboard}</GarageAccessGate>
+  ) : (
+    dashboard
   );
 }
 

@@ -1,6 +1,7 @@
 package com.prm393.floodrescue.features.mechanic.dto;
 
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStatus;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class MechanicStaffResponse {
+    private boolean active;
     private Long id;
     private Long userId;
     private String username;
@@ -31,5 +33,8 @@ public class MechanicStaffResponse {
     private String shiftName;
     private Double ratingAvg;
     private String speciality;
+    private boolean hasCrossingCapability;
+    private LocalDateTime lastHeartbeatAt;
+    private LocalDateTime lastGpsUpdatedAt;
     private LocalDateTime createdAt;
 }

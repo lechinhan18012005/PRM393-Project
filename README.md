@@ -1,6 +1,8 @@
 # Motorbike Flood Rescue Platform (PRM393)
 
-Ứng dụng gồm ba phần: `backend` (Spring Boot), `web` (React/Vite) và `mobile` (Flutter). Backend hiện triển khai **xác thực và tài khoản**. Các màn hình cứu hộ, điều phối, tài chính và PayOS trên web/mobile là **giao diện demo dùng dữ liệu mẫu**, chưa có API nghiệp vụ hoặc tích hợp thanh toán thật. Không dùng các màn hình này để xử lý giao dịch thật.
+Ứng dụng gồm `backend` (Spring Boot), `web` (React/Vite) và `mobile` (Flutter). Backend hỗ trợ xác thực, hồ sơ gara/chờ duyệt, chi nhánh, dịch vụ, đội thợ và báo ngập. Web quản lý Admin/Staff/Chủ gara; Mobile dành cho Khách hàng/Thợ cứu hộ. Các nghiệp vụ thanh toán, doanh thu và chuyến chở xe còn là demo, chưa có giao dịch thật.
+
+Xem [thiết kế phân quyền và hướng dẫn cấp tài khoản](docs/account-access.md).
 
 ## Cấu trúc
 
@@ -12,7 +14,7 @@ mobile/   Flutter app, auth API client, demo screens
 
 ## Chạy cục bộ
 
-Yêu cầu JDK 21, Maven, Node.js và Flutter SDK phù hợp với `mobile/pubspec.yaml`.
+Yêu cầu JDK 17 trở lên, Maven, Node.js và Flutter SDK phù hợp với `mobile/pubspec.yaml`.
 
 ```powershell
 cd backend
@@ -31,7 +33,7 @@ Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Web tại `http://localhost:3000`. Khi `VITE_DEMO_MODE=false`, web chỉ cho đăng nhập và thông báo các phân hệ nghiệp vụ chưa sẵn sàng. Nút đăng nhập nhanh chỉ hiện trong chế độ demo và vẫn xác thực với backend; không có đăng nhập giả khi backend không chạy.
+Web tại `http://localhost:3000`. Các màn hình quản lý tài khoản, hồ sơ gara, chi nhánh, đội thợ và bảng giá gọi API thật ở cả hai chế độ. Doanh thu/ví và chuyến chở xe chỉ hiển thị dữ liệu mẫu khi bật demo. Nút đăng nhập nhanh chỉ hiện trong chế độ demo và vẫn xác thực với backend; không có đăng nhập giả khi backend không chạy.
 
 ```powershell
 cd mobile
@@ -43,9 +45,11 @@ Mobile có nhãn `UI DEMO` trên giao diện. Nút đăng nhập nhanh chỉ hi�
 
 ## Tài khoản và phân quyền
 
-Đăng ký công khai chỉ tạo tài khoản `CUSTOMER`, kể cả khi request cố gửi vai trò khác. Tài khoản `ADMIN`, `STAFF`, `GARAGE_OWNER`, `FIELD_MECHANIC` chỉ được cấp qua quy trình quản trị riêng. Quy trình cấp tài khoản đối tác/nhân viên chưa được triển khai.
-
-Web chỉ hiển thị phân hệ đúng vai trò: `ADMIN` quản trị tài chính, `STAFF` vận hành, `GARAGE_OWNER` quản trị gara. `CUSTOMER` và `FIELD_MECHANIC` dùng mobile. Mọi API nghiệp vụ bổ sung sau này phải kiểm tra quyền ở backend, không dựa vào việc ẩn nút trên web.
+- Mobile: chỉ `CUSTOMER` và `FIELD_MECHANIC`; đăng ký công khai chỉ tạo `CUSTOMER`.
+- Web: chỉ `ADMIN`, `STAFF`, `GARAGE_OWNER`. Chủ gara đăng ký công khai và nộp giấy phép/CCCD; chỉ được vận hành sau khi Staff/Admin duyệt. Gara chờ duyệt/từ chối chỉ được xem và bổ sung hồ sơ; gara đình chỉ bị chặn vận hành.
+- Admin mời Staff; Chủ gara đã duyệt mời Thợ gắn với chi nhánh. Mã mời có hiệu lực 48 giờ, dùng một lần; người nhận tự đặt mật khẩu khi kích hoạt. Mã được chia sẻ thủ công, chưa tự gửi email/SMS.
+- Backend kiểm tra vai trò, trạng thái duyệt và quyền sở hữu dữ liệu. Tài khoản bị khóa không được tiếp tục dùng access token cũ.
+- Các chức năng của Chủ gara đã chuyển sang Web, không còn màn hình Chủ gara trên Mobile.
 
 ## Cấu hình backend
 

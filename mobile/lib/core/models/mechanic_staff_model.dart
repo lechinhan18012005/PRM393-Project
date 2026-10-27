@@ -17,6 +17,8 @@ class MechanicStaffModel {
   final String? shiftName;
   final double ratingAvg;
   final String? speciality;
+  final String? lastHeartbeatAt;
+  final String? lastGpsUpdatedAt;
   final String? createdAt;
 
   MechanicStaffModel({
@@ -38,6 +40,8 @@ class MechanicStaffModel {
     this.shiftName,
     this.ratingAvg = 5.0,
     this.speciality,
+    this.lastHeartbeatAt,
+    this.lastGpsUpdatedAt,
     this.createdAt,
   });
 
@@ -64,6 +68,8 @@ class MechanicStaffModel {
       shiftName: json['shiftName'],
       ratingAvg: (json['ratingAvg'] as num?)?.toDouble() ?? 5.0,
       speciality: json['speciality'],
+      lastHeartbeatAt: json['lastHeartbeatAt']?.toString(),
+      lastGpsUpdatedAt: json['lastGpsUpdatedAt']?.toString(),
       createdAt: json['createdAt']?.toString(),
     );
   }
@@ -88,6 +94,8 @@ class MechanicStaffModel {
       'shiftName': shiftName,
       'ratingAvg': ratingAvg,
       'speciality': speciality,
+      'lastHeartbeatAt': lastHeartbeatAt,
+      'lastGpsUpdatedAt': lastGpsUpdatedAt,
       'createdAt': createdAt,
     };
   }

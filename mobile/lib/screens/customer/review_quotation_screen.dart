@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/rescue_ui.dart';
 import 'vietqr_payment_screen.dart';
 
 class ReviewQuotationScreen extends StatelessWidget {
@@ -13,7 +14,7 @@ class ReviewQuotationScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'Duyệt báo giá',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -23,20 +24,18 @@ class ReviewQuotationScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const RescueIntro(
+              eyebrow: 'CHI PHÍ DỊCH VỤ',
+              title: 'Kiểm tra trước khi duyệt',
+              description: 'Xem từng hạng mục và tổng chi phí cứu hộ mẫu.',
+            ),
+            const SizedBox(height: 12),
+            const RescueDemoNote(
+              'Mô phỏng · Chưa xử lý giao dịch hoặc gửi dữ liệu thật',
+            ),
             // Quotation Header Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x05000000),
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
+            RescuePanel(
+              padding: 16,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -97,19 +96,8 @@ class ReviewQuotationScreen extends StatelessWidget {
             const SizedBox(height: 8),
 
             // Itemized List Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x05000000),
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
+            RescuePanel(
+              padding: 16,
               child: Column(
                 children: [
                   _buildQuoteItem(

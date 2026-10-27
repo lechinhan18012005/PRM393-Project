@@ -127,7 +127,7 @@ SET password = EXCLUDED.password,
 
 -- F. THỢ CƠ ĐỘNG PHỤ (Phục vụ phân bổ chi nhánh & trực chiến)
 INSERT INTO users (username, email, phone, password, full_name, avatar_url, role, is_active, created_at, updated_at)
-VALUES 
+VALUES
 ('mechanic_02', 'mechanic2@floodrescue.vn', '0900000012', '$2a$10$ekuNnyClOT9tMM0t810owOoF4RKXaIl8I.d6QfmpS5jBZcmcPyhym', 'Nguyễn Văn Cường', 'https://ui-avatars.com/api/?name=Nguyen+Cuong&background=random', 'FIELD_MECHANIC', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('mechanic_03', 'mechanic3@floodrescue.vn', '0900000013', '$2a$10$ekuNnyClOT9tMM0t810owOoF4RKXaIl8I.d6QfmpS5jBZcmcPyhym', 'Đặng Hữu Tài', 'https://ui-avatars.com/api/?name=Dang+Tai&background=random', 'FIELD_MECHANIC', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (username) DO NOTHING;

@@ -16,7 +16,11 @@ export type ScreenId =
   | 'monitoring'
   // Module C
   | 'owner-dashboard'
-  | 'services';
+  | 'services'
+  | 'garage-team'
+  | 'garage-finance'
+  | 'garage-transport'
+  | 'staff-accounts';
 
 export interface PayOSTransaction {
   id: string;
@@ -110,7 +114,12 @@ export interface FloodPoint {
   confidenceScore: number;
   coords: { lat: number; lng: number };
   photos: Array<{ url: string; time: string; caption: string }>;
-  recentReports: Array<{ author: string; role: string; text: string; time: string }>;
+  recentReports: Array<{
+    author: string;
+    role: string;
+    text: string;
+    time: string;
+  }>;
 }
 
 export interface DisputeCase {
