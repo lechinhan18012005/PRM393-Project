@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/logout_dialog.dart';
 import 'service_selection_screen.dart';
 import 'community_flood_report_screen.dart';
 import 'flood_map_screen.dart';
@@ -142,6 +143,12 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
             tooltip: 'Khám phá ứng dụng mẫu',
             onPressed: () => _open(const DemoCatalogScreen()),
             icon: const Icon(Icons.apps_rounded),
+          ),
+          IconButton(
+            key: const Key('customer-logout-btn'),
+            tooltip: 'Đăng xuất',
+            icon: const Icon(Icons.logout, color: AppColors.error),
+            onPressed: () => showLogoutConfirmationDialog(context),
           ),
         ],
       ),

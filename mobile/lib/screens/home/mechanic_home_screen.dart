@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/logout_dialog.dart';
 import '../../providers/auth_provider.dart';
-import '../auth/login_screen.dart';
 import '../demo/demo_catalog_screen.dart';
 import '../mechanic/incoming_dispatch_screen.dart';
 import '../mechanic/quotation_builder_screen.dart';
@@ -49,16 +49,10 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> {
             },
           ),
           IconButton(
+            key: const Key('mechanic-logout-btn'),
             icon: const Icon(Icons.logout, color: AppColors.error),
             tooltip: 'Đăng xuất',
-            onPressed: () async {
-              await authProvider.logout();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-              }
-            },
+            onPressed: () => showLogoutConfirmationDialog(context),
           ),
         ],
       ),

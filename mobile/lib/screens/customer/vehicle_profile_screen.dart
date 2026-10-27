@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/logout_dialog.dart';
 
 class VehicleProfileScreen extends StatelessWidget {
   const VehicleProfileScreen({super.key});
@@ -16,6 +17,14 @@ class VehicleProfileScreen extends StatelessWidget {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            key: const Key('vehicle-profile-logout-btn'),
+            icon: const Icon(Icons.logout, color: AppColors.error),
+            tooltip: 'Đăng xuất',
+            onPressed: () => showLogoutConfirmationDialog(context),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -79,6 +88,26 @@ class VehicleProfileScreen extends StatelessWidget {
                 ),
               ),
               style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.tonalIcon(
+              key: const Key('logout-button-vehicle-profile'),
+              onPressed: () => showLogoutConfirmationDialog(context),
+              icon: const Icon(Icons.logout, color: AppColors.error),
+              label: const Text(
+                'Đăng xuất tài khoản',
+                style: TextStyle(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.error.withValues(alpha: 0.1),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/logout_dialog.dart';
 import '../../providers/auth_provider.dart';
-import '../auth/login_screen.dart';
 import '../demo/demo_catalog_screen.dart';
 import '../garage/garage_wallet_payout_screen.dart';
 import '../garage/branch_management_screen.dart';
@@ -50,16 +50,10 @@ class _GarageHomeScreenState extends State<GarageHomeScreen> {
             },
           ),
           IconButton(
+            key: const Key('garage-logout-btn'),
             icon: const Icon(Icons.logout, color: AppColors.error),
             tooltip: 'Đăng xuất',
-            onPressed: () async {
-              await authProvider.logout();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-              }
-            },
+            onPressed: () => showLogoutConfirmationDialog(context),
           ),
         ],
       ),
