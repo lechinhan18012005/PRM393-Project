@@ -52,6 +52,12 @@ public class GarageService {
                         .phone(request.getPhone() != null ? request.getPhone() : user.getPhone())
                         .businessLicenseUrl(request.getBusinessLicenseUrl())
                         .idCardUrl(request.getIdCardUrl())
+                        .businessLicenseStorageKey(request.getBusinessLicenseStorageKey())
+                        .idCardStorageKey(request.getIdCardStorageKey())
+                        .idCardNumber(request.getIdCardNumber())
+                        .nd13Consent(request.getNd13Consent() != null ? request.getNd13Consent() : true)
+                        .nd13ConsentedAt(java.time.LocalDateTime.now())
+                        .idCardPurged(false)
                         .status(GarageStatus.PENDING)
                         .walletBalance(BigDecimal.ZERO)
                         .build();
@@ -182,6 +188,9 @@ public class GarageService {
                 && (request.getNote() == null || request.getNote().isBlank()))
             throw new BadRequestException("Vui lòng ghi rõ lý do từ chối hoặc đình chỉ");
         garage.setStatus(request.getStatus());
+        if (request.getStatus() == GarageStatus.APPROVED) {
+            garage.setKycRetentionUntil(java.time.LocalDateTime.now().plusDays(60));
+        }
         if (request.getNote() != null) {
             garage.setRejectionReason(request.getNote());
         }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/logout_dialog.dart';
 
 // Customer Screens
 import '../customer/stitch_hydro_rescue_screen.dart';
@@ -41,6 +42,14 @@ class DemoCatalogScreen extends StatelessWidget {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            key: const Key('demo-catalog-logout-btn'),
+            icon: const Icon(Icons.logout, color: AppColors.error),
+            tooltip: 'Đăng xuất',
+            onPressed: () => showLogoutConfirmationDialog(context),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

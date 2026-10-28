@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { ModuleType, ScreenId } from './types';
+import { Role } from './types/auth';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { AuthProvider, DEMO_MODE, useAuth } from './context/AuthContext';
-import { canAccessModule, canAccessScreen, screenModule } from './permissions';
+import { canAccessModule, canAccessScreen, roleModules, screenModule } from './permissions';
 import { GarageAccessGate } from './components/views/GarageAccessGate';
 import { GarageManagementView } from './components/views/GarageManagementView';
 import { StaffAccountsView } from './components/views/StaffAccountsView';
@@ -47,31 +49,27 @@ interface ToastItem {
   type: 'info' | 'success' | 'warning' | 'error';
 }
 
+const getDefaultPath = (role: Role): string => {
+  switch (role) {
+    case 'ADMIN':
+      return '/admin/payos-reconciliation';
+    case 'STAFF':
+      return '/staff/dashboard';
+    case 'GARAGE_OWNER':
+      return '/owner/owner-dashboard';
+    default:
+      return '/login';
+  }
+};
+
 function MainDashboard() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'activate'>('login');
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const [currentModule, setCurrentModule] = useState<ModuleType>('admin');
-  const [currentScreen, setCurrentScreen] = useState<ScreenId>('payos-reconciliation');
   const [searchQuery, setSearchQuery] = useState('');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
-
-  // Sync module with user role upon login
-  useEffect(() => {
-    if (user) {
-      if (user.role === 'ADMIN') {
-        setCurrentModule('admin');
-        setCurrentScreen('payos-reconciliation');
-      } else if (user.role === 'STAFF') {
-        setCurrentModule('staff');
-        setCurrentScreen('dashboard');
-      } else if (user.role === 'GARAGE_OWNER') {
-        setCurrentModule('owner');
-        setCurrentScreen('owner-dashboard');
-      }
-    }
-  }, [user]);
 
   // Core Datasets
   const [transactions] = useState(INITIAL_PAYOS_TRANSACTIONS);
@@ -92,38 +90,72 @@ function MainDashboard() {
     }, 4500);
   };
 
+  // Derive currentScreen and currentModule from URL pathname
+  const pathSegments = location.pathname.split('/').filter(Boolean);
+  const urlModule = pathSegments[0] as ModuleType | undefined;
+  const urlScreen = pathSegments[1] as ScreenId | undefined;
+
+  let currentScreen: ScreenId = 'payos-reconciliation';
+  if (urlScreen && urlScreen in screenModule) {
+    currentScreen = urlScreen;
+  } else if (urlModule && (urlModule as unknown as ScreenId) in screenModule) {
+    currentScreen = urlModule as unknown as ScreenId;
+  } else if (user?.role === 'STAFF') {
+    currentScreen = 'dashboard';
+  } else if (user?.role === 'GARAGE_OWNER') {
+    currentScreen = 'owner-dashboard';
+  }
+
+  const currentModule: ModuleType =
+    screenModule[currentScreen] ||
+    urlModule ||
+    (user?.role === 'STAFF' ? 'staff' : user?.role === 'GARAGE_OWNER' ? 'owner' : 'admin');
+
   const handleSelectModule = (mod: ModuleType) => {
     if (!user || !canAccessModule(user.role, mod)) return;
-    setCurrentModule(mod);
     if (mod === 'admin') {
-      setCurrentScreen('overview');
+      navigate('/admin/overview');
     } else if (mod === 'staff') {
-      setCurrentScreen('dashboard');
+      navigate('/staff/dashboard');
     } else if (mod === 'owner') {
-      setCurrentScreen('owner-dashboard');
+      navigate('/owner/owner-dashboard');
     }
   };
 
   const handleSelectScreen = (screen: ScreenId) => {
     if (!user || !canAccessScreen(user.role, screen)) return;
-    setCurrentScreen(screen);
-    setCurrentModule(screenModule[screen]);
+    const targetModule = screenModule[screen];
+    navigate(`/${targetModule}/${screen}`);
   };
 
-  // If not authenticated, show Login or Register view
+  // Loading state
   if (isLoading) {
     return <div className="min-h-screen p-8 bg-slate-950 text-white">Đang kiểm tra phiên đăng nhập...</div>;
   }
 
+  // Unauthenticated routes
   if (!isAuthenticated) {
-    if (authMode === 'activate') return <InvitationActivationView onBack={() => setAuthMode('login')} />;
-    if (authMode === 'register') {
-      return <RegisterView onSwitchToLogin={() => setAuthMode('login')} />;
-    }
-    return <LoginView onSwitchToRegister={() => setAuthMode('register')} onActivate={() => setAuthMode('activate')} />;
+    return (
+      <Routes>
+        <Route
+          path="/login"
+          element={<LoginView onSwitchToRegister={() => navigate('/register')} onActivate={() => navigate('/activate')} />}
+        />
+        <Route
+          path="/register"
+          element={<RegisterView onSwitchToLogin={() => navigate('/login')} />}
+        />
+        <Route
+          path="/activate"
+          element={<InvitationActivationView onBack={() => navigate('/login')} />}
+        />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
   }
 
-  if (!user || !canAccessModule(user.role, currentModule)) {
+  // Check portal permissions & null user
+  if (!user || !roleModules[user.role] || roleModules[user.role].length === 0) {
     return (
       <div className="min-h-screen p-8 bg-slate-950 text-white">
         Tài khoản này chưa có quyền truy cập web portal. Vui lòng dùng ứng dụng mobile hoặc liên hệ quản trị viên.{' '}
@@ -132,6 +164,15 @@ function MainDashboard() {
         </button>
       </div>
     );
+  }
+
+  // Redirect if authenticated user lands on auth pages
+  if (['/login', '/register', '/activate'].includes(location.pathname)) {
+    return <Navigate to={getDefaultPath(user.role)} replace />;
+  }
+
+  if (!canAccessModule(user.role, currentModule)) {
+    return <Navigate to={getDefaultPath(user.role)} replace />;
   }
 
   const urgentAlerts = [
@@ -181,60 +222,103 @@ function MainDashboard() {
 
         {/* Primary Content View Area */}
         <main className="app-main">
-          {currentScreen === 'staff-accounts' && user.role === 'ADMIN' && <StaffAccountsView />}
-          {currentScreen === 'garage-team' && user.role === 'GARAGE_OWNER' && <GarageManagementView />}
-          {currentScreen === 'garage-finance' && <GarageOperationsView mode="finance" />}
-          {currentScreen === 'garage-transport' && <GarageOperationsView mode="transport" />}
-          {/* Module A Views */}
-          {currentScreen === 'overview' && (
-            <OverviewGMVView onSelectScreen={handleSelectScreen} onShowToast={showToast} />
-          )}
-
-          {currentScreen === 'commission-settings' && <CommissionSettingsView onShowToast={showToast} />}
-
-          {currentScreen === 'payos-reconciliation' && (
-            <PayOSReconciliationView
-              transactions={transactions}
-              onSelectScreen={handleSelectScreen}
-              onShowToast={showToast}
+          <Routes>
+            {/* Module A (Admin) Views */}
+            {user.role === 'ADMIN' && (
+              <Route path="/admin/staff-accounts" element={<StaffAccountsView />} />
+            )}
+            <Route
+              path="/admin/overview"
+              element={<OverviewGMVView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
             />
-          )}
+            <Route
+              path="/admin/commission-settings"
+              element={<CommissionSettingsView onShowToast={showToast} />}
+            />
+            <Route
+              path="/admin/payos-reconciliation"
+              element={
+                <PayOSReconciliationView
+                  transactions={transactions}
+                  onSelectScreen={handleSelectScreen}
+                  onShowToast={showToast}
+                />
+              }
+            />
+            <Route
+              path="/admin/payouts"
+              element={<PayoutsView payouts={payouts} onShowToast={showToast} />}
+            />
+            <Route
+              path="/admin/refunds"
+              element={<RefundsView disputes={disputes} onShowToast={showToast} />}
+            />
+            <Route
+              path="/admin/reports"
+              element={<FinancialReportsView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+            />
 
-          {currentScreen === 'payouts' && <PayoutsView payouts={payouts} onShowToast={showToast} />}
+            {/* Module B (Staff) Views */}
+            <Route
+              path="/staff/dashboard"
+              element={<LiveDispatchDashboardView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+            />
+            <Route
+              path="/staff/verification"
+              element={<GarageVerificationView applicants={applicants} onShowToast={showToast} />}
+            />
+            <Route
+              path="/staff/moderation"
+              element={<GISFloodMapView floodPoints={floodPoints} onShowToast={showToast} />}
+            />
+            <Route
+              path="/staff/disputes"
+              element={<DisputeFraudView disputes={disputes} onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+            />
+            <Route
+              path="/staff/monitoring"
+              element={<SLAMonitoringView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+            />
 
-          {currentScreen === 'refunds' && <RefundsView disputes={disputes} onShowToast={showToast} />}
+            {/* Module C (Garage Owner) Views */}
+            <Route
+              path="/owner/owner-dashboard"
+              element={<GarageOwnerDashboardView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+            />
+            {user.role === 'GARAGE_OWNER' && (
+              <Route path="/owner/garage-team" element={<GarageManagementView />} />
+            )}
+            <Route
+              path="/owner/garage-finance"
+              element={<GarageOperationsView mode="finance" />}
+            />
+            <Route
+              path="/owner/garage-transport"
+              element={<GarageOperationsView mode="transport" />}
+            />
+            <Route
+              path="/owner/services"
+              element={<GarageServicesPricingView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+            />
 
-          {currentScreen === 'reports' && (
-            <FinancialReportsView onSelectScreen={handleSelectScreen} onShowToast={showToast} />
-          )}
+            {/* Module Entry Point Redirects */}
+            <Route path="/admin" element={<Navigate to="/admin/payos-reconciliation" replace />} />
+            <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
+            <Route path="/owner" element={<Navigate to="/owner/owner-dashboard" replace />} />
 
-          {/* Module B Views */}
-          {currentScreen === 'dashboard' && (
-            <LiveDispatchDashboardView onSelectScreen={handleSelectScreen} onShowToast={showToast} />
-          )}
+            {/* Screen ID Direct Aliases */}
+            {Object.entries(screenModule).map(([screen, mod]) => (
+              <Route
+                key={screen}
+                path={`/${screen}`}
+                element={<Navigate to={`/${mod}/${screen}`} replace />}
+              />
+            ))}
 
-          {currentScreen === 'verification' && (
-            <GarageVerificationView applicants={applicants} onShowToast={showToast} />
-          )}
-
-          {currentScreen === 'moderation' && <GISFloodMapView floodPoints={floodPoints} onShowToast={showToast} />}
-
-          {currentScreen === 'disputes' && (
-            <DisputeFraudView disputes={disputes} onSelectScreen={handleSelectScreen} onShowToast={showToast} />
-          )}
-
-          {currentScreen === 'monitoring' && (
-            <SLAMonitoringView onSelectScreen={handleSelectScreen} onShowToast={showToast} />
-          )}
-
-          {/* Module C Views */}
-          {currentScreen === 'owner-dashboard' && (
-            <GarageOwnerDashboardView onSelectScreen={handleSelectScreen} onShowToast={showToast} />
-          )}
-
-          {currentScreen === 'services' && (
-            <GarageServicesPricingView onSelectScreen={handleSelectScreen} onShowToast={showToast} />
-          )}
+            {/* Default and Wildcard Fallbacks */}
+            <Route path="/" element={<Navigate to={getDefaultPath(user.role)} replace />} />
+            <Route path="*" element={<Navigate to={getDefaultPath(user.role)} replace />} />
+          </Routes>
         </main>
       </div>
 
@@ -344,6 +428,7 @@ function MainDashboard() {
       </div>
     </div>
   );
+
   return user.role === 'GARAGE_OWNER' ? (
     <GarageAccessGate screen={currentScreen}>{dashboard}</GarageAccessGate>
   ) : (
@@ -353,8 +438,10 @@ function MainDashboard() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainDashboard />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <MainDashboard />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

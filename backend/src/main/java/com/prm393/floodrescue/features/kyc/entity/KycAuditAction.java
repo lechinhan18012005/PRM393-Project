@@ -1,0 +1,13 @@
+package com.prm393.floodrescue.features.kyc.entity;
+
+public enum KycAuditAction {
+    UPLOAD_DOCUMENT,
+    VIEW_CCCD,
+    VIEW_BUSINESS_LICENSE,
+    DOWNLOAD_DOCUMENT,
+    GENERATE_PRESIGNED_URL,
+    APPROVE_GARAGE_KYC,
+    REJECT_GARAGE_KYC,
+    PURGE_CCCD_EXPIRED,
+    ERASURE_REQUEST_FULFILLED
+}
