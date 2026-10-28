@@ -70,6 +70,8 @@ public class SecurityConfig {
                                                 "/api/v1/payments/payos/webhook",
                                                 "/api/v1/payments/payos/return",
                                                 "/api/v1/upload/**",
+                                                "/api/v1/kyc/upload",
+                                                "/api/v1/kyc/files/view",
                                                 "/ws-rescue/**",
                                                 "/favicon.ico",
                                                 "/error")

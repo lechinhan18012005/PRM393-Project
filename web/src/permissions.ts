@@ -23,11 +23,13 @@ export const screenModule: Record<ScreenId, ModuleType> = {
 
 export const roleModules: Record<Role, ModuleType[]> = {
   ADMIN: ['admin', 'staff'],
+  SUPER_ADMIN: ['admin', 'staff'],
+  KYC_VERIFIER: ['admin', 'staff'],
   STAFF: ['staff'],
   GARAGE_OWNER: ['owner'],
   FIELD_MECHANIC: [],
   CUSTOMER: []
 };
 
-export const canAccessModule = (role: Role, module: ModuleType) => roleModules[role].includes(module);
+export const canAccessModule = (role: Role, module: ModuleType) => roleModules[role]?.includes(module) ?? false;
 export const canAccessScreen = (role: Role, screen: ScreenId) => canAccessModule(role, screenModule[screen]);
