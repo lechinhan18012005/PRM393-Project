@@ -18,6 +18,8 @@ export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
 const DEMO_CREDENTIALS: Record<Role, LoginPayload> = {
   ADMIN: { identifier: 'admin@floodrescue.vn', password: 'Password@123' },
+  SUPER_ADMIN: { identifier: 'admin@floodrescue.vn', password: 'Password@123' },
+  KYC_VERIFIER: { identifier: 'staff@floodrescue.vn', password: 'Password@123' },
   STAFF: { identifier: 'staff@floodrescue.vn', password: 'Password@123' },
   GARAGE_OWNER: { identifier: 'garage@floodrescue.vn', password: 'Password@123' },
   FIELD_MECHANIC: { identifier: 'mechanic@floodrescue.vn', password: 'Password@123' },
@@ -51,26 +53,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
   }, []);
 
+  // isLoading is reserved for restoring the initial session. Login/register views
+  // keep their own submit state so failed requests do not unmount their errors.
   const login = async (payload: LoginPayload) => {
-    setIsLoading(true);
-    try {
-      const data = await authApi.login(payload);
-      setToken(data.accessToken);
-      setUser(data.user);
-    } finally {
-      setIsLoading(false);
-    }
+    const data = await authApi.login(payload);
+    setToken(data.accessToken);
+    setUser(data.user);
   };
 
   const register = async (payload: RegisterPayload) => {
-    setIsLoading(true);
-    try {
-      const data = await authApi.register(payload);
-      setToken(data.accessToken);
-      setUser(data.user);
-    } finally {
-      setIsLoading(false);
-    }
+    const data = await authApi.register(payload);
+    setToken(data.accessToken);
+    setUser(data.user);
   };
 
   const demoLogin = async (role: Role) => {

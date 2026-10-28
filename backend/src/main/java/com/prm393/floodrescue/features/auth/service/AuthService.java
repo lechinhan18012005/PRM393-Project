@@ -4,9 +4,12 @@ import com.prm393.floodrescue.features.auth.dto.AuthResponse;
 import com.prm393.floodrescue.features.auth.dto.LoginRequest;
 import com.prm393.floodrescue.features.auth.dto.RegisterRequest;
 import com.prm393.floodrescue.features.auth.dto.TokenRefreshRequest;
+import com.prm393.floodrescue.features.auth.dto.UpdateProfileRequest;
 import com.prm393.floodrescue.features.auth.dto.UserProfileResponse;
 
 public interface AuthService {
+
+    UserProfileResponse updateCurrentUserProfile(String username, UpdateProfileRequest request);
 
     AuthResponse register(RegisterRequest request);
 

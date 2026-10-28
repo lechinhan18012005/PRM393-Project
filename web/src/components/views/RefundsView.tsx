@@ -1,3 +1,4 @@
+import { ViewGuide } from '../ViewGuide';
 import React, { useState } from 'react';
 import { DisputeCase } from '../../types';
 
@@ -62,12 +63,10 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg">
           <div>
-            <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">
-              Thẩm Định & Xử Lý Hoàn Tiền Giao Dịch Cứu Hộ
-            </h1>
-            <p className="font-body-md text-body-md text-secondary mt-0.5">
+            <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">Hoàn tiền</h1>
+            <ViewGuide><p className="font-body-md text-body-md text-secondary mt-0.5">
               Cơ chế trọng tài tài chính độc lập: Xác minh kết luận giám sát hiện trường, cấn trừ ví gara hoặc kích hoạt quỹ bảo trợ khẩn cấp.
-            </p>
+            </p></ViewGuide>
           </div>
           <div className="flex flex-wrap items-center gap-space-md">
             <div className="flex items-center gap-space-md px-space-lg py-2.5 rounded-lg bg-surface-container-low shadow-sm">

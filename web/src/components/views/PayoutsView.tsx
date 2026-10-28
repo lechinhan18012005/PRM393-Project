@@ -1,25 +1,69 @@
-import React, { useState } from 'react';
+import { ViewGuide } from '../ViewGuide';
+import React, { useEffect, useState } from 'react';
 import { PayoutItem } from '../../types';
+import { financeApi, PayoutRequestBackend } from '../../services/financeApi';
 
 interface PayoutsViewProps {
   payouts: PayoutItem[];
   onShowToast: (title: string, msg: string) => void;
 }
 
+const mapBackendPayoutToItem = (b: PayoutRequestBackend): PayoutItem => ({
+  id: b.requestCode || `PO-${b.id}`,
+  garageName: b.garageName,
+  repName: b.garageOwnerName || 'Chủ Gara',
+  time: b.createdAt ? new Date(b.createdAt).toLocaleString('vi-VN') : 'Vừa xong',
+  bankCode: b.bankCode,
+  bankName: b.bankName || b.bankCode,
+  bankAccount: b.accountNumber,
+  accountHolder: b.accountHolderName,
+  requestedAmount: Number(b.requestedAmount),
+  walletBalance: Number(b.walletBalance),
+  holdbackAmount: 0,
+  availableBalance: Number(b.availableBalance),
+  riskStatus: 'SAFE',
+  ekycVerified: true,
+  status: b.status === 'TRANSFERRED' || b.status === 'APPROVED' ? 'APPROVED' : b.status === 'REJECTED' ? 'REJECTED' : 'PENDING'
+});
+
 export const PayoutsView: React.FC<PayoutsViewProps> = ({ payouts, onShowToast }) => {
+  const [backendMap, setBackendMap] = useState<Record<string, number>>({});
+  const [payoutList, setPayoutList] = useState<PayoutItem[]>(payouts);
   const [selectedPayoutId, setSelectedPayoutId] = useState<string>(payouts[0]?.id || 'PO-2024-8891');
   const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'rejected' | 'all'>('pending');
-  const [searchQuery, setSearchQuery] = useState<string>('#PO-2024-8891');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [bankFilter, setBankFilter] = useState<string>('');
   const [amountFilter, setAmountFilter] = useState<string>('high');
   const [otpCode, setOtpCode] = useState<string>('••••••');
   const [isDisbursing, setIsDisbursing] = useState<boolean>(false);
 
-  const selectedPayout = payouts.find((p) => p.id === selectedPayoutId) || payouts[0];
+  const loadBackendPayouts = async () => {
+    try {
+      const data = await financeApi.getAllPayouts();
+      if (data && data.length > 0) {
+        const mapped = data.map(mapBackendPayoutToItem);
+        const idMap: Record<string, number> = {};
+        data.forEach((b) => {
+          idMap[b.requestCode || `PO-${b.id}`] = b.id;
+        });
+        setBackendMap(idMap);
+        setPayoutList([...mapped, ...payouts]);
+        setSelectedPayoutId(mapped[0].id);
+      }
+    } catch {
+      // Fallback to demo payouts when backend is offline
+    }
+  };
 
-  const filteredPayouts = payouts.filter((p) => {
+  useEffect(() => {
+    loadBackendPayouts();
+  }, []);
+
+  const selectedPayout = payoutList.find((p) => p.id === selectedPayoutId) || payoutList[0];
+
+  const filteredPayouts = payoutList.filter((p) => {
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().replace(/^#/, '');
       const match =
         p.id.toLowerCase().includes(q) ||
         p.garageName.toLowerCase().includes(q) ||
@@ -31,8 +75,31 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ payouts, onShowToast }
     return true;
   });
 
-  const handleDisburse = () => {
+  const handleDisburse = async () => {
+    if (!selectedPayout) return;
     setIsDisbursing(true);
+    const backendId = backendMap[selectedPayout.id];
+    if (backendId) {
+      try {
+        const res = await financeApi.processPayout(
+          backendId,
+          'TRANSFERRED',
+          'Đã duyệt và giải ngân qua cổng Napas247'
+        );
+        await loadBackendPayouts();
+        setIsDisbursing(false);
+        onShowToast(
+          'Giải Ngân PayOS Thành Công!',
+          `Đã trừ ví gara và chuyển khoản ${selectedPayout.requestedAmount.toLocaleString('vi-VN')} ₫ tới ${selectedPayout.accountHolder}. Mã UNC: ${res.transactionReference || 'TXN-NAPAS-247'}.`
+        );
+        return;
+      } catch (err) {
+        setIsDisbursing(false);
+        onShowToast('Lỗi Xử Lý', err instanceof Error ? err.message : 'Không thể xử lý giải ngân');
+        return;
+      }
+    }
+
     setTimeout(() => {
       setIsDisbursing(false);
       onShowToast(
@@ -42,7 +109,17 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ payouts, onShowToast }
     }, 1200);
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
+    if (!selectedPayout) return;
+    const backendId = backendMap[selectedPayout.id];
+    if (backendId) {
+      try {
+        await financeApi.processPayout(backendId, 'REJECTED', 'Từ chối yêu cầu rút tiền do cần đối soát bổ sung');
+        await loadBackendPayouts();
+      } catch {
+        // Fallback toast
+      }
+    }
     onShowToast('Đã Từ Chối Lệnh', `Đã từ chối lệnh rút tiền ${selectedPayout.id}. Số dư bảo lưu tại ví gara.`);
   };
 
@@ -79,17 +156,15 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ payouts, onShowToast }
             <span className="text-primary font-bold">QUẢN LÝ GIẢI NGÂN</span>
           </nav>
           <div className="flex items-center gap-space-md flex-wrap">
-            <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">
-              Xét Duyệt Yêu Cầu Rút Tiền Ví Gara & Đội Cứu Hộ
-            </h1>
+            <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">Yêu cầu rút tiền</h1>
             <span className="px-space-sm py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-bold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse"></span>
               7 LỆNH CHỜ DUYỆT
             </span>
           </div>
-          <p className="font-body-md text-body-md text-secondary">
+          <ViewGuide><p className="font-body-md text-body-md text-secondary">
             Thẩm định đối chiếu số dư ký quỹ bảo hành, hồ sơ pháp lý eKYC và kích hoạt lệnh chuyển khoản tự động Napas247.
-          </p>
+          </p></ViewGuide>
         </div>
 
         {/* Quick Metric Cards & Fast Actions */}

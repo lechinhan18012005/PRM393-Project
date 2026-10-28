@@ -1,4 +1,4 @@
-export type Role = 'CUSTOMER' | 'GARAGE_OWNER' | 'FIELD_MECHANIC' | 'STAFF' | 'ADMIN';
+export type Role = 'CUSTOMER' | 'GARAGE_OWNER' | 'FIELD_MECHANIC' | 'STAFF' | 'ADMIN' | 'KYC_VERIFIER' | 'SUPER_ADMIN';
 
 export interface User {
   id: number;
@@ -38,5 +38,14 @@ export interface RegisterPayload {
   phone?: string;
   password: string;
   fullName: string;
-  role?: 'CUSTOMER';
+  application: {
+    garageName: string;
+    phone?: string;
+    businessLicenseUrl: string;
+    idCardUrl: string;
+    nd13Consent?: boolean;
+    idCardStorageKey?: string;
+    businessLicenseStorageKey?: string;
+    firstBranchAddress?: string;
+  };
 }

@@ -9,11 +9,14 @@ import com.prm393.floodrescue.features.auth.dto.AuthResponse;
 import com.prm393.floodrescue.features.auth.dto.LoginRequest;
 import com.prm393.floodrescue.features.auth.dto.RegisterRequest;
 import com.prm393.floodrescue.features.auth.dto.TokenRefreshRequest;
+import com.prm393.floodrescue.features.auth.dto.UpdateProfileRequest;
 import com.prm393.floodrescue.features.auth.dto.UserProfileResponse;
 import com.prm393.floodrescue.features.auth.entity.Role;
 import com.prm393.floodrescue.features.auth.entity.User;
 import com.prm393.floodrescue.features.auth.repository.UserRepository;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -34,32 +37,45 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new BadRequestException("Tên đăng nhập đã được sử dụng: " + request.getUsername());
+        return registerAs(request, Role.CUSTOMER);
+    }
+
+    @Transactional
+    public AuthResponse registerOwner(RegisterRequest request) {
+        return registerAs(request, Role.GARAGE_OWNER);
+    }
+
+    private AuthResponse registerAs(RegisterRequest request, Role assignedRole) {
+        if (userRepository.existsByUsername(request.getUsername().trim())) {
+            throw new BadRequestException(
+                    "Tên đăng nhập đã được sử dụng: " + request.getUsername());
         }
 
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByEmail(
+                request.getEmail().trim().toLowerCase(java.util.Locale.ROOT))) {
             throw new BadRequestException("Email đã được đăng ký: " + request.getEmail());
         }
 
-        if (request.getPhone() != null && !request.getPhone().isBlank() && userRepository.existsByPhone(request.getPhone())) {
+        if (request.getPhone() != null
+                && !request.getPhone().isBlank()
+                && userRepository.existsByPhone(request.getPhone().trim())) {
             throw new BadRequestException("Số điện thoại đã được đăng ký: " + request.getPhone());
         }
 
         if (request.getRole() != null && request.getRole() != Role.CUSTOMER) {
             throw new BadRequestException("Đăng ký công khai chỉ dành cho khách hàng");
         }
-        Role assignedRole = Role.CUSTOMER;
 
-        User user = User.builder()
-                .username(request.getUsername().trim())
-                .email(request.getEmail().trim().toLowerCase())
-                .phone(request.getPhone() != null ? request.getPhone().trim() : null)
-                .password(passwordEncoder.encode(request.getPassword()))
-                .fullName(request.getFullName().trim())
-                .role(assignedRole)
-                .active(true)
-                .build();
+        User user =
+                User.builder()
+                        .username(request.getUsername().trim())
+                        .email(request.getEmail().trim().toLowerCase(java.util.Locale.ROOT))
+                        .phone(request.getPhone() != null ? request.getPhone().trim() : null)
+                        .password(passwordEncoder.encode(request.getPassword()))
+                        .fullName(request.getFullName().trim())
+                        .role(assignedRole)
+                        .active(true)
+                        .build();
 
         User savedUser = userRepository.save(user);
 
@@ -77,13 +93,18 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByIdentifier(request.getIdentifier().trim())
-                .orElseThrow(() -> new BadCredentialsException("Tài khoản hoặc mật khẩu không chính xác"));
+        User user =
+                userRepository
+                        .findByIdentifier(request.getIdentifier().trim())
+                        .orElseThrow(
+                                () ->
+                                        new BadCredentialsException(
+                                                "Tài khoản hoặc mật khẩu không chính xác"));
 
         try {
             authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(user.getUsername(), request.getPassword())
-            );
+                    new UsernamePasswordAuthenticationToken(
+                            user.getUsername(), request.getPassword()));
         } catch (Exception e) {
             throw new BadCredentialsException("Tài khoản hoặc mật khẩu không chính xác");
         }
@@ -92,6 +113,17 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Tài khoản của bạn đã bị vô hiệu hóa");
         }
 
+        if (request.getPlatform() == LoginRequest.ClientPlatform.MOBILE
+                && user.getRole() != Role.CUSTOMER
+                && user.getRole() != Role.FIELD_MECHANIC)
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Tài khoản này vui lòng đăng nhập trên Web");
+        if (request.getPlatform() == LoginRequest.ClientPlatform.WEB
+                && user.getRole() != Role.ADMIN
+                && user.getRole() != Role.STAFF
+                && user.getRole() != Role.GARAGE_OWNER)
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Tài khoản này vui lòng đăng nhập trên Mobile");
         String accessToken = jwtService.generateToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
@@ -109,8 +141,11 @@ public class AuthServiceImpl implements AuthService {
         String refreshToken = request.getRefreshToken();
         try {
             String username = jwtService.extractUsername(refreshToken);
-            User user = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new UnauthorizedException("Người dùng không tồn tại"));
+            User user =
+                    userRepository
+                            .findByUsername(username)
+                            .orElseThrow(
+                                    () -> new UnauthorizedException("Người dùng không tồn tại"));
 
             if (!user.isActive() || !jwtService.isRefreshTokenValid(refreshToken, user)) {
                 throw new UnauthorizedException("Refresh token không hợp lệ hoặc đã hết hạn");
@@ -132,8 +167,54 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public UserProfileResponse getCurrentUserProfile(String usernameOrIdentifier) {
-        User user = userRepository.findByIdentifier(usernameOrIdentifier)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin người dùng"));
+        User user =
+                userRepository
+                        .findByIdentifier(usernameOrIdentifier)
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Không tìm thấy thông tin người dùng"));
         return UserProfileResponse.fromEntity(user);
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse updateCurrentUserProfile(
+            String username, UpdateProfileRequest request) {
+        User user =
+                userRepository
+                        .findByUsername(username)
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException("Không tìm thấy tài khoản"));
+        String email = request.email().trim().toLowerCase(java.util.Locale.ROOT);
+        String phone =
+                request.phone() == null || request.phone().isBlank()
+                        ? null
+                        : request.phone().trim();
+        userRepository
+                .findByEmail(email)
+                .filter(other -> !other.getId().equals(user.getId()))
+                .ifPresent(
+                        other -> {
+                            throw new BadRequestException("Email đã được tài khoản khác sử dụng");
+                        });
+        if (phone != null)
+            userRepository
+                    .findByPhone(phone)
+                    .filter(other -> !other.getId().equals(user.getId()))
+                    .ifPresent(
+                            other -> {
+                                throw new BadRequestException(
+                                        "Số điện thoại đã được tài khoản khác sử dụng");
+                            });
+        user.setFullName(request.fullName().trim());
+        user.setEmail(email);
+        user.setPhone(phone);
+        try {
+            return UserProfileResponse.fromEntity(userRepository.saveAndFlush(user));
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new BadRequestException(
+                    "Email hoặc số điện thoại đã được sử dụng. Vui lòng kiểm tra lại.");
+        }
     }
 }

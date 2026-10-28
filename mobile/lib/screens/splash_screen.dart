@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../core/constants/app_colors.dart';
 import '../providers/auth_provider.dart';
 import 'auth/login_screen.dart';
-import 'home/customer_home_screen.dart';
+import 'customer/stitch_hydro_rescue_screen.dart';
 import 'home/mechanic_home_screen.dart';
-import 'home/garage_home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -31,19 +31,16 @@ class _SplashScreenState extends State<SplashScreen> {
       Widget targetScreen;
       if (role == 'FIELD_MECHANIC') {
         targetScreen = const MechanicHomeScreen();
-      } else if (role == 'GARAGE_OWNER') {
-        targetScreen = const GarageHomeScreen();
       } else {
-        targetScreen = const CustomerHomeScreen();
+        targetScreen = const StitchHydroRescueScreen();
       }
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => targetScreen),
-      );
+      Navigator.of(context)
+          .pushReplacement(MaterialPageRoute(builder: (_) => targetScreen));
     } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
     }
   }
 
@@ -76,15 +73,10 @@ class _SplashScreenState extends State<SplashScreen> {
             SizedBox(height: 8),
             Text(
               'Nền tảng cứu hộ xe máy ngập lụt',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.secondary,
-              ),
+              style: TextStyle(fontSize: 14, color: AppColors.secondary),
             ),
             SizedBox(height: 32),
-            CircularProgressIndicator(
-              color: AppColors.primaryOrange,
-            ),
+            CircularProgressIndicator(color: AppColors.primaryOrange),
           ],
         ),
       ),

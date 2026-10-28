@@ -1,6 +1,14 @@
 import { ApiResponse, AuthResponse, LoginPayload, RegisterPayload, User } from '../types/auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1/auth';
+const rawAuthUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').trim().replace(/\/$/, '');
+
+const getAuthBaseUrl = () => {
+  if (rawAuthUrl.endsWith('/auth')) return rawAuthUrl;
+  if (rawAuthUrl.endsWith('/api/v1')) return `${rawAuthUrl}/auth`;
+  return `${rawAuthUrl}/api/v1/auth`;
+};
+
+const API_BASE_URL = getAuthBaseUrl();
 
 const TOKEN_KEY = 'floodrescue_access_token';
 const REFRESH_TOKEN_KEY = 'floodrescue_refresh_token';
@@ -36,7 +44,7 @@ export const authApi = {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ ...payload, platform: 'WEB' })
     });
 
     const data: ApiResponse<AuthResponse> = await response.json();
@@ -44,6 +52,10 @@ export const authApi = {
       throw new Error(data.message || 'Đăng nhập không thành công');
     }
 
+    if (!['ADMIN', 'STAFF', 'GARAGE_OWNER'].includes(data.data.user.role)) {
+      authStorage.clear();
+      throw new Error('Tài khoản này vui lòng đăng nhập trên Mobile');
+    }
     authStorage.setToken(data.data.accessToken);
     authStorage.setRefreshToken(data.data.refreshToken);
     authStorage.setUser(data.data.user);
@@ -51,12 +63,15 @@ export const authApi = {
   },
 
   register: async (payload: RegisterPayload): Promise<AuthResponse> => {
-    const response = await fetch(`${API_BASE_URL}/register`, {
+    const response = await fetch(`${API_BASE_URL.replace(/\/auth$/, '')}/onboarding/garage`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        account: { ...payload, application: undefined },
+        application: payload.application
+      })
     });
 
     const data: ApiResponse<AuthResponse> = await response.json();
@@ -64,6 +79,10 @@ export const authApi = {
       throw new Error(data.message || 'Đăng ký không thành công');
     }
 
+    if (!['ADMIN', 'STAFF', 'GARAGE_OWNER'].includes(data.data.user.role)) {
+      authStorage.clear();
+      throw new Error('Tài khoản này vui lòng đăng nhập trên Mobile');
+    }
     authStorage.setToken(data.data.accessToken);
     authStorage.setRefreshToken(data.data.refreshToken);
     authStorage.setUser(data.data.user);
@@ -77,7 +96,7 @@ export const authApi = {
     const response = await fetch(`${API_BASE_URL}/me`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`
+        Authorization: `Bearer ${token}`
       }
     });
 
@@ -86,6 +105,10 @@ export const authApi = {
       throw new Error(data.message || 'Không thể lấy thông tin tài khoản');
     }
 
+    if (!['ADMIN', 'STAFF', 'GARAGE_OWNER'].includes(data.data.role)) {
+      authStorage.clear();
+      throw new Error('Tài khoản này vui lòng đăng nhập trên Mobile');
+    }
     authStorage.setUser(data.data);
     return data.data;
   },

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
-import '../home/customer_home_screen.dart';
+import '../customer/stitch_hydro_rescue_screen.dart';
 import '../home/mechanic_home_screen.dart';
-import '../home/garage_home_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -17,7 +17,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-  String _selectedRole = 'CUSTOMER'; // CUSTOMER, FIELD_MECHANIC, GARAGE_OWNER
+  String _selectedRole = 'CUSTOMER'; // CUSTOMER, FIELD_MECHANIC
   bool _obscurePassword = true;
 
   @override
@@ -31,15 +31,12 @@ class _LoginScreenState extends State<LoginScreen> {
     Widget target;
     if (role == 'FIELD_MECHANIC') {
       target = const MechanicHomeScreen();
-    } else if (role == 'GARAGE_OWNER') {
-      target = const GarageHomeScreen();
     } else {
-      target = const CustomerHomeScreen();
+      target = const StitchHydroRescueScreen();
     }
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => target),
-    );
+    Navigator.of(context)
+        .pushReplacement(MaterialPageRoute(builder: (_) => target));
   }
 
   Future<void> _handleLogin() async {
@@ -79,9 +76,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (success && authProvider.user != null) {
       _navigateToHome(authProvider.user!.role);
     } else if (authProvider.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(authProvider.errorMessage!)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(authProvider.errorMessage!)));
     }
   }
 
@@ -95,57 +91,13 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // 1. Emergency Live Storm Banner (from Stitch UI)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: AppColors.errorContainer,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: AppColors.error,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'TRỰC CHIẾN BÃO SỐ 4',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.onErrorContainer,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Row(
-                      children: [
-                        Icon(Icons.groups, size: 16, color: AppColors.onErrorContainer),
-                        SizedBox(width: 4),
-                        Text(
-                          '150+ Đội cơ động',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.onErrorContainer,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
               // 2. Hero Header with Stitch style
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 24,
+                  horizontal: 20,
+                ),
                 decoration: const BoxDecoration(
                   color: AppColors.surfaceContainerHigh,
                 ),
@@ -158,7 +110,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: 88,
                           height: 88,
                           decoration: BoxDecoration(
-                            color: AppColors.primaryContainer.withValues(alpha: 0.4),
+                            color: AppColors.primaryContainer.withValues(
+                              alpha: 0.4,
+                            ),
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -173,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 color: Colors.black12,
                                 blurRadius: 8,
                                 offset: Offset(0, 3),
-                              )
+                              ),
                             ],
                           ),
                           child: const Icon(
@@ -229,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     // Role Segmented Tabs
                     const Text(
-                      'CHỌN VAI TRÒ ĐĂNG NHẬP',
+                      'Bạn là',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -247,8 +201,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Row(
                         children: [
                           _buildRoleTab('CUSTOMER', 'Chủ xe', Icons.person),
-                          _buildRoleTab('FIELD_MECHANIC', 'Thợ cơ động', Icons.build),
-                          _buildRoleTab('GARAGE_OWNER', 'Chủ Gara', Icons.store),
+                          _buildRoleTab(
+                            'FIELD_MECHANIC',
+                            'Thợ cơ động',
+                            Icons.build,
+                          ),
                         ],
                       ),
                     ),
@@ -261,9 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: 'Số điện thoại hoặc Email',
                         hintText: _selectedRole == 'CUSTOMER'
                             ? 'customer@floodrescue.vn hoặc 0900000005'
-                            : _selectedRole == 'FIELD_MECHANIC'
-                            ? 'mechanic@floodrescue.vn hoặc 0900000004'
-                            : 'garage@floodrescue.vn hoặc 0900000003',
+                            : 'mechanic@floodrescue.vn hoặc 0900000004',
                         prefixIcon: const Icon(Icons.account_circle_outlined),
                         filled: true,
                         fillColor: AppColors.surfaceContainerLowest,
@@ -288,7 +243,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                           ),
                           onPressed: () {
                             setState(() {
@@ -333,10 +290,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             )
                           : Text(
                               _selectedRole == 'CUSTOMER'
-                                  ? 'Đăng nhập gọi cứu hộ'
+                                  ? 'Đăng nhập'
                                   : _selectedRole == 'FIELD_MECHANIC'
-                                  ? 'Đăng nhập thợ trực chiến'
-                                  : 'Truy cập cổng Gara đối tác',
+                                  ? 'Đăng nhập'
+                                  : 'Đăng nhập',
                               style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
@@ -346,88 +303,93 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 24),
 
                     if (const bool.fromEnvironment('DEMO_MODE')) ...[
-                    // Demo Shortcuts Divider
-                    const Row(
-                      children: [
-                        Expanded(child: Divider()),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 10),
-                          child: Text(
-                            'HOẶC ĐĂNG NHẬP NHANH (DEMO)',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.outline,
+                      // Demo Shortcuts Divider
+                      const Row(
+                        children: [
+                          Expanded(child: Divider()),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 10),
+                            child: Text(
+                              'HOẶC ĐĂNG NHẬP NHANH (DEMO)',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.outline,
+                              ),
                             ),
                           ),
-                        ),
-                        Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
+                          Expanded(child: Divider()),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
 
-                    // Demo buttons row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => _handleDemoLogin('CUSTOMER'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                      // Demo buttons row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _handleDemoLogin('CUSTOMER'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text(
+                                'Khách xe SH',
+                                style: TextStyle(fontSize: 12),
                               ),
                             ),
-                            child: const Text(
-                              'Khách xe SH',
-                              style: TextStyle(fontSize: 12),
-                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => _handleDemoLogin('FIELD_MECHANIC'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () =>
+                                  _handleDemoLogin('FIELD_MECHANIC'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text(
+                                'Thợ cơ động',
+                                style: TextStyle(fontSize: 12),
                               ),
                             ),
-                            child: const Text(
-                              'Thợ cơ động',
-                              style: TextStyle(fontSize: 12),
-                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => _handleDemoLogin('GARAGE_OWNER'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text(
-                              'Chủ Gara',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
                     ],
 
+                    TextButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const RegisterScreen(invitation: true),
+                        ),
+                      ),
+                      child: const Text(
+                        'Kích hoạt tài khoản Thợ cứu hộ được mời',
+                      ),
+                    ),
                     // Link to Register
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
                       children: [
                         const Text(
                           'Chưa có tài khoản? ',
-                          style: TextStyle(color: AppColors.secondary, fontSize: 13),
+                          style: TextStyle(
+                            color: AppColors.secondary,
+                            fontSize: 13,
+                          ),
                         ),
                         GestureDetector(
                           onTap: () {
@@ -478,7 +440,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Colors.black12,
                       blurRadius: 4,
                       offset: Offset(0, 1),
-                    )
+                    ),
                   ]
                 : null,
           ),
@@ -488,7 +450,9 @@ class _LoginScreenState extends State<LoginScreen> {
               Icon(
                 icon,
                 size: 20,
-                color: isSelected ? AppColors.primaryOrange : AppColors.secondary,
+                color: isSelected
+                    ? AppColors.primaryOrange
+                    : AppColors.secondary,
               ),
               const SizedBox(height: 4),
               Text(
@@ -496,7 +460,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? AppColors.primaryOrange : AppColors.secondary,
+                  color: isSelected
+                      ? AppColors.primaryOrange
+                      : AppColors.secondary,
                 ),
               ),
             ],

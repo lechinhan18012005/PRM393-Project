@@ -5,5 +5,7 @@ public enum Role {
     GARAGE_OWNER,
     FIELD_MECHANIC,
     STAFF,
-    ADMIN
+    ADMIN,
+    KYC_VERIFIER,
+    SUPER_ADMIN
 }
