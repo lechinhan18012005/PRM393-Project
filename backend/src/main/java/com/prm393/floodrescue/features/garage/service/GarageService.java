@@ -14,6 +14,7 @@ import com.prm393.floodrescue.features.garage.entity.GarageBranch;
 import com.prm393.floodrescue.features.garage.entity.GarageStatus;
 import com.prm393.floodrescue.features.garage.repository.GarageBranchRepository;
 import com.prm393.floodrescue.features.garage.repository.GarageRepository;
+import com.prm393.floodrescue.features.kyc.service.SecureStorageService;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Base64;
 import java.util.List;
 
 @Service
@@ -34,6 +38,51 @@ public class GarageService {
     private final GarageBranchRepository branchRepository;
     private final MechanicStaffRepository mechanicRepository;
     private final UserRepository userRepository;
+    private final SecureStorageService secureStorageService;
+
+    /**
+     * Trích xuất storageKey thực tế nếu URL là link Pre-signed KYC (/api/v1/kyc/files/view?key=...)
+     */
+    private String extractStorageKeyFromUrl(String url) {
+        if (url == null || !url.contains("/api/v1/kyc/files/view")) {
+            return null;
+        }
+        try {
+            int keyIndex = url.indexOf("key=");
+            if (keyIndex == -1) return null;
+            int ampersandIndex = url.indexOf('&', keyIndex);
+            String encodedKey = ampersandIndex == -1
+                    ? url.substring(keyIndex + 4)
+                    : url.substring(keyIndex + 4, ampersandIndex);
+            byte[] decoded = Base64.getUrlDecoder().decode(encodedKey);
+            String key = new String(decoded, StandardCharsets.UTF_8);
+            if (key.startsWith("id-cards/") || key.startsWith("licenses/") || key.startsWith("general/")) {
+                return key;
+            }
+        } catch (Exception e) {
+            log.debug("Không thể trích xuất storageKey từ url {}: {}", url, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Luôn sinh Pre-signed URL mới còn hạn (2 giờ) để người dùng xem ảnh không bao giờ bị 403 Forbidden.
+     */
+    private String resolveFreshUrl(String storageKey, String originalUrl) {
+        String key = (storageKey != null && !storageKey.isBlank())
+                ? storageKey
+                : extractStorageKeyFromUrl(originalUrl);
+
+        if (key != null && !key.isBlank() && secureStorageService != null) {
+            try {
+                // Tạo Pre-signed URL mới có hiệu lực 2 giờ cho phiên xem của người dùng
+                return secureStorageService.generateTemporaryAccessUrl(key, Duration.ofHours(2));
+            } catch (Exception e) {
+                log.warn("Không thể sinh Pre-signed URL cho key {}: {}", key, e.getMessage());
+            }
+        }
+        return originalUrl;
+    }
 
     @Transactional
     public GarageResponse registerGarage(User user, RegisterGarageRequest request) {
@@ -45,6 +94,16 @@ public class GarageService {
             throw new org.springframework.security.access.AccessDeniedException(
                     "Chỉ chủ gara được nộp hồ sơ");
 
+        String licenseKey = request.getBusinessLicenseStorageKey();
+        if (licenseKey == null || licenseKey.isBlank()) {
+            licenseKey = extractStorageKeyFromUrl(request.getBusinessLicenseUrl());
+        }
+
+        String idCardKey = request.getIdCardStorageKey();
+        if (idCardKey == null || idCardKey.isBlank()) {
+            idCardKey = extractStorageKeyFromUrl(request.getIdCardUrl());
+        }
+
         Garage garage =
                 Garage.builder()
                         .owner(user)
@@ -52,8 +111,8 @@ public class GarageService {
                         .phone(request.getPhone() != null ? request.getPhone() : user.getPhone())
                         .businessLicenseUrl(request.getBusinessLicenseUrl())
                         .idCardUrl(request.getIdCardUrl())
-                        .businessLicenseStorageKey(request.getBusinessLicenseStorageKey())
-                        .idCardStorageKey(request.getIdCardStorageKey())
+                        .businessLicenseStorageKey(licenseKey)
+                        .idCardStorageKey(idCardKey)
                         .idCardNumber(request.getIdCardNumber())
                         .nd13Consent(request.getNd13Consent() != null ? request.getNd13Consent() : true)
                         .nd13ConsentedAt(java.time.LocalDateTime.now())
@@ -116,16 +175,34 @@ public class GarageService {
                 || request.getIdCardUrl() == null
                 || request.getIdCardUrl().isBlank())
             throw new BadRequestException("Vui lòng cung cấp giấy phép kinh doanh và CCCD");
+
         garage.setGarageName(request.getGarageName());
         garage.setPhone(request.getPhone());
         garage.setBusinessLicenseUrl(request.getBusinessLicenseUrl());
         garage.setIdCardUrl(request.getIdCardUrl());
+
+        String licenseKey = request.getBusinessLicenseStorageKey();
+        if (licenseKey == null || licenseKey.isBlank()) {
+            licenseKey = extractStorageKeyFromUrl(request.getBusinessLicenseUrl());
+        }
+        if (licenseKey != null && !licenseKey.isBlank()) {
+            garage.setBusinessLicenseStorageKey(licenseKey);
+        }
+
+        String idCardKey = request.getIdCardStorageKey();
+        if (idCardKey == null || idCardKey.isBlank()) {
+            idCardKey = extractStorageKeyFromUrl(request.getIdCardUrl());
+        }
+        if (idCardKey != null && !idCardKey.isBlank()) {
+            garage.setIdCardStorageKey(idCardKey);
+        }
+
         garage.setStatus(GarageStatus.PENDING);
         garage.setRejectionReason(null);
         return mapToResponse(garageRepository.save(garage));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public GarageResponse getCurrentGarage(User user) {
         Garage garage =
                 garageRepository
@@ -134,6 +211,27 @@ public class GarageService {
                                 () ->
                                         new ResourceNotFoundException(
                                                 "Chưa tìm thấy hồ sơ garage cho tài khoản này!"));
+
+        // Tự động kiểm tra và cập nhật storageKey nếu bản ghi cũ thiếu
+        boolean updated = false;
+        if (garage.getIdCardStorageKey() == null && garage.getIdCardUrl() != null) {
+            String extracted = extractStorageKeyFromUrl(garage.getIdCardUrl());
+            if (extracted != null) {
+                garage.setIdCardStorageKey(extracted);
+                updated = true;
+            }
+        }
+        if (garage.getBusinessLicenseStorageKey() == null && garage.getBusinessLicenseUrl() != null) {
+            String extracted = extractStorageKeyFromUrl(garage.getBusinessLicenseUrl());
+            if (extracted != null) {
+                garage.setBusinessLicenseStorageKey(extracted);
+                updated = true;
+            }
+        }
+        if (updated) {
+            garage = garageRepository.save(garage);
+        }
+
         return mapToResponse(garage);
     }
 
@@ -206,6 +304,10 @@ public class GarageService {
         int branchCount = branches.size();
         int mechanicCount = (int) mechanicRepository.countByGarageId(garage.getId());
 
+        // Sinh link Pre-signed mới còn hạn (2 giờ) cho người xem
+        String freshBusinessLicenseUrl = resolveFreshUrl(garage.getBusinessLicenseStorageKey(), garage.getBusinessLicenseUrl());
+        String freshIdCardUrl = resolveFreshUrl(garage.getIdCardStorageKey(), garage.getIdCardUrl());
+
         return GarageResponse.builder()
                 .id(garage.getId())
                 .ownerId(garage.getOwner() != null ? garage.getOwner().getId() : null)
@@ -213,8 +315,9 @@ public class GarageService {
                 .ownerEmail(garage.getOwner() != null ? garage.getOwner().getEmail() : null)
                 .garageName(garage.getGarageName())
                 .phone(garage.getPhone())
-                .businessLicenseUrl(garage.getBusinessLicenseUrl())
-                .idCardUrl(garage.getIdCardUrl())
+                .businessLicenseUrl(freshBusinessLicenseUrl)
+                .idCardUrl(freshIdCardUrl)
+                .idCardNumber(garage.getIdCardNumber())
                 .status(garage.getStatus())
                 .walletBalance(garage.getWalletBalance())
                 .rejectionReason(garage.getRejectionReason())

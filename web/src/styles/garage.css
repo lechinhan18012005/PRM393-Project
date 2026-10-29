@@ -45,9 +45,9 @@
 .garage-button,
 .garage-portal
   :where(
-    button:not(.garage-checklist button):not(.garage-tabs button):not(.garage-text-button):not(.garage-icon-button)
+    button:not(.garage-checklist button):not(.garage-tabs button):not(.garage-text-button):not(.garage-icon-button):not([class*=bg-])
   ),
-.garage-form button {
+.garage-form button:not([class*=bg-]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -61,8 +61,8 @@
   cursor: pointer;
   transition: background 0.15s;
 }
-.garage-portal button:hover,
-.garage-form button:hover {
+.garage-portal button:not([class*=bg-]):hover,
+.garage-form button:not([class*=bg-]):hover {
   background: #f1f5f7;
 }
 .garage-button.primary,
@@ -618,7 +618,7 @@
   color: #526176;
   display: block;
 }
-.garage-form input,
+.garage-form input:not([type="file"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
 .garage-form select {
   display: block;
   width: 100%;
@@ -898,3 +898,5 @@
 }
 
 .garage-service-row > .garage-service-name, .garage-service-row > .garage-service-meta { display: block; }
+
+

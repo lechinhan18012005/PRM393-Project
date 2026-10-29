@@ -30,3 +30,7 @@ mobile/windows/flutter/ephemeral/
 .DS_Store
 Thumbs.db
 *.log
+
+# Secure Storage (Decree 13 Private Encrypted Storage)
+storage/
+**/storage/

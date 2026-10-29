@@ -22,6 +22,7 @@ public class GarageResponse {
     private String phone;
     private String businessLicenseUrl;
     private String idCardUrl;
+    private String idCardNumber;
     private GarageStatus status;
     private BigDecimal walletBalance;
     private String rejectionReason;

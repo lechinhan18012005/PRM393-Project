@@ -9,7 +9,8 @@ export interface GarageBackendResponse {
   phone: string;
   businessLicenseUrl: string | null;
   idCardUrl: string | null;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+  idCardNumber?: string | null;
+  status: 'PENDING' | 'NEED_INFO' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
   walletBalance: number;
   rejectionReason?: string;
   createdAt: string;
