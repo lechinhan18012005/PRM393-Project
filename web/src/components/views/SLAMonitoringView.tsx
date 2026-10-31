@@ -1,6 +1,7 @@
 import { ViewGuide } from '../ViewGuide';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScreenId } from '../../types';
+import { financeApi, ServiceRatingBackendResponse } from '../../services/financeApi';
 
 interface SLAMonitoringViewProps {
   onSelectScreen: (screen: ScreenId) => void;
@@ -22,6 +23,45 @@ interface GarageSLA {
   status: 'EXCELLENT' | 'GOOD' | 'WARNING' | 'SUSPENDED';
 }
 
+const FALLBACK_RATINGS: ServiceRatingBackendResponse[] = [
+  {
+    id: 1,
+    rescueOrderId: 8821,
+    rescueCode: '#RC-8821',
+    customerName: 'Võ Minh Khôi',
+    garageName: 'Gara An Phú (Q.8)',
+    mechanicName: 'Lê Tuấn Hưng',
+    stars: 5,
+    tags: 'Đến nhanh < 15p,Nhiệt tình lội nước,Đúng giá niêm yết',
+    comment: 'Anh thợ hỗ trợ rất nhiệt tình giữa đêm mưa ngập, giá minh bạch đúng trên app!',
+    createdAt: '2026-04-16T20:15:00'
+  },
+  {
+    id: 2,
+    rescueOrderId: 8819,
+    rescueCode: '#RC-8819',
+    customerName: 'Trần Thu Hà',
+    garageName: 'Đội Cứu Hộ Bình Tân',
+    mechanicName: 'Nguyễn Văn Định',
+    stars: 5,
+    tags: 'Tay nghề cao,Cứu hộ an toàn',
+    comment: 'Xe chết máy ngập bugi được xử lý tại chỗ chỉ 20 phút là nổ máy lại.',
+    createdAt: '2026-04-16T19:40:00'
+  },
+  {
+    id: 3,
+    rescueOrderId: 8790,
+    rescueCode: '#RC-8790',
+    customerName: 'Phạm Văn Hùng',
+    garageName: 'Cơ Sở Sửa Xe Thành Lợi',
+    mechanicName: 'Trần Văn Lợi',
+    stars: 3,
+    tags: 'Cứu hộ an toàn',
+    comment: 'Thợ đến hơi trễ khoảng 25 phút do kẹt xe ngập nước.',
+    createdAt: '2026-04-16T18:10:00'
+  }
+];
+
 export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
   onSelectScreen,
   onShowToast
@@ -29,6 +69,26 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGarage, setSelectedGarage] = useState<GarageSLA | null>(null);
+  const [ratings, setRatings] = useState<ServiceRatingBackendResponse[]>(FALLBACK_RATINGS);
+  const [isLoadingRatings, setIsLoadingRatings] = useState<boolean>(false);
+
+  const loadRatings = async () => {
+    setIsLoadingRatings(true);
+    try {
+      const data = await financeApi.getAllRatings();
+      if (data && data.length > 0) {
+        setRatings(data);
+      }
+    } catch {
+      // Fallback to sample ratings if offline
+    } finally {
+      setIsLoadingRatings(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRatings();
+  }, []);
 
   const [garages, setGarages] = useState<GarageSLA[]>([
     {
@@ -156,19 +216,30 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
     return true;
   });
 
+  const avgStars =
+    ratings.length > 0
+      ? (ratings.reduce((acc, r) => acc + r.stars, 0) / ratings.length).toFixed(2)
+      : '4.86';
+
   return (
     <div className="space-y-space-xl">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md border-b border-surface-container pb-space-md">
         <div>
-
-          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">Chất lượng dịch vụ</h1>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">Chất lượng dịch vụ &amp; Đánh giá sau cứu hộ (UC-19)</h1>
           <ViewGuide><p className="font-body-md text-body-md text-secondary">
-            Kiểm soát thời gian phản hồi ca ngập, chống ép giá khách hàng, và duy trì chỉ số CSAT &gt; 4.8 sao toàn hệ thống.
+            Kiểm soát thời gian phản hồi ca ngập, đồng bộ đánh giá sao &amp; nhận xét khách hàng (UC-19), và duy trì chỉ số CSAT &gt; 4.8 sao toàn hệ thống.
           </p></ViewGuide>
         </div>
 
         <div className="flex items-center gap-space-sm">
+          <button
+            onClick={loadRatings}
+            className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all"
+          >
+            <span className="material-symbols-outlined text-[18px]">refresh</span>
+            <span>{isLoadingRatings ? 'Đang tải...' : 'Làm mới đánh giá'}</span>
+          </button>
           <button
             onClick={() => onSelectScreen('verification')}
             className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all"
@@ -177,7 +248,7 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
             <span>Hồ sơ mới</span>
           </button>
           <button
-            onClick={() => onShowToast('Xuất Báo Cáo SLA', 'Đã tải bảng xếp hạng SLA mạng lưới Gara tháng 11/2023')}
+            onClick={() => onShowToast('Xuất Báo Cáo SLA', 'Đã tải bảng xếp hạng SLA mạng lưới Gara')}
             className="flex items-center gap-1.5 px-space-md py-2 bg-primary text-on-primary rounded font-label-md font-semibold hover:bg-primary/90 transition-all shadow-xs"
           >
             <span className="material-symbols-outlined text-[18px]">download</span>
@@ -208,14 +279,14 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
 
         <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
           <span className="text-label-sm uppercase font-bold text-secondary">Điểm CSAT Toàn Sàn</span>
-          <div className="text-2xl font-bold text-blue-600 font-data-mono mt-1">4.86 / 5.0 ⭐</div>
-          <div className="text-label-xs text-secondary mt-1">Dựa trên 1.420 đánh giá</div>
+          <div className="text-2xl font-bold text-blue-600 font-data-mono mt-1">{avgStars} / 5.0 ⭐</div>
+          <div className="text-label-xs text-secondary mt-1">Đồng bộ {ratings.length} đánh giá mới nhất</div>
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
           <span className="text-label-sm uppercase font-bold text-secondary">Vi Phạm Giá / Thắt Cổ Chai</span>
           <div className="text-2xl font-bold text-red-600 font-data-mono mt-1">3 vụ</div>
-          <div className="text-label-xs text-red-700 font-semibold mt-1">Đã khấu trừ & khoá ví</div>
+          <div className="text-label-xs text-red-700 font-semibold mt-1">Đã khấu trừ &amp; khoá ví</div>
         </div>
       </div>
 
@@ -259,7 +330,7 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-container-low border-b border-surface-container font-label-sm text-secondary uppercase tracking-wider">
-                <th className="py-3 px-4">Gara & Khu Vực</th>
+                <th className="py-3 px-4">Gara &amp; Khu Vực</th>
                 <th className="py-3 px-4">Đại Diện</th>
                 <th className="py-3 px-4 text-center">Ca Đã Cứu Hộ</th>
                 <th className="py-3 px-4 text-center">Phản Hồi SLA</th>
@@ -382,6 +453,66 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
         </div>
       </div>
 
+      {/* UC-19: Customer Ratings & Reviews Stream */}
+      <div className="bg-surface-container-lowest rounded-xl border border-surface-container p-space-lg shadow-xs">
+        <div className="flex items-center justify-between mb-space-md">
+          <div>
+            <span className="text-label-xs font-bold uppercase text-primary tracking-wider">Luồng 9 • UC-19</span>
+            <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
+              Nhật Ký Đánh Giá &amp; Nhận Xét Sau Dịch Vụ Mới Nhất
+            </h3>
+          </div>
+          <span className="text-label-sm font-semibold text-secondary">
+            Tổng số: {ratings.length} đánh giá
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+          {ratings.slice(0, 6).map((r) => (
+            <div
+              key={r.id}
+              className="p-space-md rounded-xl bg-surface-container-low border border-surface-container flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="font-data-mono text-label-xs font-bold text-primary">
+                    {r.rescueCode || `#RC-${r.rescueOrderId}`}
+                  </span>
+                  <span className="font-data-mono font-bold text-amber-600 text-body-sm">
+                    {'⭐'.repeat(Math.max(1, Math.min(5, r.stars)))} ({r.stars}/5)
+                  </span>
+                </div>
+                <div className="font-bold text-on-surface mt-1">{r.customerName}</div>
+                <div className="text-label-xs text-secondary">
+                  Gara: <span className="font-semibold text-on-surface">{r.garageName || 'Đối tác cứu hộ'}</span>
+                  {r.mechanicName ? ` • Thợ: ${r.mechanicName}` : ''}
+                </div>
+                {r.tags && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {r.tags.split(',').map((t, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary"
+                      >
+                        {t.trim()}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {r.comment && (
+                  <p className="text-body-sm text-on-surface mt-2 italic">
+                    &ldquo;{r.comment}&rdquo;
+                  </p>
+                )}
+              </div>
+              <div className="text-label-xs text-secondary mt-3 pt-2 border-t border-surface-container font-data-mono">
+                {r.createdAt}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Drawer / Modal when selecting garage */}
       {selectedGarage && (
         <div className="p-space-lg bg-surface-container-lowest rounded-xl border border-primary/30 shadow-md">
@@ -400,7 +531,7 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-space-md text-body-sm">
             <div className="p-3 bg-surface-container-low rounded">
-              <span className="text-secondary text-label-xs">Chủ cơ sở & Liên hệ</span>
+              <span className="text-secondary text-label-xs">Chủ cơ sở &amp; Liên hệ</span>
               <div className="font-bold text-on-surface mt-0.5">{selectedGarage.owner}</div>
               <div className="font-data-mono text-secondary">{selectedGarage.phone}</div>
             </div>

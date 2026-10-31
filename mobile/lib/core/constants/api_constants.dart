@@ -37,6 +37,7 @@ class ApiConstants {
   // Flood Map Endpoints (Luồng 8)
   static String get floodReportsUrl => '$baseUrl/flood-reports';
   static String get activeFloodReportsUrl => '$baseUrl/flood-reports/active';
+  static String get myFloodReportsUrl => '$baseUrl/flood-reports/my';
 
   // Media Upload (Cloudinary)
   static String get uploadImageUrl => '$baseUrl/upload/image';
@@ -83,4 +84,18 @@ class ApiConstants {
       '$baseUrl/payments/$orderCode/simulate-webhook';
   static String confirmCashPaymentUrl(int orderCode) =>
       '$baseUrl/payments/$orderCode/confirm-cash';
+
+  // Service Disputes & Refunds Endpoints (Luồng 6 - UC-23 & UC-27)
+  static String get disputesUrl => '$baseUrl/disputes';
+  static String get myDisputesUrl => '$baseUrl/disputes/my';
+  static String disputesByOrderUrl(int rescueOrderId) =>
+      '$baseUrl/disputes/order/$rescueOrderId';
+
+  // Service Ratings & Reviews Endpoints (Luồng 9 - UC-19)
+  static String get ratingsUrl => '$baseUrl/ratings';
+  static String get myRatingsUrl => '$baseUrl/ratings/my';
+  static String ratingByOrderUrl(int rescueOrderId) =>
+      '$baseUrl/ratings/order/$rescueOrderId';
+  static String ratingsByGarageUrl(int garageId) =>
+      '$baseUrl/ratings/garage/$garageId';
 }

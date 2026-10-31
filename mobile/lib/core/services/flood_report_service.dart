@@ -5,7 +5,12 @@ import '../models/flood_report_model.dart';
 import 'auth_service.dart';
 
 class FloodReportService {
-  final AuthService _authService = AuthService();
+  final http.Client _client;
+  final AuthService _authService;
+
+  FloodReportService({http.Client? client, AuthService? authService})
+      : _client = client ?? http.Client(),
+        _authService = authService ?? AuthService();
 
   Future<Map<String, String>> _getHeaders() async {
     final token = await _authService.getToken();
@@ -16,13 +21,27 @@ class FloodReportService {
   }
 
   Future<List<FloodReportModel>> getActiveFloodReports() async {
-    final response = await http.get(Uri.parse(ApiConstants.activeFloodReportsUrl));
+    final response = await _client.get(Uri.parse(ApiConstants.activeFloodReportsUrl));
     final data = jsonDecode(utf8.decode(response.bodyBytes));
     if (response.statusCode == 200 && data['success'] == true) {
       final list = (data['data'] as List).map((i) => FloodReportModel.fromJson(i)).toList();
       return list;
     }
     throw Exception(data['message'] ?? 'Không thể tải dữ liệu bản đồ ngập');
+  }
+
+  Future<List<FloodReportModel>> getMyFloodReports() async {
+    final headers = await _getHeaders();
+    final response = await _client.get(
+      Uri.parse(ApiConstants.myFloodReportsUrl),
+      headers: headers,
+    );
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
+    if (response.statusCode == 200 && data['success'] == true) {
+      final list = (data['data'] as List).map((i) => FloodReportModel.fromJson(i)).toList();
+      return list;
+    }
+    throw Exception(data['message'] ?? 'Không thể tải danh sách điểm ngập đã báo cáo');
   }
 
   Future<FloodReportModel> reportFlood({
@@ -34,7 +53,7 @@ class FloodReportService {
     String? imageUrls,
   }) async {
     final headers = await _getHeaders();
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse(ApiConstants.floodReportsUrl),
       headers: headers,
       body: jsonEncode({
@@ -64,7 +83,7 @@ class FloodReportService {
       request.fields['folder'] = folder;
       request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await _client.send(request);
       final response = await http.Response.fromStream(streamedResponse);
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (response.statusCode == 200 && data['success'] == true) {
