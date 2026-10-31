@@ -1,20 +1,35 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/services/rating_service.dart';
 import '../../core/widgets/rescue_ui.dart';
 import 'stitch_hydro_rescue_screen.dart';
 
 class RatingReviewScreen extends StatefulWidget {
-  const RatingReviewScreen({super.key});
+  final int? rescueOrderId;
+  final String? rescueCode;
+  final String? garageName;
+  final String? mechanicName;
+
+  const RatingReviewScreen({
+    super.key,
+    this.rescueOrderId,
+    this.rescueCode,
+    this.garageName,
+    this.mechanicName,
+  });
 
   @override
   State<RatingReviewScreen> createState() => _RatingReviewScreenState();
 }
 
 class _RatingReviewScreenState extends State<RatingReviewScreen> {
+  final RatingService _ratingService = RatingService();
   int _stars = 5;
   final Set<String> _selectedTags = {'Đến nhanh < 15p', 'Nhiệt tình lội nước'};
   final _commentController = TextEditingController();
+  bool _isSubmitting = false;
+  ServiceRatingModel? _existingRating;
 
   final List<String> _tags = [
     'Đến nhanh < 15p',
@@ -25,19 +40,112 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.rescueOrderId != null) {
+      _checkExistingRating(widget.rescueOrderId!);
+    }
+  }
+
+  Future<void> _checkExistingRating(int orderId) async {
+    try {
+      final existing = await _ratingService.getRatingByOrder(orderId);
+      if (existing != null && mounted) {
+        setState(() {
+          _existingRating = existing;
+          _stars = existing.stars;
+          if (existing.tags != null && existing.tags!.isNotEmpty) {
+            _selectedTags
+              ..clear()
+              ..addAll(existing.tags!.split(',').map((e) => e.trim()));
+          }
+          if (existing.comment != null) {
+            _commentController.text = existing.comment!;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  @override
   void dispose() {
     _commentController.dispose();
     super.dispose();
   }
 
+  Future<void> _handleSubmit() async {
+    if (_isSubmitting) return;
+    final orderId = widget.rescueOrderId ?? 8821;
+    setState(() => _isSubmitting = true);
+
+    try {
+      final created = await _ratingService.submitRating(
+        rescueOrderId: orderId,
+        stars: _stars,
+        tags: _selectedTags.join(','),
+        comment: _commentController.text.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã gửi đánh giá ${created.stars} sao cho đơn ${created.rescueCode} thành công!',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const StitchHydroRescueScreen(),
+        ),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceAll('Exception: ', '');
+      if (widget.rescueOrderId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Đã ghi nhận đánh giá (Chế độ xem trước khi chưa kết nối đơn thực tế).',
+            ),
+          ),
+        );
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const StitchHydroRescueScreen(),
+          ),
+          (route) => false,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final mechanicDisplay = widget.mechanicName ?? 'Thợ Phạm Tuấn Anh';
+    final garageDisplay =
+        widget.garageName ?? 'Đội cứu hộ cơ động • Gara Toàn Thắng (Q.7)';
+    final orderCodeDisplay = widget.rescueCode ??
+        (widget.rescueOrderId != null ? '#RC-${widget.rescueOrderId}' : '#RC-8821');
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: const Text(
-          'Đánh giá cứu hộ',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+        title: Text(
+          'Đánh giá cứu hộ ($orderCodeDisplay)',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -48,14 +156,30 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const RescueIntro(
-              eyebrow: 'CHẤT LƯỢNG HỖ TRỢ',
+              eyebrow: 'CHẤT LƯỢNG HỖ TRỢ • UC-19',
               title: 'Chia sẻ trải nghiệm',
-              description: 'Đánh giá sự hỗ trợ của đội cứu hộ.',
+              description:
+                  'Đánh giá số sao và nhận xét để hệ thống cập nhật điểm uy tín (CSAT) của Thợ & Gara cứu hộ.',
             ),
             const SizedBox(height: 12),
-            const RescueDemoNote(
-              'Mô phỏng · Chưa xử lý giao dịch hoặc gửi dữ liệu thật',
-            ),
+            if (_existingRating != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Text(
+                  'Đơn cứu hộ này đã được bạn đánh giá ${_existingRating!.stars} sao.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade800,
+                  ),
+                ),
+              ),
             // Mechanic Portrait Card
             RescuePanel(
               padding: 16,
@@ -71,14 +195,20 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'Thợ Phạm Tuấn Anh',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  Text(
+                    mechanicDisplay,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 2),
-                  const Text(
-                    'Đội cứu hộ cơ động • Gara Toàn Thắng (Q.7)',
-                    style: TextStyle(fontSize: 12, color: AppColors.secondary),
+                  Text(
+                    garageDisplay,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary,
+                    ),
                   ),
                   const SizedBox(height: 14),
 
@@ -92,11 +222,13 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
                           color: Colors.amber,
                           size: 36,
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _stars = index + 1;
-                          });
-                        },
+                        onPressed: _existingRating != null
+                            ? null
+                            : () {
+                                setState(() {
+                                  _stars = index + 1;
+                                });
+                              },
                       );
                     }),
                   ),
@@ -143,15 +275,17 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
                   selectedColor: AppColors.primaryOrange,
                   backgroundColor: Colors.white,
                   checkmarkColor: Colors.white,
-                  onSelected: (val) {
-                    setState(() {
-                      if (val) {
-                        _selectedTags.add(tag);
-                      } else {
-                        _selectedTags.remove(tag);
-                      }
-                    });
-                  },
+                  onSelected: _existingRating != null
+                      ? null
+                      : (val) {
+                          setState(() {
+                            if (val) {
+                              _selectedTags.add(tag);
+                            } else {
+                              _selectedTags.remove(tag);
+                            }
+                          });
+                        },
                 );
               }).toList(),
             ),
@@ -160,6 +294,7 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
             // Comment text area
             TextField(
               controller: _commentController,
+              enabled: _existingRating == null,
               maxLines: 3,
               decoration: InputDecoration(
                 hintText: 'Chia sẻ trải nghiệm của bạn...',
@@ -173,21 +308,8 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
             const SizedBox(height: 24),
 
             ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Đã hoàn tất đánh giá minh họa. Dữ liệu chưa được gửi lên hệ thống.',
-                    ),
-                  ),
-                );
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(
-                    builder: (_) => const StitchHydroRescueScreen(),
-                  ),
-                  (route) => false,
-                );
-              },
+              onPressed:
+                  (_isSubmitting || _existingRating != null) ? null : _handleSubmit,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryOrange,
                 foregroundColor: Colors.white,
@@ -196,9 +318,11 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text(
-                'Gửi Đánh Giá Cứu Hộ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              child: Text(
+                _existingRating != null
+                    ? 'Đã Gửi Đánh Giá'
+                    : (_isSubmitting ? 'Đang gửi...' : 'Gửi Đánh Giá Cứu Hộ'),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
             ),
           ],

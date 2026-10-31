@@ -3,7 +3,10 @@ import '../core/models/flood_report_model.dart';
 import '../core/services/flood_report_service.dart';
 
 class FloodReportProvider with ChangeNotifier {
-  final FloodReportService _floodService = FloodReportService();
+  final FloodReportService _floodService;
+
+  FloodReportProvider({FloodReportService? floodService})
+      : _floodService = floodService ?? FloodReportService();
 
   List<FloodReportModel> _floodPoints = [];
   bool _isLoading = false;
@@ -47,9 +50,7 @@ class FloodReportProvider with ChangeNotifier {
         description: description,
         imageUrls: imageUrls,
       );
-      if (point.moderationStatus == 'APPROVED') {
-        _floodPoints.insert(0, point);
-      }
+      _floodPoints.insert(0, point);
       _isLoading = false;
       notifyListeners();
       return true;

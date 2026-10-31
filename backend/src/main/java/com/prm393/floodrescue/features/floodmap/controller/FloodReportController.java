@@ -43,4 +43,15 @@ public class FloodReportController {
         List<FloodReportResponse> list = floodReportService.getActiveFloodPoints();
         return ResponseEntity.ok(ApiResponse.success(list));
     }
+
+    // UC-20: View My Submitted Flood Reports
+    @GetMapping("/my")
+    @Operation(summary = "UC-20: Lấy danh sách các điểm ngập do người dùng hiện tại đã báo cáo")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<ApiResponse<List<FloodReportResponse>>> getMyFloodReports(
+            @AuthenticationPrincipal User user
+    ) {
+        List<FloodReportResponse> list = floodReportService.getMyReports(user);
+        return ResponseEntity.ok(ApiResponse.success(list));
+    }
 }

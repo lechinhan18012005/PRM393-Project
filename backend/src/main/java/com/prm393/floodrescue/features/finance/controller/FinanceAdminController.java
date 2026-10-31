@@ -3,7 +3,9 @@ package com.prm393.floodrescue.features.finance.controller;
 import com.prm393.floodrescue.common.dto.ApiResponse;
 import com.prm393.floodrescue.features.auth.entity.User;
 import com.prm393.floodrescue.features.finance.dto.*;
+import com.prm393.floodrescue.features.finance.entity.DisputeStatus;
 import com.prm393.floodrescue.features.finance.entity.PayoutStatus;
+import com.prm393.floodrescue.features.finance.service.DisputeRefundService;
 import com.prm393.floodrescue.features.finance.service.FinanceAdminService;
 import com.prm393.floodrescue.features.payment.dto.PaymentTransactionResponse;
 import com.prm393.floodrescue.features.payment.entity.PaymentStatus;
@@ -25,6 +27,7 @@ public class FinanceAdminController {
 
     private final FinanceAdminService financeAdminService;
     private final PayOSPaymentService payOSPaymentService;
+    private final DisputeRefundService disputeRefundService;
 
     // UC-24: Get active commission rate configuration
     @GetMapping("/commission")
@@ -87,6 +90,26 @@ public class FinanceAdminController {
     ) {
         PayoutRequestResponse response = financeAdminService.processPayoutRequest(admin, id, request);
         return ResponseEntity.ok(ApiResponse.success("Xử lý yêu cầu rút tiền thành công!", response));
+    }
+
+    // UC-27: List all dispute & refund cases for Admin decision
+    @GetMapping("/refunds")
+    public ResponseEntity<ApiResponse<List<DisputeResponse>>> getAllRefundDisputes(
+            @RequestParam(value = "status", required = false) DisputeStatus status
+    ) {
+        List<DisputeResponse> disputes = disputeRefundService.getAllDisputes(status);
+        return ResponseEntity.ok(ApiResponse.success(disputes));
+    }
+
+    // UC-27: Admin approves & executes refund (100% or partial), requests re-verification, or rejects
+    @PatchMapping("/refunds/{id}/process")
+    public ResponseEntity<ApiResponse<DisputeResponse>> processRefundDecision(
+            @AuthenticationPrincipal User admin,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody AdminProcessRefundRequest request
+    ) {
+        DisputeResponse response = disputeRefundService.processRefundByAdmin(admin, id, request);
+        return ResponseEntity.ok(ApiResponse.success("Đã thực thi quyết định hoàn tiền / xử lý khiếu nại thành công!", response));
     }
 
     // UC-25: Financial overview statistics
