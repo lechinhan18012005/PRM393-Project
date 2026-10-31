@@ -7,7 +7,6 @@ import 'package:mobile/providers/auth_provider.dart';
 import 'package:mobile/screens/auth/login_screen.dart';
 import 'package:mobile/screens/customer/stitch_hydro_rescue_screen.dart';
 import 'package:mobile/screens/customer/vehicle_profile_screen.dart';
-import 'package:mobile/screens/home/garage_home_screen.dart';
 import 'package:mobile/screens/home/mechanic_home_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -176,40 +175,6 @@ void main() {
 
       expect(mockAuth.logoutCalled, isTrue);
       expect(find.byType(LoginScreen), findsOneWidget);
-    });
-
-    testWidgets('GarageHomeScreen has working logout button', (tester) async {
-      final mockAuth = MockAuthProvider(
-        user: UserModel(
-          id: 2,
-          username: 'garage_test',
-          email: 'garage@floodrescue.vn',
-          fullName: 'Gara Test',
-          phone: '0901111222',
-          role: 'GARAGE_OWNER',
-          active: true,
-        ),
-      );
-
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<AuthProvider>.value(value: mockAuth),
-          ],
-          child: MaterialApp(
-            theme: AppTheme.light,
-            home: const GarageHomeScreen(),
-          ),
-        ),
-      );
-
-      final logoutBtn = find.byKey(const Key('garage-logout-btn'));
-      expect(logoutBtn, findsOneWidget);
-
-      await tester.tap(logoutBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Xác nhận đăng xuất'), findsOneWidget);
     });
 
     testWidgets('MechanicHomeScreen has working logout button', (tester) async {

@@ -17,6 +17,7 @@ import com.prm393.floodrescue.features.garage.entity.GarageStatus;
 import com.prm393.floodrescue.features.garage.repository.GarageBranchRepository;
 import com.prm393.floodrescue.features.garage.repository.GarageRepository;
 import com.prm393.floodrescue.features.garage.service.GarageService;
+import com.prm393.floodrescue.features.garage.service.impl.GarageServiceImpl;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +43,7 @@ class GarageServiceTest {
 
     @Mock private UserRepository userRepository;
 
-    @InjectMocks private GarageService garageService;
+    @InjectMocks private GarageServiceImpl garageService;
 
     private User sampleUser;
 

@@ -6,11 +6,24 @@ import '../../core/services/location_service.dart';
 import '../../providers/mechanic_provider.dart';
 import 'mechanic_ui.dart';
 
-Future<void> changeMechanicAvailability(BuildContext context) async {
+Future<void> changeMechanicAvailability(BuildContext context, {String? pauseReason}) async {
   final provider = context.read<MechanicProvider>();
   final profile = provider.myProfile;
   if (profile == null || profile.isBusy || provider.isLoading) return;
+
   final target = profile.isOnline ? 'OFFLINE' : 'AVAILABLE';
+
+  // Guard: Chặn bật trực tuyến khi chi nhánh đóng cửa bảo trì (BR-MECH-004)
+  if (target == 'AVAILABLE' && !profile.isBranchOpen) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Chi nhánh của bạn đang tạm đóng cửa bảo trì, không thể bật nhận việc!'),
+        backgroundColor: AppColors.error,
+      ),
+    );
+    return;
+  }
+
   double? lat;
   double? lon;
   if (target == 'AVAILABLE') {
@@ -23,7 +36,13 @@ Future<void> changeMechanicAvailability(BuildContext context) async {
       }
     }
   }
-  final ok = await provider.toggleStatus(status: target, latitude: lat, longitude: lon);
+
+  final ok = await provider.toggleStatus(
+    status: target,
+    latitude: lat,
+    longitude: lon,
+    pauseReason: target == 'OFFLINE' ? (pauseReason ?? 'Tạm nghỉ giữa ca') : null,
+  );
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
@@ -101,6 +120,55 @@ class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+            if (p != null && !p.isBranchOpen)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: .1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.error.withValues(alpha: .3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: AppColors.error),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Chi nhánh ${p.branchName ?? ""} đang tạm đóng cửa bảo trì. Vui lòng liên hệ Chủ gara!',
+                          style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (p != null && p.isPaused)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryOrange.withValues(alpha: .1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.primaryOrange.withValues(alpha: .3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.pause_circle_filled, color: AppColors.primaryOrange),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Bạn đang tạm nghỉ: ${p.pauseReason ?? "Tạm nghỉ"}. Gạt nhận việc khi sẵn sàng!',
+                          style: const TextStyle(color: AppColors.primaryOrange, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             const MechanicSection('Thông tin phân công'),
             MechanicPanel(
               child: Column(
@@ -146,7 +214,7 @@ class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
                               ? 'Đang thực hiện công việc'
                               : p.isOnline
                               ? 'Sẵn sàng nhận đơn'
-                              : 'Đang tạm nghỉ',
+                              : (p.isPaused ? 'Đang tạm nghỉ' : 'Đang tạm nghỉ'),
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
@@ -156,17 +224,19 @@ class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'Bật nhận việc khi bạn sẵn sàng. Thay đổi trạng thái được đồng bộ với gara.',
+                  Text(
+                    p != null && !p.isBranchOpen
+                        ? 'Chi nhánh đang đóng cửa bảo trì. Không thể nhận đơn.'
+                        : 'Bật nhận việc khi bạn sẵn sàng. Thay đổi trạng thái được đồng bộ với gara.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.secondary,
+                      color: p != null && !p.isBranchOpen ? AppColors.error : AppColors.secondary,
                       height: 1.6,
                     ),
                   ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
-                    onPressed: p == null || p.isBusy || provider.isLoading
+                    onPressed: p == null || p.isBusy || provider.isLoading || (!p.isOnline && !p.isBranchOpen)
                         ? null
                         : () => changeMechanicAvailability(context),
                     icon: Icon(

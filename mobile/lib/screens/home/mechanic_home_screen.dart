@@ -20,6 +20,7 @@ import '../mechanic/repair_execution_screen.dart';
 import '../mechanic/route_navigation_screen.dart';
 import '../mechanic/mechanic_shift_screen.dart';
 import '../mechanic/mechanic_ui.dart';
+import '../demo/demo_catalog_screen.dart';
 
 class MechanicHomeScreen extends StatefulWidget {
   const MechanicHomeScreen({super.key});
@@ -425,6 +426,11 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
               ),
               actions: [
                 IconButton(
+                  tooltip: 'Khám phá ứng dụng mẫu',
+                  onPressed: () => _open(const DemoCatalogScreen()),
+                  icon: const Icon(Icons.apps_rounded, color: AppColors.primary),
+                ),
+                IconButton(
                   tooltip: 'Làm mới',
                   onPressed: () {
                     _initializeHomeScreen();
@@ -546,8 +552,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
                       ? 'Đang thực hiện việc'
                       : profile.isOnline
                       ? 'Sẵn sàng nhận đơn'
-                      : 'Đang nghỉ',
-                  color: const Color(0xFF76D6B5),
+                      : (profile.isPaused ? 'Đang tạm nghỉ' : 'Đang nghỉ'),
+                  color: profile?.isPaused == true ? AppColors.primaryOrange : const Color(0xFF76D6B5),
                 ),
                 if (profile?.branchName != null)
                   MechanicLabel(
@@ -647,7 +653,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
             ),
             Switch(
               value: profile?.isOnline ?? false,
-              onChanged: profile == null || profile.isBusy || provider.isLoading
+              onChanged: profile == null || profile.isBusy || provider.isLoading || (!profile.isOnline && !profile.isBranchOpen)
                   ? null
                   : (_) => _toggleAvailability(),
             ),

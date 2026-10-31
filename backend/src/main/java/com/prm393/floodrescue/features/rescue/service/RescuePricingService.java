@@ -80,7 +80,7 @@ public class RescuePricingService {
 
         for (Garage garage : approvedGarages) {
             List<ServiceItem> matchingServices = serviceItemRepository
-                    .findByGarageIdAndActiveTrueOrderByCreatedAtAsc(garage.getId())
+                    .findByGarageIdAndActiveTrueAndDeletedFalseOrderByCreatedAtAsc(garage.getId())
                     .stream()
                     .filter(s -> s.getServiceType() == serviceType)
                     .toList();

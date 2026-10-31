@@ -1,5 +1,6 @@
 package com.prm393.floodrescue.features.mechanic.dto;
 
+import com.prm393.floodrescue.features.garage.entity.BranchStatus;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStatus;
 
 import lombok.AllArgsConstructor;
@@ -27,6 +28,10 @@ public class MechanicStaffResponse {
     private Long branchId;
     private String branchName;
     private String branchAddress;
+    private BranchStatus branchOperatingStatus;
+    private boolean isManualOverride;
+    private LocalDateTime pausedAt;
+    private String pauseReason;
     private Double currentLatitude;
     private Double currentLongitude;
     private MechanicStatus workingStatus;

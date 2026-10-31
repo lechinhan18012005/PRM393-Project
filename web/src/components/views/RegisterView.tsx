@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DocumentUpload } from '../DocumentUpload';
 import { useAuth } from '../../context/AuthContext';
-import { Shield, AlertCircle, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react';
+import { Shield, AlertCircle, ArrowLeft, Loader2, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 interface RegisterViewProps {
   onSwitchToLogin: () => void;
@@ -34,6 +34,8 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [nd13Consent, setNd13Consent] = useState(false);
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -429,18 +431,33 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
                   <label className="block text-xs font-semibold text-slate-700 mb-0.5">
                     Mật khẩu <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => handleChange('password', e.target.value)}
-                    onBlur={() => handleBlur('password')}
-                    placeholder="Tối thiểu 6 ký tự"
-                    className={`w-full px-3 py-1.5 bg-slate-50 border rounded-lg text-slate-900 placeholder-slate-400 text-xs focus:outline-none focus:ring-1 ${
-                      touched.password && errors.password
-                        ? 'border-red-500 focus:ring-red-500/30'
-                        : 'border-slate-200 focus:ring-orange-500'
-                    }`}
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => handleChange('password', e.target.value)}
+                      onBlur={() => handleBlur('password')}
+                      placeholder="Tối thiểu 6 ký tự"
+                      className={`w-full pl-3 pr-8 py-1.5 bg-slate-50 border rounded-lg text-slate-900 placeholder-slate-400 text-xs focus:outline-none focus:ring-1 ${
+                        touched.password && errors.password
+                          ? 'border-red-500 focus:ring-red-500/30'
+                          : 'border-slate-200 focus:ring-orange-500'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-2 p-0.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-200/50 transition-colors focus:outline-none cursor-pointer"
+                      title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-3.5 h-3.5" />
+                      ) : (
+                        <Eye className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
                   {touched.password && errors.password && (
                     <p className="text-red-500 text-[11px] mt-0.5 font-medium leading-tight break-words">{errors.password}</p>
                   )}
@@ -450,18 +467,33 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
                   <label className="block text-xs font-semibold text-slate-700 mb-0.5">
                     Xác nhận mật khẩu <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => handleChange('confirmPassword', e.target.value)}
-                    onBlur={() => handleBlur('confirmPassword')}
-                    placeholder="Nhập lại mật khẩu"
-                    className={`w-full px-3 py-1.5 bg-slate-50 border rounded-lg text-slate-900 placeholder-slate-400 text-xs focus:outline-none focus:ring-1 ${
-                      touched.confirmPassword && errors.confirmPassword
-                        ? 'border-red-500 focus:ring-red-500/30'
-                        : 'border-slate-200 focus:ring-orange-500'
-                    }`}
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => handleChange('confirmPassword', e.target.value)}
+                      onBlur={() => handleBlur('confirmPassword')}
+                      placeholder="Nhập lại mật khẩu"
+                      className={`w-full pl-3 pr-8 py-1.5 bg-slate-50 border rounded-lg text-slate-900 placeholder-slate-400 text-xs focus:outline-none focus:ring-1 ${
+                        touched.confirmPassword && errors.confirmPassword
+                          ? 'border-red-500 focus:ring-red-500/30'
+                          : 'border-slate-200 focus:ring-orange-500'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      className="absolute right-2 p-0.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-200/50 transition-colors focus:outline-none cursor-pointer"
+                      title={showConfirmPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      aria-label={showConfirmPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="w-3.5 h-3.5" />
+                      ) : (
+                        <Eye className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
                   {touched.confirmPassword && errors.confirmPassword && (
                     <p className="text-red-500 text-[11px] mt-0.5 font-medium leading-tight break-words">{errors.confirmPassword}</p>
                   )}
