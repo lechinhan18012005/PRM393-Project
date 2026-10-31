@@ -103,8 +103,9 @@ public class RescueDispatchService {
     }
 
     public static String computePayloadHash(CreateRescueOrderRequest request) {
-        String payloadString = String.format("%d:%d:%d:%.6f:%.6f:%.6f:%.6f:%s:%s:%s:%s",
+        String payloadString = String.format("%d:%d:%d:%s:%.6f:%.6f:%.6f:%.6f:%s:%s:%s:%s",
                 request.getVehicleId(), request.getGarageId(), request.getServiceItemId(),
+                resolveOrderType(request).name(),
                 request.getPickupLatitude(), request.getPickupLongitude(),
                 request.getDropoffLatitude(), request.getDropoffLongitude(),
                 request.getPickupAddress() != null ? request.getPickupAddress().trim() : "",
@@ -126,6 +127,22 @@ public class RescueDispatchService {
 
     @Transactional
     public RescueOrderResponse createSingleCrossingOrder(User customer, CreateRescueOrderRequest request) {
+        if (resolveOrderType(request) == OrderType.BATCH_CROSSING) {
+            throw new BadRequestException(
+                    "Chỉ có thể tham gia gom chuyến từ một chuyến do thợ hoặc gara đã mở");
+        }
+        return createOrder(customer, request);
+    }
+
+    @Transactional
+    public RescueOrderResponse createBatchOrderForTrip(User customer, CreateRescueOrderRequest request) {
+        request.setOrderType(OrderType.BATCH_CROSSING);
+        return createOrder(customer, request);
+    }
+
+    private RescueOrderResponse createOrder(User customer, CreateRescueOrderRequest request) {
+        OrderType orderType = resolveOrderType(request);
+        ServiceType expectedServiceType = expectedServiceType(orderType);
         // 0. Khóa bản ghi khách hàng để tuần tự hóa các yêu cầu tạo đơn đồng thời từ cùng một người dùng (B02)
         userRepository.findByIdWithLock(customer.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Tài khoản người dùng không tồn tại!"));
@@ -169,8 +186,8 @@ public class RescueDispatchService {
         if (!serviceItem.getGarage().getId().equals(garage.getId())) {
             throw new BadRequestException("Dịch vụ không thuộc gara đã chọn!");
         }
-        if (!serviceItem.isActive() || serviceItem.getServiceType() != ServiceType.CROSSING) {
-            throw new BadRequestException("Dịch vụ chở xe vượt ngập hiện không hoạt động!");
+        if (!serviceItem.isActive() || serviceItem.getServiceType() != expectedServiceType) {
+            throw new BadRequestException("Dịch vụ được chọn không phù hợp với loại yêu cầu cứu hộ!");
         }
 
         // 4. Lấy snapshot giá từ database (không tin cậy giá client)
@@ -195,13 +212,15 @@ public class RescueDispatchService {
         }
 
         // C01: Kiểm tra giới hạn quãng đường chở xe vượt ngập
-        double crossingDistanceMeters = GeoDistanceUtils.calculateDistanceMeters(
-                request.getPickupLatitude(), request.getPickupLongitude(),
-                request.getDropoffLatitude(), request.getDropoffLongitude()
-        );
-        if (crossingDistanceMeters > 30000.0) {
-            throw new BadRequestException("Quãng đường chở xe vượt ngập quá xa ("
-                    + Math.round(crossingDistanceMeters / 1000.0) + " km), vượt quá giới hạn phục vụ 30 km của dịch vụ đơn lẻ!");
+        if (orderType == OrderType.SINGLE_CROSSING || orderType == OrderType.BATCH_CROSSING) {
+            double crossingDistanceMeters = GeoDistanceUtils.calculateDistanceMeters(
+                    request.getPickupLatitude(), request.getPickupLongitude(),
+                    request.getDropoffLatitude(), request.getDropoffLongitude()
+            );
+            if (crossingDistanceMeters > 30000.0) {
+                throw new BadRequestException("Quãng đường chở xe vượt ngập quá xa ("
+                        + Math.round(crossingDistanceMeters / 1000.0) + " km), vượt quá giới hạn phục vụ 30 km của dịch vụ đơn lẻ!");
+            }
         }
 
         // 5. Sinh mã đơn hàng
@@ -216,7 +235,7 @@ public class RescueDispatchService {
                 .garage(garage)
                 .branch(null) // Sẽ gán theo chi nhánh của thợ nhận
                 .serviceItem(serviceItem)
-                .orderType(OrderType.SINGLE_CROSSING)
+                .orderType(orderType)
                 .status(RescueOrderStatus.REQUESTED)
                 .vehicleId(vehicle.getId())
                 .vehiclePlate(vehicle.getLicensePlate())
@@ -241,8 +260,10 @@ public class RescueDispatchService {
         order = rescueOrderRepository.save(order);
         recordAudit(order.getId(), null, RescueOrderStatus.REQUESTED, customer.getId(), customer.getUsername(), "Khách hàng gửi yêu cầu SOS");
 
-        // 6. Tìm kiếm ứng viên điều phối thuộc Gara đã chọn
-        dispatchNextCandidate(order);
+        // Đơn gom chờ khách tham gia một chuyến ở Luồng 7; các loại còn lại điều phối ngay.
+        if (orderType != OrderType.BATCH_CROSSING) {
+            dispatchNextCandidate(order);
+        }
 
         return mapToResponse(order);
     }
@@ -272,7 +293,7 @@ public class RescueDispatchService {
         List<CandidateWithDistance> candidates = mechanicRepository.findByGarageIdOrderByCreatedAtDesc(order.getGarage().getId())
                 .stream()
                 .filter(m -> !offeredMechanicIds.contains(m.getId()))
-                .filter(m -> eligibilityChecker.isMechanicEligibleForCrossing(m, heartbeatThreshold))
+                .filter(m -> isEligibleForOrder(m, order, heartbeatThreshold))
                 .map(m -> {
                     // Dùng tọa độ GPS thật của thợ, KHÔNG fallback về chi nhánh hay điểm đón khách (B01)
                     double distance = GeoDistanceUtils.calculateDistanceMeters(
@@ -389,7 +410,7 @@ public class RescueDispatchService {
 
         // B01: Kiểm tra lại toàn diện tiêu chí thợ đủ điều kiện tại thời điểm accept
         LocalDateTime heartbeatThreshold = LocalDateTime.now().minusMinutes(heartbeatValidMinutes);
-        if (!eligibilityChecker.isMechanicEligibleForCrossing(staff, heartbeatThreshold)) {
+        if (!isEligibleForOrder(staff, order, heartbeatThreshold)) {
             throw new BadRequestException("Bạn không còn đủ điều kiện nhận đơn (trạng thái làm việc, GPS hoặc heartbeat đã thay đổi)!");
         }
 
@@ -432,6 +453,29 @@ public class RescueDispatchService {
         broadcastOrderUpdate(order);
 
         return mapToResponse(order);
+    }
+
+    private static OrderType resolveOrderType(CreateRescueOrderRequest request) {
+        OrderType orderType = request.getOrderType() != null ? request.getOrderType() : OrderType.SINGLE_CROSSING;
+        if (orderType == OrderType.TOWING) {
+            throw new BadRequestException(
+                    "Khách hàng không thể tạo trực tiếp đơn kéo xe; thợ phải kiểm tra và khách duyệt báo giá kéo xe trước");
+        }
+        return orderType;
+    }
+
+    private static ServiceType expectedServiceType(OrderType orderType) {
+        return switch (orderType) {
+            case SINGLE_CROSSING, BATCH_CROSSING -> ServiceType.CROSSING;
+            case ONSITE_REPAIR -> ServiceType.REPAIR_ONSITE;
+            case TOWING -> ServiceType.TOWING;
+        };
+    }
+
+    private boolean isEligibleForOrder(MechanicStaff staff, RescueOrder order, LocalDateTime heartbeatThreshold) {
+        return order.getOrderType() == OrderType.SINGLE_CROSSING
+                ? eligibilityChecker.isMechanicEligibleForCrossing(staff, heartbeatThreshold)
+                : eligibilityChecker.isMechanicEligibleForRescue(staff, heartbeatThreshold);
     }
 
     /**
@@ -583,7 +627,7 @@ public class RescueDispatchService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public RescueOrderResponse getActiveOrderByUser(User user) {
         RescueOrder order = null;
         if (user.getRole() == com.prm393.floodrescue.features.auth.entity.Role.CUSTOMER) {
@@ -595,6 +639,10 @@ public class RescueDispatchService {
                             RescueOrderStatus.IN_PROGRESS,
                             RescueOrderStatus.PAYMENT_PENDING
                     )).orElse(null);
+            if (isExpiredUnjoinedBatchOrder(order)) {
+                expireUnjoinedBatchOrder(order, user);
+                return null;
+            }
         } else if (user.getRole() == com.prm393.floodrescue.features.auth.entity.Role.FIELD_MECHANIC) {
             MechanicStaff staff = mechanicRepository.findByUserId(user.getId()).orElse(null);
             if (staff != null) {
@@ -608,6 +656,39 @@ public class RescueDispatchService {
             }
         }
         return order != null ? mapToResponse(order) : null;
+    }
+
+    private boolean isExpiredUnjoinedBatchOrder(RescueOrder order) {
+        return order != null
+                && order.getOrderType() == OrderType.BATCH_CROSSING
+                && order.getBatchTripId() == null
+                && order.getStatus() == RescueOrderStatus.REQUESTED
+                && order.getRequestedAt() != null
+                && !order.getRequestedAt().isAfter(LocalDateTime.now().minusMinutes(10));
+    }
+
+    private void expireUnjoinedBatchOrder(RescueOrder order, User customer) {
+        LocalDateTime now = LocalDateTime.now();
+        order.setStatus(RescueOrderStatus.CANCELLED);
+        order.setCancelledAt(now);
+        order.setCancelReason("Hết thời gian chờ tham gia chuyến gom");
+        order.setTransportNote("Yêu cầu gom chuyến đã hết hạn");
+        rescueOrderRepository.save(order);
+        recordAudit(order.getId(), RescueOrderStatus.REQUESTED,
+                RescueOrderStatus.CANCELLED, customer.getId(), customer.getUsername(),
+                "Tự động đóng yêu cầu gom chuyến hết hạn");
+        broadcastOrderUpdate(order);
+    }
+
+    @Transactional
+    public int expireStaleUnjoinedBatchOrders() {
+        List<RescueOrder> staleOrders = rescueOrderRepository
+                .findByOrderTypeAndBatchTripIdIsNullAndStatusAndRequestedAtBefore(
+                        OrderType.BATCH_CROSSING,
+                        RescueOrderStatus.REQUESTED,
+                        LocalDateTime.now().minusMinutes(10));
+        staleOrders.forEach(order -> expireUnjoinedBatchOrder(order, order.getCustomer()));
+        return staleOrders.size();
     }
 
     public void validateOrderAccess(User user, RescueOrder order) {

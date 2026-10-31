@@ -17,6 +17,7 @@ export const screenModule: Record<ScreenId, ModuleType> = {
   moderation: 'staff',
   disputes: 'staff',
   monitoring: 'staff',
+  'batch-trips': 'staff',
   'owner-dashboard': 'owner',
   services: 'owner'
 };

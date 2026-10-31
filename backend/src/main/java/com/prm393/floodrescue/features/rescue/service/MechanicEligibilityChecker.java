@@ -29,6 +29,19 @@ public class MechanicEligibilityChecker {
      * Bộ tiêu chí chuẩn hóa xác minh thợ đủ điều kiện chở xe vượt ngập (B01)
      */
     public boolean isMechanicEligibleForCrossing(MechanicStaff staff, LocalDateTime heartbeatThreshold) {
+        return isMechanicEligible(staff, heartbeatThreshold, true);
+    }
+
+    /**
+     * Bộ tiêu chí dùng chung cho điều phối cứu hộ. Năng lực chở xe chuyên dụng
+     * chỉ bắt buộc với đơn vượt ngập, không bắt buộc với sửa tại chỗ/kéo xe.
+     */
+    public boolean isMechanicEligibleForRescue(MechanicStaff staff, LocalDateTime heartbeatThreshold) {
+        return isMechanicEligible(staff, heartbeatThreshold, false);
+    }
+
+    private boolean isMechanicEligible(MechanicStaff staff, LocalDateTime heartbeatThreshold,
+                                       boolean requireCrossingCapability) {
         if (staff == null) {
             return false;
         }
@@ -49,7 +62,7 @@ public class MechanicEligibilityChecker {
         }
 
         // 4. Có năng lực chở xe chuyên dụng (hasCrossingCapability = true)
-        if (!staff.isHasCrossingCapability()) {
+        if (requireCrossingCapability && !staff.isHasCrossingCapability()) {
             return false;
         }
 
