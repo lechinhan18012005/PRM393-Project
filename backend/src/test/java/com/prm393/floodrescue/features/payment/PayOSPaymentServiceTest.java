@@ -180,6 +180,38 @@ class PayOSPaymentServiceTest {
     }
 
     @Test
+    @DisplayName("Luồng 4: Thanh toán sửa tại chỗ dùng tỷ lệ hoa hồng cứu hộ xe ngập")
+    void createPayment_OnsiteRepairUsesWaterloggedRepairRate() {
+        RescueOrder order = RescueOrder.builder()
+                .id(903L).customer(customer).garage(garage)
+                .orderType(OrderType.ONSITE_REPAIR)
+                .status(RescueOrderStatus.PAYMENT_PENDING)
+                .totalAmount(new BigDecimal("200000.00")).orderCode("#RC-903")
+                .build();
+        when(rescueOrderRepository.findByIdWithLock(903L)).thenReturn(Optional.of(order));
+        when(commissionConfigRepository.findFirstByActiveTrueOrderByCreatedAtDesc())
+                .thenReturn(Optional.of(CommissionConfig.builder()
+                        .globalRate(new BigDecimal("12.50"))
+                        .singleCrossingRate(new BigDecimal("10.00"))
+                        .waterloggedRepairRate(new BigDecimal("15.00"))
+                        .active(true).build()));
+        when(paymentTransactionRepository.save(any(PaymentTransaction.class))).thenAnswer(inv -> {
+            PaymentTransaction tx = inv.getArgument(0);
+            tx.setId(503L);
+            return tx;
+        });
+
+        CreatePaymentLinkResponse response = payOSPaymentService.createPayment(customer,
+                CreatePaymentRequest.builder().rescueOrderId(903L).garageId(20L)
+                        .amount(new BigDecimal("200000.00"))
+                        .paymentMethod(PaymentMethod.PAYOS_VIETQR).build());
+
+        assertEquals(new BigDecimal("15.00"), response.getCommissionRate());
+        assertEquals(new BigDecimal("30000.00"), response.getPlatformFee());
+        assertEquals(new BigDecimal("170000.00"), response.getNetGarageAmount());
+    }
+
+    @Test
     @DisplayName("UC-18 + UC-26: Webhook PayOS hợp lệ tự động cộng tiền thực nhận vào Ví Gara, ghi sổ WalletTransaction và hoàn tất đơn cứu hộ")
     void handlePayOSWebhook_ValidSignature_CreditsGarageWallet() {
         RescueOrder order = RescueOrder.builder()

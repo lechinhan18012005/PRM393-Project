@@ -2,6 +2,7 @@ package com.prm393.floodrescue.features.rescue.repository;
 
 import com.prm393.floodrescue.features.rescue.entity.RescueOrder;
 import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
+import com.prm393.floodrescue.features.rescue.entity.OrderType;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 @Repository
 public interface RescueOrderRepository extends JpaRepository<RescueOrder, Long> {
@@ -33,11 +35,19 @@ public interface RescueOrderRepository extends JpaRepository<RescueOrder, Long> 
 
     List<RescueOrder> findByGarageIdOrderByCreatedAtDesc(Long garageId);
 
+    List<RescueOrder> findByBatchTripIdOrderByCreatedAtAsc(Long batchTripId);
+
+    List<RescueOrder> findByOrderTypeAndBatchTripIdIsNullAndStatusAndRequestedAtBefore(
+            OrderType orderType, RescueOrderStatus status, LocalDateTime requestedBefore);
+
     List<RescueOrder> findAllByOrderByCreatedAtDesc();
 
     boolean existsByCustomerIdAndStatusIn(Long customerId, List<RescueOrderStatus> statuses);
 
     boolean existsByMechanicStaffIdAndStatusIn(Long mechanicStaffId, List<RescueOrderStatus> statuses);
+
+    boolean existsByMechanicStaffIdAndIdNotAndStatusIn(
+            Long mechanicStaffId, Long excludedOrderId, List<RescueOrderStatus> statuses);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM RescueOrder r WHERE r.id = :id")

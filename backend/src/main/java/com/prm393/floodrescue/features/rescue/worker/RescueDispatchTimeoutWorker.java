@@ -35,4 +35,17 @@ public class RescueDispatchTimeoutWorker {
             }
         }
     }
+
+    /** Đóng các yêu cầu gom chuyến cũ chưa kịp giữ chỗ để không còn đơn treo ở trang khách. */
+    @Scheduled(fixedDelay = 30000)
+    public void expireUnjoinedBatchOrders() {
+        try {
+            int expired = rescueDispatchService.expireStaleUnjoinedBatchOrders();
+            if (expired > 0) {
+                log.info("Đã tự động đóng {} yêu cầu gom chuyến hết hạn", expired);
+            }
+        } catch (Exception e) {
+            log.error("Lỗi khi đóng yêu cầu gom chuyến hết hạn: {}", e.getMessage());
+        }
+    }
 }

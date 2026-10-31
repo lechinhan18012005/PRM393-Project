@@ -14,6 +14,7 @@ export type ScreenId =
   | 'moderation'
   | 'disputes'
   | 'monitoring'
+  | 'batch-trips'
   // Module C
   | 'owner-dashboard'
   | 'services'
@@ -21,6 +22,21 @@ export type ScreenId =
   | 'garage-finance'
   | 'garage-transport'
   | 'staff-accounts';
+
+export interface BatchTrip {
+  id: number;
+  mechanicId: number;
+  branchId: number;
+  capacity: number;
+  currentVehicleCount: number;
+  availableSlots: number;
+  pickupPlace: string;
+  discountedPricePerVehicle: number;
+  status: 'GATHERING' | 'READY' | 'PICKING_UP' | 'MOVING' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+  departureTime: string;
+  createdAt: string;
+  completedAt?: string;
+}
 
 export interface PayOSTransaction {
   id: string;
