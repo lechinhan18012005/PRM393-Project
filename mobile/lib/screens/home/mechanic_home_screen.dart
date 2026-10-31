@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,8 +9,10 @@ import '../../core/services/location_service.dart';
 import '../../core/services/rescue_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/mechanic_provider.dart';
+import '../../features/quotation/quotation_api.dart';
 import '../customer/account_screen.dart';
 import '../customer/vietqr_payment_screen.dart';
+import '../garage/batch_transport_manage_screen.dart';
 import '../mechanic/crossing_transport_screen.dart';
 import '../mechanic/incoming_dispatch_screen.dart';
 import '../mechanic/quotation_builder_screen.dart';
@@ -24,7 +27,8 @@ class MechanicHomeScreen extends StatefulWidget {
   State<MechanicHomeScreen> createState() => _MechanicHomeScreenState();
 }
 
-class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBindingObserver {
+class _MechanicHomeScreenState extends State<MechanicHomeScreen>
+    with WidgetsBindingObserver {
   // Hot reload can retain a State created before these fields existed.
   // Read through defaults instead of relying on field initializers being rerun.
   int? _tab;
@@ -41,6 +45,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
 
   final RescueService _rescueService = RescueService();
   RescueOrderModel? _activeOrder;
+  String? _latestQuotationStatus;
 
   // Quản lý offer & GPS nhàn rỗi theo phiên FIELD_MECHANIC
   RescueOfferModel? _pendingOffer;
@@ -191,7 +196,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
     }
 
     // Đổi tài khoản: reset cache offer
-    if (_currentMechanicUsername != null && _currentMechanicUsername != authUser.username) {
+    if (_currentMechanicUsername != null &&
+        _currentMechanicUsername != authUser.username) {
       setState(() {
         _pendingOffer = null;
         _presentedOfferId = null;
@@ -234,7 +240,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
         if (IncomingDispatchScreen.isScreenOpen) {
           _presentedOfferId = latest.offerId;
           IncomingDispatchScreen.updateActiveOffer(latest);
-        } else if (_presentedOfferId != latest.offerId && !_isHandlingOfferNavigation) {
+        } else if (_presentedOfferId != latest.offerId &&
+            !_isHandlingOfferNavigation) {
           _presentedOfferId = latest.offerId;
           _openIncomingDispatchScreen(offer: latest);
         }
@@ -300,10 +307,10 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
       setState(() => _gpsUnavailable = false);
       // Gửi GPS thật lên backend để làm mới last_gps_updated_at lúc thợ đang AVAILABLE
       await context.read<MechanicProvider>().toggleStatus(
-            status: 'AVAILABLE',
-            latitude: loc.latitude,
-            longitude: loc.longitude,
-          );
+        status: 'AVAILABLE',
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+      );
     } catch (_) {
       // Bỏ qua lỗi mạng lúc gửi GPS heartbeat
     } finally {
@@ -314,8 +321,21 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
   Future<void> _loadActiveOrder() async {
     try {
       final order = await _rescueService.getActiveOrder();
+      String? quotationStatus;
+      if (order != null &&
+          (order.status == 'ARRIVED' || order.status == 'IN_PROGRESS') &&
+          (order.orderType == 'ONSITE_REPAIR' || order.orderType == 'TOWING')) {
+        try {
+          final history = await QuotationApi().history(order.id);
+          final latest = history.where((item) => item.latest).toList();
+          quotationStatus = latest.isNotEmpty ? latest.first.status : null;
+        } catch (_) {}
+      }
       if (mounted) {
-        setState(() => _activeOrder = order);
+        setState(() {
+          _activeOrder = order;
+          _latestQuotationStatus = quotationStatus;
+        });
         if (_isAppForeground) {
           _syncTimers();
         }
@@ -485,8 +505,6 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
     final profile = provider.myProfile;
     final name = context.watch<AuthProvider>().user?.fullName ?? 'Thợ cứu hộ';
 
-
-
     return _scroll([
       MechanicPanel(
         dark: true,
@@ -614,8 +632,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
                   Text(
                     profile?.isOnline == true
                         ? (_gpsUnavailable
-                            ? 'GPS không khả dụng · Cần bật vị trí để nhận cuốc'
-                            : 'Đang trực tuyến · Tọa độ GPS đã đồng bộ')
+                              ? 'GPS không khả dụng · Cần bật vị trí để nhận cuốc'
+                              : 'Đang trực tuyến · Tọa độ GPS đã đồng bộ')
                         : 'Trạng thái đồng bộ với gara',
                     style: TextStyle(
                       fontSize: 11,
@@ -656,7 +674,14 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
         Icons.receipt_long_outlined,
         'Lập báo giá',
         'Chọn dịch vụ và tính chi phí',
-        () => _open(const QuotationBuilderScreen()),
+        () => _open(
+          QuotationBuilderScreen(
+            orderId: _activeOrder?.status == 'ARRIVED'
+                ? _activeOrder?.id
+                : null,
+            orderType: _activeOrder?.orderType,
+          ),
+        ),
       ),
       const SizedBox(height: 8),
       _tool(
@@ -698,7 +723,10 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
           spacing: 8,
           runSpacing: 8,
           children: [
-            const MechanicLabel('ĐƠN ĐANG THỰC HIỆN', color: AppColors.primaryOrange),
+            const MechanicLabel(
+              'ĐƠN ĐANG THỰC HIỆN',
+              color: AppColors.primaryOrange,
+            ),
             MechanicLabel(order.statusDescription),
           ],
         ),
@@ -732,23 +760,71 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.primaryOrange),
-            onPressed: () {
-              if (order.status == 'DISPATCHED') {
-                _open(RouteNavigationScreen(orderId: order.id));
-              } else {
-                _open(CrossingTransportScreen(orderId: order.id));
-              }
-            },
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primaryOrange,
+            ),
+            onPressed: _latestQuotationStatus == 'PENDING_APPROVAL'
+                ? null
+                : () {
+                    if (order.status == 'DISPATCHED') {
+                      _open(RouteNavigationScreen(orderId: order.id));
+                    } else if ((order.orderType == 'ONSITE_REPAIR' ||
+                            order.orderType == 'TOWING') &&
+                        _latestQuotationStatus != 'FINALIZED') {
+                      _open(
+                        QuotationBuilderScreen(
+                          orderId: order.id,
+                          orderType: order.orderType,
+                        ),
+                      );
+                    } else if (order.orderType == 'ONSITE_REPAIR' ||
+                        order.orderType == 'TOWING') {
+                      _open(
+                        RepairExecutionScreen(
+                          orderId: order.id,
+                          orderType: order.orderType,
+                        ),
+                      );
+                    } else {
+                      _open(CrossingTransportScreen(orderId: order.id));
+                    }
+                  },
             icon: const Icon(Icons.arrow_forward, size: 17),
             label: Text(
-              order.status == 'DISPATCHED'
+              _latestQuotationStatus == 'PENDING_APPROVAL'
+                  ? 'Đang chờ khách hàng duyệt báo giá'
+                  : order.status == 'DISPATCHED'
                   ? 'Tiếp tục di chuyển đến điểm đón'
+                  : order.orderType == 'ONSITE_REPAIR' ||
+                        order.orderType == 'TOWING'
+                  ? _latestQuotationStatus == 'FINALIZED'
+                        ? order.orderType == 'TOWING'
+                              ? 'Tiếp tục quy trình kéo xe'
+                              : 'Tiếp tục sửa chữa tại chỗ'
+                        : 'Kiểm tra xe và lập báo giá'
                   : 'Tiếp tục chuyên chở qua ngập',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
         ),
+        if (order.status == 'ARRIVED') ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _latestQuotationStatus == 'PENDING_APPROVAL'
+                  ? null
+                  : () => _open(
+                      QuotationBuilderScreen(
+                        orderId: order.id,
+                        orderType: order.orderType,
+                      ),
+                    ),
+              icon: const Icon(Icons.receipt_long_outlined),
+              label: const Text('Kiểm tra xe và lập báo giá sửa / kéo xe'),
+            ),
+          ),
+        ],
       ],
     ),
   );
@@ -765,7 +841,11 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
               'YÊU CẦU CỨU HỘ MỚI (Còn ${_offerSecondsRemaining}s)',
               color: AppColors.primaryOrange,
             ),
-            MechanicLabel(offer.orderType == 'SINGLE_CROSSING' ? 'Chở xe qua ngập' : 'Cứu hộ'),
+            MechanicLabel(
+              offer.orderType == 'SINGLE_CROSSING'
+                  ? 'Chở xe qua ngập'
+                  : 'Cứu hộ',
+            ),
           ],
         ),
         const SizedBox(height: 14),
@@ -798,7 +878,9 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.primaryOrange),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primaryOrange,
+            ),
             onPressed: () {
               _openIncomingDispatchScreen(offer: offer);
             },
@@ -831,33 +913,38 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
                 color: isOnline ? const Color(0xFF76D6B5) : AppColors.secondary,
               ),
               if (_gpsUnavailable && isOnline)
-                const MechanicLabel('GPS KHÔNG TÍN HIỆU', color: AppColors.error),
+                const MechanicLabel(
+                  'GPS KHÔNG TÍN HIỆU',
+                  color: AppColors.error,
+                ),
             ],
           ),
           const SizedBox(height: 14),
           Text(
-            isOnline
-                ? 'Sẵn sàng tiếp nhận cứu hộ'
-                : 'Chưa kích hoạt ca trực',
+            isOnline ? 'Sẵn sàng tiếp nhận cứu hộ' : 'Chưa kích hoạt ca trực',
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 5),
           Text(
             isOnline
                 ? (_gpsUnavailable
-                    ? 'Cảnh báo: GPS bị gián đoạn. Hãy bật vị trí để nhận điều phối cuốc ngập.'
-                    : 'Hệ thống tự động điều phối khi có khách cần cứu hộ trong khu vực.')
+                      ? 'Cảnh báo: GPS bị gián đoạn. Hãy bật vị trí để nhận điều phối cuốc ngập.'
+                      : 'Hệ thống tự động điều phối khi có khách cần cứu hộ trong khu vực.')
                 : 'Bật công tắc trực tuyến ở trên để bắt đầu nhận yêu cầu cứu hộ từ khách hàng.',
             style: TextStyle(
               fontSize: 12,
-              color: _gpsUnavailable && isOnline ? AppColors.error : AppColors.secondary,
+              color: _gpsUnavailable && isOnline
+                  ? AppColors.error
+                  : AppColors.secondary,
             ),
           ),
           const Divider(height: 26),
           MechanicInfo(
             icon: Icons.radar,
             title: 'Kênh tiếp nhận',
-            value: isOnline ? 'Đang lắng nghe cuốc mới (chu kỳ 3s)' : 'Đang tạm dừng',
+            value: isOnline
+                ? 'Đang lắng nghe cuốc mới (chu kỳ 3s)'
+                : 'Đang tạm dừng',
           ),
           MechanicInfo(
             icon: Icons.location_on_outlined,
@@ -930,15 +1017,31 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
       Icons.local_shipping_outlined,
       'Chở xe qua ngập',
       'Tiến độ 5 bước chở xe đơn lẻ',
-      () => _open(CrossingTransportScreen(orderId: _hasActiveOrder ? _activeOrder?.id : null)),
+      () => _open(
+        CrossingTransportScreen(
+          orderId: _hasActiveOrder ? _activeOrder?.id : null,
+        ),
+      ),
       demo: !_hasActiveOrder,
+    ),
+    const SizedBox(height: 8),
+    _tool(
+      Icons.groups_2_outlined,
+      'Vận hành chuyến gom',
+      'Nhận, vận chuyển và bàn giao từng xe trong chuyến',
+      () => _open(const BatchTransportManageScreen(operatorMode: true)),
+      demo: false,
     ),
     const SizedBox(height: 8),
     _tool(
       Icons.route_outlined,
       'Đường đến khách',
       'Xem lộ trình điều hướng',
-      () => _open(RouteNavigationScreen(orderId: _hasActiveOrder ? _activeOrder?.id : null)),
+      () => _open(
+        RouteNavigationScreen(
+          orderId: _hasActiveOrder ? _activeOrder?.id : null,
+        ),
+      ),
       demo: !_hasActiveOrder,
     ),
     const MechanicSection('Sửa chữa & thanh toán'),
@@ -946,14 +1049,31 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen> with WidgetsBin
       Icons.receipt_long_outlined,
       'Lập báo giá',
       'Danh mục dịch vụ và tổng chi phí',
-      () => _open(const QuotationBuilderScreen()),
+      () => _open(
+        QuotationBuilderScreen(
+          orderId: _activeOrder?.status == 'ARRIVED' ? _activeOrder?.id : null,
+          orderType: _activeOrder?.orderType,
+        ),
+      ),
     ),
     const SizedBox(height: 8),
     _tool(
       Icons.build_outlined,
       'Thực hiện sửa chữa',
       'Theo dõi các bước công việc',
-      () => _open(const RepairExecutionScreen()),
+      () => _open(
+        RepairExecutionScreen(
+          orderId:
+              _activeOrder != null &&
+                  (_activeOrder!.status == 'ARRIVED' ||
+                      _activeOrder!.status == 'IN_PROGRESS') &&
+                  (_activeOrder!.orderType == 'ONSITE_REPAIR' ||
+                      _activeOrder!.orderType == 'TOWING')
+              ? _activeOrder!.id
+              : null,
+          orderType: _activeOrder?.orderType,
+        ),
+      ),
     ),
     const SizedBox(height: 8),
     _tool(

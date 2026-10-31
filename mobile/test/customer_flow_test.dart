@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/theme/app_theme.dart';
 import 'package:mobile/screens/customer/stitch_hydro_rescue_screen.dart';
 import 'package:mobile/screens/customer/service_selection_screen.dart';
-import 'package:mobile/screens/customer/radar_dispatch_screen.dart';
 
 void main() {
   testWidgets('Choose vehicle and open rescue services', (tester) async {
@@ -23,6 +22,8 @@ void main() {
     await tester.tap(find.byKey(const Key('request-rescue')));
     await tester.pumpAndSettle();
     expect(find.byType(ServiceSelectionScreen), findsOneWidget);
+    expect(find.text('Chở xe qua điểm ngập'), findsOneWidget);
+    expect(find.text('Đi chuyến riêng'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const ValueKey('service-1')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('service-1')));
@@ -31,11 +32,16 @@ void main() {
     await tester.ensureVisible(details);
     await tester.tap(details);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Phụ tùng phát sinh'), findsOneWidget);
+    expect(find.textContaining('hư hỏng nặng'), findsOneWidget);
     await tester.tap(find.text('Tìm cứu hộ'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(RadarDispatchScreen), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byType(ServiceSelectionScreen), findsOneWidget);
+    expect(
+      find.text(
+        'Vui lòng chọn một gara cứu hộ khả dụng trước khi gửi yêu cầu!',
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

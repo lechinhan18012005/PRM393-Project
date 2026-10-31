@@ -49,6 +49,9 @@ public class RescueOrder {
     @JoinColumn(name = "branch_id")
     private GarageBranch branch;
 
+    @Column(name = "batch_trip_id")
+    private Long batchTripId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "service_item_id", nullable = false)
     private ServiceItem serviceItem;

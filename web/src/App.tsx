@@ -28,6 +28,7 @@ import GarageVerificationView from './components/views/GarageVerificationView';
 import { GISFloodMapView } from './components/views/GISFloodMapView';
 import { DisputeFraudView } from './components/views/DisputeFraudView';
 import { SLAMonitoringView } from './components/views/SLAMonitoringView';
+import { BatchTripMonitoringView } from './components/views/BatchTripMonitoringView';
 
 // Module C Views
 import { GarageOwnerDashboardView } from './components/views/GarageOwnerDashboardView';
@@ -279,6 +280,7 @@ function MainDashboard() {
               path="/staff/monitoring"
               element={<SLAMonitoringView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
             />
+            <Route path="/staff/batch-trips" element={<BatchTripMonitoringView />} />
 
             {/* Module C (Garage Owner) Views */}
             <Route

@@ -66,6 +66,11 @@ public class RescuePricingService {
 
     @Transactional(readOnly = true)
     public List<CrossingOptionDto> getEligibleCrossingGarages(Double pickupLat, Double pickupLng) {
+        return getEligibleGarages(ServiceType.CROSSING, pickupLat, pickupLng);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CrossingOptionDto> getEligibleGarages(ServiceType serviceType, Double pickupLat, Double pickupLng) {
         List<Garage> approvedGarages = garageRepository.findAll().stream()
                 .filter(g -> g.getStatus() == GarageStatus.APPROVED)
                 .toList();
@@ -74,14 +79,13 @@ public class RescuePricingService {
         LocalDateTime heartbeatThreshold = LocalDateTime.now().minusMinutes(heartbeatValidMinutes);
 
         for (Garage garage : approvedGarages) {
-            // Lấy danh sách dịch vụ CROSSING đang active
-            List<ServiceItem> crossingServices = serviceItemRepository
+            List<ServiceItem> matchingServices = serviceItemRepository
                     .findByGarageIdAndActiveTrueOrderByCreatedAtAsc(garage.getId())
                     .stream()
-                    .filter(s -> s.getServiceType() == ServiceType.CROSSING)
+                    .filter(s -> s.getServiceType() == serviceType)
                     .toList();
 
-            if (crossingServices.isEmpty()) {
+            if (matchingServices.isEmpty()) {
                 continue;
             }
 
@@ -100,7 +104,9 @@ public class RescuePricingService {
             List<MechanicStaff> availableMechanics = mechanicRepository
                     .findByGarageIdOrderByCreatedAtDesc(garage.getId())
                     .stream()
-                    .filter(m -> eligibilityChecker.isMechanicEligibleForCrossing(m, heartbeatThreshold))
+                    .filter(m -> serviceType == ServiceType.CROSSING
+                            ? eligibilityChecker.isMechanicEligibleForCrossing(m, heartbeatThreshold)
+                            : eligibilityChecker.isMechanicEligibleForRescue(m, heartbeatThreshold))
                     .filter(m -> {
                         if (pickupLat == null || pickupLng == null) {
                             return true;
@@ -118,7 +124,7 @@ public class RescuePricingService {
             }
 
             GarageBranch mainBranch = openBranches.get(0);
-            for (ServiceItem service : crossingServices) {
+            for (ServiceItem service : matchingServices) {
                 BigDecimal basePrice = service.getStandardPrice();
                 BigDecimal bookingFee = getBookingFee();
                 BigDecimal total = basePrice.add(bookingFee);
@@ -134,9 +140,7 @@ public class RescuePricingService {
                         .branchLongitude(mainBranch.getLongitude())
                         .serviceItemId(service.getId())
                         .serviceName(service.getServiceName())
-                        .description(service.getDescription() != null
-                                ? service.getDescription()
-                                : "Chở riêng 1 xe máy và khách qua điểm ngập bằng xe chuyên dụng đến nơi khô ráo")
+                        .description(service.getDescription() != null ? service.getDescription() : service.getServiceName())
                         .serviceBasePrice(basePrice)
                         .bookingFee(bookingFee)
                         .totalAmount(total)
