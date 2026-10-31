@@ -1,5 +1,7 @@
 package com.prm393.floodrescue.common.contracts.dto;
 
+import com.prm393.floodrescue.features.garage.entity.ApplicableVehicleType;
+import com.prm393.floodrescue.features.garage.entity.ItemCategoryType;
 import com.prm393.floodrescue.features.garage.entity.ServiceType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,6 +20,8 @@ public class GarageServiceSnapshot {
     private String serviceName;
     private String description;
     private ServiceType serviceType;
+    private ItemCategoryType itemCategoryType;
+    private ApplicableVehicleType applicableVehicleType;
     private BigDecimal standardPrice;
     private BigDecimal minPrice;
     private BigDecimal maxPrice;

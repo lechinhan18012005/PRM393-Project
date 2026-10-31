@@ -1,5 +1,6 @@
 package com.prm393.floodrescue.features.garage.repository;
 
+import com.prm393.floodrescue.features.garage.entity.ApplicableVehicleType;
 import com.prm393.floodrescue.features.garage.entity.ServiceItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -10,4 +11,13 @@ import java.util.List;
 public interface ServiceItemRepository extends JpaRepository<ServiceItem, Long> {
     List<ServiceItem> findByGarageIdOrderByCreatedAtAsc(Long garageId);
     List<ServiceItem> findByGarageIdAndActiveTrueOrderByCreatedAtAsc(Long garageId);
+
+    List<ServiceItem> findByGarageIdAndDeletedFalseOrderByCreatedAtAsc(Long garageId);
+    List<ServiceItem> findByGarageIdAndActiveTrueAndDeletedFalseOrderByCreatedAtAsc(Long garageId);
+
+    boolean existsByGarageIdAndServiceNameIgnoreCaseAndApplicableVehicleTypeAndDeletedFalse(
+            Long garageId, String serviceName, ApplicableVehicleType applicableVehicleType);
+
+    boolean existsByGarageIdAndServiceNameIgnoreCaseAndApplicableVehicleTypeAndDeletedFalseAndIdNot(
+            Long garageId, String serviceName, ApplicableVehicleType applicableVehicleType, Long id);
 }

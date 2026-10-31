@@ -602,6 +602,112 @@
   cursor: pointer;
   flex-shrink: 0;
 }
+
+/* Garage Modal (Centered Pop-up) */
+.garage-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #0b1c3066;
+  backdrop-filter: blur(4px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: garageFadeIn 0.2s ease-out;
+}
+
+.garage-modal {
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  color: #182d40;
+  overflow: hidden;
+  animation: garageModalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.garage-modal.max-w-md { max-width: 28rem; }
+.garage-modal.max-w-lg { max-width: 32rem; }
+.garage-modal.max-w-xl { max-width: 36rem; }
+.garage-modal.max-w-2xl { max-width: 44rem; }
+.garage-modal.max-w-3xl { max-width: 48rem; }
+
+.garage-modal-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid #e6ebf0;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.garage-modal-heading h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: #112c42;
+}
+
+.garage-modal-heading p {
+  font-size: 13px;
+  color: #8190a0;
+  margin: 0;
+}
+
+.garage-modal-body {
+  padding: 24px 26px;
+  overflow-y: auto;
+  max-height: calc(90vh - 90px);
+}
+
+.garage-modal .garage-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 0;
+}
+
+@keyframes garageFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes garageModalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@media (max-width: 700px) {
+  .garage-modal-backdrop {
+    padding: 10px;
+  }
+  .garage-modal {
+    max-height: 94vh;
+    border-radius: 14px;
+  }
+  .garage-modal-heading {
+    padding: 16px 18px 14px;
+  }
+  .garage-modal-body {
+    padding: 16px 18px;
+  }
+}
 .garage-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -619,7 +725,8 @@
   display: block;
 }
 .garage-form input:not([type="file"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
-.garage-form select {
+.garage-form select,
+.garage-form textarea {
   display: block;
   width: 100%;
   margin-top: 7px;

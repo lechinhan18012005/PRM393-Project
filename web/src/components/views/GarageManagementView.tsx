@@ -26,9 +26,10 @@ import {
   Sparkles,
   Key,
   Trash2,
-  UserPlus
+  UserPlus,
+  Clock
 } from 'lucide-react';
-import { GarageHeading, GarageStat, GaragePanel, GarageDrawer, GarageError } from '../garage/GarageUI';
+import { GarageHeading, GarageStat, GaragePanel, GarageDrawer, GarageModal, GarageError } from '../garage/GarageUI';
 
 interface GarageManagementViewProps {
   onShowToast?: (title: string, msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
@@ -131,9 +132,112 @@ async function searchAddressGeocoding(queryText: string): Promise<AddressSuggest
   return [];
 }
 
+export interface RescueShift {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  desc: string;
+}
+
+export const STANDARD_RESCUE_SHIFTS: RescueShift[] = [
+  {
+    id: 'ca-1',
+    name: 'Ca 1: Sáng (06:00 - 14:00)',
+    startTime: '06:00',
+    endTime: '14:00',
+    desc: 'Trực sáng sớm & cao điểm triều cường đi làm',
+  },
+  {
+    id: 'ca-2',
+    name: 'Ca 2: Chiều tối (14:00 - 22:00)',
+    startTime: '14:00',
+    endTime: '22:00',
+    desc: 'Trực tan tầm, mưa bão chiều & ngập lụt đô thị',
+  },
+  {
+    id: 'ca-3',
+    name: 'Ca 3: Đêm trực bão (22:00 - 06:00)',
+    startTime: '22:00',
+    endTime: '06:00',
+    desc: 'Trực cứu hộ đêm muộn xuyên đêm khẩn cấp',
+  },
+  {
+    id: 'ca-4',
+    name: 'Ca Hành chính (08:00 - 17:00)',
+    startTime: '08:00',
+    endTime: '17:00',
+    desc: 'Khung giờ hành chính chuẩn tại xưởng & sửa chữa',
+  },
+  {
+    id: 'ca-5',
+    name: 'Ca Trực chiến 24/7 (00:00 - 23:59)',
+    startTime: '00:00',
+    endTime: '23:59',
+    desc: 'Đội cơ động đặc nhiệm trực sẵn sàng 24/24',
+  },
+];
+
+export function isShiftCurrentlyActive(shiftName?: string | null): boolean {
+  if (!shiftName) return false;
+  const trimmed = shiftName.trim();
+  if (trimmed.includes('24/7') || trimmed.includes('24/24')) return true;
+
+  const match = trimmed.match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
+  if (!match) {
+    const lower = trimmed.toLowerCase();
+    const now = new Date();
+    const curHour = now.getHours();
+    if (lower.includes('sáng')) return curHour >= 6 && curHour < 14;
+    if (lower.includes('chiều')) return curHour >= 14 && curHour < 22;
+    if (lower.includes('đêm') || lower.includes('tối')) return curHour >= 22 || curHour < 6;
+    if (lower.includes('hành chính')) return curHour >= 8 && curHour < 17;
+    return false;
+  }
+
+  const [_, startStr, endStr] = match;
+  const [sh, sm] = startStr.split(':').map(Number);
+  const [eh, em] = endStr.split(':').map(Number);
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+
+  const now = new Date();
+  const curMins = now.getHours() * 60 + now.getMinutes();
+
+  if (startMins <= endMins) {
+    return curMins >= startMins && curMins < endMins;
+  } else {
+    // Overnight shift (crosses midnight, e.g. 22:00 - 06:00)
+    return curMins >= startMins || curMins < endMins;
+  }
+}
+
+export function getMechanicShiftState(mechanic: Mechanic): {
+  workingStatus: 'AVAILABLE' | 'BUSY' | 'OFFLINE';
+  isInShift: boolean;
+  statusLabel: string;
+} {
+  if (!mechanic.active) {
+    return { workingStatus: 'OFFLINE', isInShift: false, statusLabel: 'ĐÃ KHÓA' };
+  }
+  if (mechanic.workingStatus === 'BUSY') {
+    return { workingStatus: 'BUSY', isInShift: true, statusLabel: 'ĐANG ĐI CA' };
+  }
+  const inShift = isShiftCurrentlyActive(mechanic.shiftName);
+  return {
+    workingStatus: inShift ? 'AVAILABLE' : 'OFFLINE',
+    isInShift: inShift,
+    statusLabel: inShift ? 'SẴN SÀNG' : 'NGHỈ TRỰC',
+  };
+}
+
 export function GarageManagementView({ onShowToast }: GarageManagementViewProps) {
   const [drawer, setDrawer] = useState<'branch' | 'invite' | 'createMechanic' | 'editMechanic' | null>(null);
   const [selectedMechanic, setSelectedMechanic] = useState<Mechanic | null>(null);
+  const [createShiftOption, setCreateShiftOption] = useState<string>('Ca 2: Chiều tối (14:00 - 22:00)');
+  const [createCustomShift, setCreateCustomShift] = useState<string>('');
+  const [editShiftOption, setEditShiftOption] = useState<string>('Ca 2: Chiều tối (14:00 - 22:00)');
+  const [editCustomShift, setEditCustomShift] = useState<string>('');
   const [tempPasswordModal, setTempPasswordModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -350,8 +454,27 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
   async function handleSaveBranchSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (!formBranchName.trim() || !formAddress.trim()) {
+    const branchName = formBranchName.trim();
+    const address = formAddress.trim();
+    const phoneNumber = formPhone.trim();
+
+    if (!branchName || !address) {
       notify('Thiếu thông tin', 'Vui lòng nhập tên chi nhánh và địa chỉ.', 'warning');
+      return;
+    }
+
+    if (branchName.length < 2 || branchName.length > 100) {
+      notify('Tên chi nhánh không hợp lệ', 'Tên chi nhánh phải từ 2 đến 100 ký tự.', 'warning');
+      return;
+    }
+
+    if (address.length < 5 || address.length > 255) {
+      notify('Địa chỉ không hợp lệ', 'Địa chỉ phải từ 5 đến 255 ký tự.', 'warning');
+      return;
+    }
+
+    if (phoneNumber && !/^(0|\+84)[0-9]{9}$/.test(phoneNumber)) {
+      notify('Số điện thoại không hợp lệ', 'Vui lòng nhập số điện thoại Việt Nam hợp lệ (10 số, VD: 0903123456).', 'warning');
       return;
     }
 
@@ -362,12 +485,17 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
       return;
     }
 
+    if (latNum < 6.0 || latNum > 24.5 || lngNum < 101.5 || lngNum > 118.0) {
+      notify('Tọa độ ngoài lãnh thổ', 'Tọa độ GPS phải thuộc lãnh thổ Việt Nam (Vĩ độ 6.0 - 24.5, Kinh độ 101.5 - 118.0).', 'warning');
+      return;
+    }
+
     const payload = {
-      branchName: formBranchName.trim(),
-      address: formAddress.trim(),
+      branchName,
+      address,
       latitude: latNum,
       longitude: lngNum,
-      phoneNumber: formPhone.trim(),
+      phoneNumber,
       rescueVehicles: formVehicles.trim()
     };
 
@@ -420,6 +548,11 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
 
     if (!email || !branchId) {
       notify('Thiếu thông tin', 'Vui lòng nhập email và chọn chi nhánh cho thợ.', 'warning');
+      return;
+    }
+
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      notify('Email không hợp lệ', 'Vui lòng nhập địa chỉ email hợp lệ (tối đa 254 ký tự).', 'warning');
       return;
     }
 
@@ -535,7 +668,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     const fullName = String(data.get('fullName') || '').trim();
     const phone = String(data.get('phone') || '').trim();
     const email = String(data.get('email') || '').trim();
-    const password = String(data.get('password') || '').trim();
+    const password = String(data.get('password') || '');
     const branchId = Number(data.get('branchId'));
     const shiftName = String(data.get('shiftName') || '').trim();
     const speciality = String(data.get('speciality') || '').trim();
@@ -543,6 +676,36 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
 
     if (!username || !fullName || !phone || !password || !branchId) {
       notify('Thiếu thông tin', 'Vui lòng điền đầy đủ các trường bắt buộc (*)', 'warning');
+      setBusy(false);
+      return;
+    }
+
+    if (username.length < 3 || username.length > 50 || !/^[a-zA-Z0-9._-]+$/.test(username)) {
+      notify('Tên đăng nhập không hợp lệ', 'Tên đăng nhập phải từ 3 đến 50 ký tự, chỉ gồm chữ cái, số, dấu chấm, gạch dưới hoặc gạch ngang.', 'warning');
+      setBusy(false);
+      return;
+    }
+
+    if (fullName.length < 2 || fullName.length > 100) {
+      notify('Họ tên không hợp lệ', 'Họ tên phải từ 2 đến 100 ký tự.', 'warning');
+      setBusy(false);
+      return;
+    }
+
+    if (!/^(0|\+84)[0-9]{9}$/.test(phone)) {
+      notify('Số điện thoại không hợp lệ', 'Số điện thoại Việt Nam phải gồm 10 chữ số (VD: 0909123456 hoặc +84909123456).', 'warning');
+      setBusy(false);
+      return;
+    }
+
+    if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      notify('Email không hợp lệ', 'Email tối đa 254 ký tự và đúng định dạng.', 'warning');
+      setBusy(false);
+      return;
+    }
+
+    if (password.length < 8 || password.length > 64) {
+      notify('Mật khẩu không hợp lệ', 'Mật khẩu phải từ 8 đến 64 ký tự.', 'warning');
       setBusy(false);
       return;
     }
@@ -592,6 +755,18 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     const shiftName = String(data.get('shiftName') || '').trim();
     const speciality = String(data.get('speciality') || '').trim();
     const hasCrossingCapability = data.get('hasCrossingCapability') === 'on';
+
+    if (fullName && (fullName.length < 2 || fullName.length > 100)) {
+      notify('Họ tên không hợp lệ', 'Họ tên phải từ 2 đến 100 ký tự.', 'warning');
+      setBusy(false);
+      return;
+    }
+
+    if (phone && !/^(0|\+84)[0-9]{9}$/.test(phone)) {
+      notify('Số điện thoại không hợp lệ', 'Số điện thoại Việt Nam phải gồm 10 chữ số (VD: 0909123456 hoặc +84909123456).', 'warning');
+      setBusy(false);
+      return;
+    }
 
     try {
       await managementApi.updateMechanic(selectedMechanic.id, {
@@ -663,12 +838,13 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     });
   }, [branches, statusFilter, query]);
 
-  // Lọc đội thợ
+  // Lọc đội thợ theo trạng thái ca trực thực tế
   const filteredMechanics = useMemo(() => {
     return mechanics.filter((m) => {
-      if (teamStatusFilter === 'available' && (!m.active || m.workingStatus !== 'AVAILABLE')) return false;
-      if (teamStatusFilter === 'busy' && (!m.active || m.workingStatus !== 'BUSY')) return false;
-      if (teamStatusFilter === 'offline' && (!m.active || !['AVAILABLE', 'BUSY'].includes(m.workingStatus))) return false;
+      const shiftState = getMechanicShiftState(m);
+      if (teamStatusFilter === 'available' && (!m.active || shiftState.workingStatus !== 'AVAILABLE')) return false;
+      if (teamStatusFilter === 'busy' && (!m.active || shiftState.workingStatus !== 'BUSY')) return false;
+      if (teamStatusFilter === 'offline' && (!m.active || shiftState.workingStatus !== 'OFFLINE')) return false;
       if (teamStatusFilter === 'disabled' && m.active) return false;
 
       if (query.trim()) {
@@ -686,7 +862,10 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
 
   // Thống kê nhanh
   const openBranchesCount = useMemo(() => branches.filter((b) => b.operatingStatus === 'OPEN').length, [branches]);
-  const availableMechanicsCount = useMemo(() => mechanics.filter((m) => m.active && m.workingStatus === 'AVAILABLE').length, [mechanics]);
+  const availableMechanicsCount = useMemo(
+    () => mechanics.filter((m) => getMechanicShiftState(m).workingStatus === 'AVAILABLE').length,
+    [mechanics]
+  );
 
   return (
     <section className="garage-portal w-full flex flex-col gap-5 p-4 sm:p-6 max-w-7xl mx-auto">
@@ -731,6 +910,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               }}
               className="px-3.5 py-2 rounded-lg font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs hover:opacity-90 disabled:opacity-50"
               onClick={() => {
+                setCreateShiftOption('Ca 2: Chiều tối (14:00 - 22:00)');
+                setCreateCustomShift('');
                 setDrawer('createMechanic');
               }}
               disabled={!branches.length}
@@ -882,8 +1063,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
             >
               <option value="all">Tất cả ({mechanics.length})</option>
               <option value="available">Sẵn sàng ({availableMechanicsCount})</option>
-              <option value="busy">Đang bận ({mechanics.filter((m) => m.active && m.workingStatus === 'BUSY').length})</option>
-              <option value="offline">Nghỉ trực ({mechanics.filter((m) => m.active && m.workingStatus !== 'AVAILABLE' && m.workingStatus !== 'BUSY').length})</option>
+              <option value="busy">Đang bận ({mechanics.filter((m) => m.active && getMechanicShiftState(m).workingStatus === 'BUSY').length})</option>
+              <option value="offline">Nghỉ trực ({mechanics.filter((m) => m.active && getMechanicShiftState(m).workingStatus === 'OFFLINE').length})</option>
               <option value="disabled">Đã khóa ({mechanics.filter((m) => !m.active).length})</option>
             </select>
           )}
@@ -1043,8 +1224,9 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
           {filteredMechanics.length > 0 ? (
             <div className="divide-y divide-surface-container/60">
               {filteredMechanics.map((mechanic) => {
-                const isAvailable = mechanic.active && mechanic.workingStatus === 'AVAILABLE';
-                const isBusy = mechanic.active && mechanic.workingStatus === 'BUSY';
+                const shiftState = getMechanicShiftState(mechanic);
+                const isAvailable = shiftState.workingStatus === 'AVAILABLE';
+                const isBusy = shiftState.workingStatus === 'BUSY';
 
                 return (
                   <div
@@ -1070,7 +1252,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                   : isBusy
                                     ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                                    : 'bg-surface-container-high text-secondary'
+                                    : 'bg-slate-100 text-slate-700 border border-slate-300'
                             }`}
                           >
                             <span
@@ -1081,16 +1263,10 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                                     ? 'bg-emerald-600 animate-pulse'
                                     : isBusy
                                       ? 'bg-rose-600 animate-ping'
-                                      : 'bg-secondary'
+                                      : 'bg-slate-500'
                               }`}
                             ></span>
-                            {!mechanic.active
-                              ? 'ĐÃ KHÓA'
-                              : isAvailable
-                                ? 'SẴN SÀNG'
-                                : isBusy
-                                  ? 'ĐANG ĐI CA'
-                                  : 'NGHỈ TRỰC'}
+                            {shiftState.statusLabel}
                           </span>
                         </div>
 
@@ -1122,137 +1298,115 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                             {mechanic.ratingAvg ? `${mechanic.ratingAvg.toFixed(1)}/5.0` : '5.0'}
                           </span>
                         </div>
+
+                        {/* Hiển thị đầy đủ thông tin Chi nhánh & Ca làm việc */}
+                        <div className="mt-2.5 flex items-center gap-2 flex-wrap text-xs">
+                          <div className="px-2.5 py-1 rounded-lg bg-surface-container-high/60 border border-surface-container font-medium flex items-center gap-1.5 text-on-surface">
+                            <Building2 size={13} className="text-primary shrink-0" />
+                            <span>Chi nhánh: <strong className="text-on-surface font-semibold">{mechanic.branchName || 'Chưa phân bổ chi nhánh'}</strong></span>
+                          </div>
+                          <div className="px-2.5 py-1 rounded-lg bg-amber-50/90 border border-amber-200 font-medium flex items-center gap-1.5 text-amber-900">
+                            <Clock size={13} className="text-amber-700 shrink-0" />
+                            <span>Ca trực: <strong className="text-amber-950 font-semibold">{mechanic.shiftName || 'Chưa thiết lập ca làm việc'}</strong></span>
+                            {mechanic.shiftName && (
+                              <span
+                                className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  shiftState.isInShift
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-300'
+                                }`}
+                              >
+                                {shiftState.isInShift ? '🟢 Đang trong ca' : '⚪ Ngoài ca trực'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Form Phân bổ Chi nhánh & Ca trực */}
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const data = new FormData(e.currentTarget);
-                        void handleAllocateMechanic(
-                          mechanic,
-                          Number(data.get('branchId')),
-                          String(data.get('shiftName') || '').trim()
-                        );
-                      }}
-                      className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap lg:justify-end"
-                    >
-                      <div className="flex items-center gap-2">
-                        {/* Dropdown Chi nhánh */}
-                        <select
-                          name="branchId"
-                          required
-                          aria-label={`Chi nhánh phân công của ${mechanic.fullName}`}
-                          defaultValue={mechanic.branchId ?? ''}
-                          className="h-9 px-3 text-xs bg-surface-container-low border border-surface-container rounded-lg text-on-surface font-medium focus:outline-none focus:ring-1 focus:ring-primary min-w-[180px] cursor-pointer"
-                        >
-                          <option value="">-- Chọn chi nhánh --</option>
-                          {branches.map((b) => (
-                            <option key={b.id} value={b.id}>
-                              {b.branchName}
-                            </option>
-                          ))}
-                        </select>
+                    {/* Action Buttons: Các thao tác quản trị */}
+                    <div className="flex items-center gap-2 flex-wrap lg:justify-end shrink-0 self-start lg:self-center">
+                      {/* Nút Chỉnh sửa thông tin thợ (đã tích hợp sửa ca trực, chi nhánh, chuyên môn, SĐT, v.v.) */}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          setSelectedMechanic(mechanic);
+                          const matchingShift = STANDARD_RESCUE_SHIFTS.find((s) => s.name === mechanic.shiftName);
+                          if (matchingShift) {
+                            setEditShiftOption(matchingShift.name);
+                            setEditCustomShift('');
+                          } else if (mechanic.shiftName) {
+                            setEditShiftOption('__custom__');
+                            setEditCustomShift(mechanic.shiftName);
+                          } else {
+                            setEditShiftOption('Ca 2: Chiều tối (14:00 - 22:00)');
+                            setEditCustomShift('');
+                          }
+                          setDrawer('editMechanic');
+                        }}
+                        style={{
+                          backgroundColor: '#fff7ed',
+                          color: '#c2410c',
+                          borderColor: '#fed7aa'
+                        }}
+                        className="h-9 px-3.5 rounded-lg font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer text-xs border hover:opacity-90 shadow-2xs"
+                        title="Chỉnh sửa ca trực, chi nhánh, chuyên môn, năng lực vượt ngập và số điện thoại"
+                      >
+                        <Edit3 size={14} />
+                        <span>Chỉnh sửa</span>
+                      </button>
 
-                        {/* Ca làm việc */}
-                        <input
-                          name="shiftName"
-                          aria-label={`Ca làm việc của ${mechanic.fullName}`}
-                          placeholder="Ca làm (VD: Ca trực đêm)"
-                          defaultValue={mechanic.shiftName ?? ''}
-                          className="h-9 px-3 text-xs bg-surface-container-low border border-surface-container rounded-lg text-on-surface focus:outline-none focus:ring-1 focus:ring-primary w-32"
-                        />
-                      </div>
+                      {/* Nút Cấp lại mật khẩu */}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleResetPasswordConfirm(mechanic)}
+                        style={{
+                          backgroundColor: '#fefce8',
+                          color: '#a16207',
+                          borderColor: '#fef08a'
+                        }}
+                        className="h-9 px-3 rounded-lg font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer text-xs border hover:opacity-90"
+                        title="Cấp lại mật khẩu tạm thời cho thợ"
+                      >
+                        <Key size={14} />
+                        <span>Reset MK</span>
+                      </button>
 
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {/* Nút lưu phân công / chuyển chi nhánh */}
-                        <button
-                          type="submit"
-                          disabled={busy}
-                          style={{
-                            backgroundColor: '#fff7ed',
-                            color: '#c2410c',
-                            borderColor: '#fed7aa'
-                          }}
-                          className="h-9 px-2.5 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90 disabled:opacity-50"
-                          title="Lưu chi nhánh và ca làm mới"
-                        >
-                          <Save size={13} />
-                          <span>Lưu ca</span>
-                        </button>
+                      {/* Nút Khóa / Mở quyền thợ */}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleToggleMechanicActiveConfirm(mechanic)}
+                        style={{
+                          backgroundColor: mechanic.active ? '#fef2f2' : '#ecfdf5',
+                          color: mechanic.active ? '#b91c1c' : '#047857',
+                          borderColor: mechanic.active ? '#fecaca' : '#a7f3d0'
+                        }}
+                        className="h-9 px-3 rounded-lg font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer text-xs border hover:opacity-90"
+                        title={mechanic.active ? 'Khóa quyền làm việc' : 'Mở lại quyền làm việc'}
+                      >
+                        {mechanic.active ? <Power size={14} /> : <CheckCircle2 size={14} />}
+                        <span>{mechanic.active ? 'Khóa quyền' : 'Mở lại'}</span>
+                      </button>
 
-                        {/* Nút Sửa thông tin thợ */}
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => {
-                            setSelectedMechanic(mechanic);
-                            setDrawer('editMechanic');
-                          }}
-                          style={{
-                            backgroundColor: '#f1f5f9',
-                            color: '#334155',
-                            borderColor: '#cbd5e1'
-                          }}
-                          className="h-9 px-2.5 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
-                          title="Chỉnh sửa ca trực, chuyên môn, năng lực vượt ngập và số điện thoại"
-                        >
-                          <Edit3 size={13} />
-                          <span>Sửa</span>
-                        </button>
-
-                        {/* Nút Cấp lại mật khẩu */}
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleResetPasswordConfirm(mechanic)}
-                          style={{
-                            backgroundColor: '#fefce8',
-                            color: '#a16207',
-                            borderColor: '#fef08a'
-                          }}
-                          className="h-9 px-2.5 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
-                          title="Cấp lại mật khẩu tạm thời cho thợ"
-                        >
-                          <Key size={13} />
-                          <span>Reset MK</span>
-                        </button>
-
-                        {/* Nút Khóa / Mở quyền thợ */}
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleToggleMechanicActiveConfirm(mechanic)}
-                          style={{
-                            backgroundColor: mechanic.active ? '#fef2f2' : '#ecfdf5',
-                            color: mechanic.active ? '#b91c1c' : '#047857',
-                            borderColor: mechanic.active ? '#fecaca' : '#a7f3d0'
-                          }}
-                          className="h-9 px-2.5 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
-                          title={mechanic.active ? 'Khóa quyền làm việc' : 'Mở lại quyền làm việc'}
-                        >
-                          {mechanic.active ? <Power size={13} /> : <CheckCircle2 size={13} />}
-                          <span>{mechanic.active ? 'Khóa' : 'Mở lại'}</span>
-                        </button>
-
-                        {/* Nút Cho thôi việc */}
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleRemoveMechanicConfirm(mechanic)}
-                          style={{
-                            backgroundColor: '#faf5ff',
-                            color: '#7e22ce',
-                            borderColor: '#e9d5ff'
-                          }}
-                          className="h-9 px-2 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
-                          title="Cho thôi việc (gỡ khỏi chi nhánh & bảo toàn lịch sử cứu hộ)"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </form>
+                      {/* Nút Cho thôi việc */}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleRemoveMechanicConfirm(mechanic)}
+                        style={{
+                          backgroundColor: '#faf5ff',
+                          color: '#7e22ce',
+                          borderColor: '#e9d5ff'
+                        }}
+                        className="h-9 px-2.5 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
+                        title="Cho thôi việc (gỡ khỏi chi nhánh & bảo toàn lịch sử cứu hộ)"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1283,7 +1437,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
 
       {/* DRAWER 1: THÊM / CHỈNH SỬA CHI NHÁNH */}
       {drawer === 'branch' && (
-        <GarageDrawer
+        <GarageModal
+          maxWidth="max-w-2xl"
           title={editing ? `Chỉnh sửa: ${editing.branchName}` : 'Thêm chi nhánh trực chiến mới'}
           description="Gõ địa chỉ để hệ thống tự động tìm vị trí và lấy về vĩ độ, kinh độ GPS chuẩn xác."
           onClose={() => {
@@ -1305,6 +1460,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                 <input
                   type="text"
                   required
+                  minLength={2}
+                  maxLength={100}
                   placeholder="VD: Chi nhánh Quận 7 - Trạm Cứu Hộ Nam Sài Gòn"
                   value={formBranchName}
                   onChange={(e) => setFormBranchName(e.target.value)}
@@ -1318,6 +1475,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                 </label>
                 <input
                   type="tel"
+                  pattern="^(0|\+84)[0-9]{9}$"
+                  title="Số điện thoại Việt Nam gồm 10 chữ số (VD: 0903123456 hoặc +84903123456)"
                   placeholder="VD: 0903123456"
                   value={formPhone}
                   onChange={(e) => setFormPhone(e.target.value)}
@@ -1348,6 +1507,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                   <input
                     type="text"
                     required
+                    minLength={5}
+                    maxLength={255}
                     placeholder="Gõ tên đường, số nhà, phường quận (VD: 123 Nguyễn Hữu Thọ Q7)..."
                     value={formAddress}
                     onChange={(e) => {
@@ -1463,6 +1624,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                     <input
                       type="number"
                       step="any"
+                      min="-90"
+                      max="90"
                       required
                       placeholder="Tự động điền khi chọn địa chỉ"
                       value={formLat}
@@ -1475,6 +1638,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                     <input
                       type="number"
                       step="any"
+                      min="-180"
+                      max="180"
                       required
                       placeholder="Tự động điền khi chọn địa chỉ"
                       value={formLng}
@@ -1569,12 +1734,13 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               </button>
             </div>
           </form>
-        </GarageDrawer>
+        </GarageModal>
       )}
 
       {/* DRAWER 2: MỜI THỢ CỨU HỘ VÀO ĐỘI NGŨ */}
       {drawer === 'invite' && (
-        <GarageDrawer
+        <GarageModal
+          maxWidth="max-w-lg"
           title="Mời thợ cứu hộ mới"
           description="Gửi mã kích hoạt riêng biệt để thợ kích hoạt tài khoản trên ứng dụng Mobile Cứu Hộ."
           onClose={() => {
@@ -1591,6 +1757,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                 name="email"
                 type="email"
                 required
+                maxLength={254}
                 placeholder="VD: thocuuho.nguyenvana@gmail.com"
                 className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
@@ -1669,12 +1836,13 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               </p>
             </div>
           )}
-        </GarageDrawer>
+        </GarageModal>
       )}
 
       {/* DRAWER 3: THÊM THỢ CỨU HỘ TRỰC TIẾP (UC-05 Normal Flow) */}
       {drawer === 'createMechanic' && (
-        <GarageDrawer
+        <GarageModal
+          maxWidth="max-w-2xl"
           title="Thêm thợ cứu hộ trực tiếp"
           description="Khởi tạo tài khoản thợ, phân bổ chi nhánh và cấp quyền cứu hộ vượt ngập."
           onClose={() => {
@@ -1690,6 +1858,10 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <input
                 name="username"
                 required
+                minLength={3}
+                maxLength={50}
+                pattern="^[a-zA-Z0-9._-]+$"
+                title="Từ 3-50 ký tự, chỉ gồm chữ cái, số, dấu chấm, gạch dưới hoặc gạch ngang"
                 placeholder="VD: tho_tuananh_01"
                 className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
@@ -1702,6 +1874,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <input
                 name="fullName"
                 required
+                minLength={2}
+                maxLength={100}
                 placeholder="VD: Phạm Tuấn Anh"
                 className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
@@ -1715,6 +1889,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                 <input
                   name="phone"
                   required
+                  pattern="^(0|\+84)[0-9]{9}$"
+                  title="Số điện thoại Việt Nam gồm 10 chữ số (VD: 0909123456 hoặc +84909123456)"
                   placeholder="VD: 0909123456"
                   className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
@@ -1727,6 +1903,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                 <input
                   name="email"
                   type="email"
+                  maxLength={254}
                   placeholder="VD: tuananh@gmail.com"
                   className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
@@ -1739,7 +1916,10 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               </label>
               <input
                 name="password"
+                type="password"
                 required
+                minLength={8}
+                maxLength={64}
                 defaultValue="FR@Pass2026"
                 placeholder="Mật khẩu tạm thời"
                 className="w-full h-10 px-3 text-sm font-mono bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -1768,15 +1948,82 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-on-surface mb-1">
-                Ca làm việc:
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-on-surface">
+                  Ca làm việc: <span className="text-error">*</span>
+                </label>
+                <span className="text-[11px] text-secondary">
+                  Trạng thái thợ sẽ tự động kích hoạt theo khung giờ ca
+                </span>
+              </div>
+              <select
+                value={createShiftOption}
+                onChange={(e) => setCreateShiftOption(e.target.value)}
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer font-medium"
+              >
+                {STANDARD_RESCUE_SHIFTS.map((s) => {
+                  const activeNow = isShiftCurrentlyActive(s.name);
+                  return (
+                    <option key={s.id} value={s.name}>
+                      {s.name} {activeNow ? '🟢 [Đang trong ca trực]' : ''}
+                    </option>
+                  );
+                })}
+                <option value="__custom__">-- Tùy chỉnh ca làm việc khác --</option>
+              </select>
+
+              {createShiftOption === '__custom__' && (
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    value={createCustomShift}
+                    onChange={(e) => setCreateCustomShift(e.target.value)}
+                    placeholder="VD: Ca Sáng bão (05:00 - 13:00)"
+                    className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    required
+                  />
+                  <span className="text-[11px] text-secondary mt-1 block">
+                    Gợi ý định dạng: Tên ca (HH:mm - HH:mm) để hệ thống tự động xác định ca trực.
+                  </span>
+                </div>
+              )}
+
               <input
+                type="hidden"
                 name="shiftName"
-                defaultValue="Ca 2: Chiều tối (14:00 - 22:00)"
-                placeholder="VD: Ca Chiều trực bão (14:00 - 22:00)"
-                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={createShiftOption === '__custom__' ? createCustomShift : createShiftOption}
               />
+
+              {/* Real-time status preview */}
+              {(() => {
+                const effectiveShift = createShiftOption === '__custom__' ? createCustomShift : createShiftOption;
+                const isNowInShift = isShiftCurrentlyActive(effectiveShift);
+                return (
+                  <div
+                    className={`mt-2 p-2.5 rounded-lg border text-xs flex items-center gap-2 ${
+                      isNowInShift
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-amber-50 border-amber-200 text-amber-800'
+                    }`}
+                  >
+                    <Clock size={14} className={isNowInShift ? 'text-emerald-600 shrink-0' : 'text-amber-600 shrink-0'} />
+                    <span>
+                      {isNowInShift ? (
+                        <>
+                          <strong>Đang trong ca trực:</strong> Thợ được tạo sẽ có trạng thái{' '}
+                          <strong className="text-emerald-700">SẴN SÀNG</strong> nhận cuốc cứu hộ ngay.
+                        </>
+                      ) : (
+                        <>
+                          <strong>Ngoài ca trực:</strong> Thợ sẽ có trạng thái{' '}
+                          <strong className="text-amber-700">NGHỈ TRỰC</strong> và tự động kích hoạt{' '}
+                          <strong>SẴN SÀNG</strong> khi đến khung giờ ca trực.
+                        </>
+                      )}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             <div>
@@ -1817,12 +2064,13 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <span>Tạo tài khoản thợ mới</span>
             </button>
           </form>
-        </GarageDrawer>
+        </GarageModal>
       )}
 
       {/* DRAWER 4: CHỈNH SỬA THÔNG TIN THỢ (UC-05 Alt Flow 5.2) */}
       {drawer === 'editMechanic' && selectedMechanic && (
-        <GarageDrawer
+        <GarageModal
+          maxWidth="max-w-2xl"
           title={`Chỉnh sửa: ${selectedMechanic.fullName}`}
           description="Cập nhật chuyên môn, ca trực, số điện thoại và năng lực cứu hộ vượt ngập."
           onClose={() => {
@@ -1841,6 +2089,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <input
                 name="fullName"
                 required
+                minLength={2}
+                maxLength={100}
                 defaultValue={selectedMechanic.fullName}
                 className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
@@ -1853,6 +2103,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <input
                 name="phone"
                 required
+                pattern="^(0|\+84)[0-9]{9}$"
+                title="Số điện thoại Việt Nam gồm 10 chữ số (VD: 0909123456 hoặc +84909123456)"
                 defaultValue={selectedMechanic.phone || ''}
                 className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
@@ -1877,15 +2129,82 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-on-surface mb-1">
-                Ca làm việc:
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-on-surface">
+                  Ca làm việc:
+                </label>
+                <span className="text-[11px] text-secondary">
+                  Trạng thái thợ sẽ tự động kích hoạt theo khung giờ ca
+                </span>
+              </div>
+              <select
+                value={editShiftOption}
+                onChange={(e) => setEditShiftOption(e.target.value)}
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer font-medium"
+              >
+                {STANDARD_RESCUE_SHIFTS.map((s) => {
+                  const activeNow = isShiftCurrentlyActive(s.name);
+                  return (
+                    <option key={s.id} value={s.name}>
+                      {s.name} {activeNow ? '🟢 [Đang trong ca trực]' : ''}
+                    </option>
+                  );
+                })}
+                <option value="__custom__">-- Tùy chỉnh ca làm việc khác --</option>
+              </select>
+
+              {editShiftOption === '__custom__' && (
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    value={editCustomShift}
+                    onChange={(e) => setEditCustomShift(e.target.value)}
+                    placeholder="VD: Ca Đêm trực bão (22:00 - 06:00)"
+                    className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    required
+                  />
+                  <span className="text-[11px] text-secondary mt-1 block">
+                    Gợi ý định dạng: Tên ca (HH:mm - HH:mm) để hệ thống tự động xác định ca trực.
+                  </span>
+                </div>
+              )}
+
               <input
+                type="hidden"
                 name="shiftName"
-                defaultValue={selectedMechanic.shiftName || ''}
-                placeholder="VD: Ca đêm trực bão"
-                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={editShiftOption === '__custom__' ? editCustomShift : editShiftOption}
               />
+
+              {/* Real-time status preview */}
+              {(() => {
+                const effectiveShift = editShiftOption === '__custom__' ? editCustomShift : editShiftOption;
+                const isNowInShift = isShiftCurrentlyActive(effectiveShift);
+                return (
+                  <div
+                    className={`mt-2 p-2.5 rounded-lg border text-xs flex items-center gap-2 ${
+                      isNowInShift
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-amber-50 border-amber-200 text-amber-800'
+                    }`}
+                  >
+                    <Clock size={14} className={isNowInShift ? 'text-emerald-600 shrink-0' : 'text-amber-600 shrink-0'} />
+                    <span>
+                      {isNowInShift ? (
+                        <>
+                          <strong>Đang trong ca trực:</strong> Thợ sẽ chuyển sang trạng thái{' '}
+                          <strong className="text-emerald-700">SẴN SÀNG</strong> nhận cuốc cứu hộ.
+                        </>
+                      ) : (
+                        <>
+                          <strong>Ngoài ca trực:</strong> Thợ sẽ chuyển sang trạng thái{' '}
+                          <strong className="text-amber-700">NGHỈ TRỰC</strong> và tự động kích hoạt{' '}
+                          <strong>SẴN SÀNG</strong> khi đến khung giờ ca trực.
+                        </>
+                      )}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             <div>
@@ -1927,7 +2246,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <span>Lưu thay đổi thông tin thợ</span>
             </button>
           </form>
-        </GarageDrawer>
+        </GarageModal>
       )}
 
       {/* POPUP HIỂN THỊ MẬT KHẨU TẠM THỜI BÀN GIAO CHO THỢ */}

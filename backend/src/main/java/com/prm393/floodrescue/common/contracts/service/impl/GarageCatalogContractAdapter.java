@@ -39,15 +39,15 @@ public class GarageCatalogContractAdapter implements GarageCatalogLookup {
         if (!service.getGarage().getId().equals(garageId)) {
             throw new BadRequestException("Dịch vụ không thuộc garage của đơn cứu hộ");
         }
-        if (!service.isActive()) {
-            throw new BadRequestException("Dịch vụ đã ngừng hoạt động");
+        if (service.isDeleted() || !service.isActive()) {
+            throw new BadRequestException("Dịch vụ đã ngừng kinh doanh hoặc tạm dừng phục vụ");
         }
         return toSnapshot(service);
     }
 
     @Override
     public List<GarageServiceSnapshot> getActiveServices(Long garageId) {
-        return serviceItemRepository.findByGarageIdAndActiveTrueOrderByCreatedAtAsc(garageId)
+        return serviceItemRepository.findByGarageIdAndActiveTrueAndDeletedFalseOrderByCreatedAtAsc(garageId)
                 .stream()
                 .map(this::toSnapshot)
                 .toList();
@@ -63,35 +63,30 @@ public class GarageCatalogContractAdapter implements GarageCatalogLookup {
     @Override
     public MechanicContextSnapshot getRequiredMechanicByStaffId(Long mechanicStaffId) {
         MechanicStaff mechanic = mechanicStaffRepository.findById(mechanicStaffId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thợ cứu hộ: " + mechanicStaffId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ thợ cứu hộ"));
         return toSnapshot(mechanic);
     }
 
     @Override
     public GarageOwnerContextSnapshot getRequiredGarageOwnerContext(Long ownerUserId) {
         Garage garage = garageRepository.findByOwnerId(ownerUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy garage của tài khoản"));
-        List<Long> mechanicIds = mechanicStaffRepository.findByGarageIdOrderByCreatedAtDesc(garage.getId())
-                .stream()
-                .map(MechanicStaff::getId)
-                .toList();
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy garage của chủ sở hữu"));
         return GarageOwnerContextSnapshot.builder()
                 .garageId(garage.getId())
                 .approved(garage.getStatus() == GarageStatus.APPROVED)
-                .mechanicStaffIds(mechanicIds)
                 .build();
     }
 
     @Override
     public GarageBranchSnapshot getRequiredBranch(Long branchId, Long garageId) {
         GarageBranch branch = branchRepository.findById(branchId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chi nhánh: " + branchId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chi nhánh"));
         if (!branch.getGarage().getId().equals(garageId)) {
-            throw new BadRequestException("Chi nhánh không thuộc garage của đơn cứu hộ");
+            throw new BadRequestException("Chi nhánh không thuộc garage này");
         }
         return GarageBranchSnapshot.builder()
                 .branchId(branch.getId())
-                .garageId(branch.getGarage().getId())
+                .garageId(garageId)
                 .branchName(branch.getBranchName())
                 .address(branch.getAddress())
                 .open(branch.getOperatingStatus() == BranchStatus.OPEN)
@@ -105,10 +100,12 @@ public class GarageCatalogContractAdapter implements GarageCatalogLookup {
                 .serviceName(service.getServiceName())
                 .description(service.getDescription())
                 .serviceType(service.getServiceType())
+                .itemCategoryType(service.getItemCategoryType())
+                .applicableVehicleType(service.getApplicableVehicleType())
                 .standardPrice(service.getStandardPrice())
                 .minPrice(service.getMinPrice())
                 .maxPrice(service.getMaxPrice())
-                .active(service.isActive())
+                .active(service.isActive() && !service.isDeleted())
                 .build();
     }
 

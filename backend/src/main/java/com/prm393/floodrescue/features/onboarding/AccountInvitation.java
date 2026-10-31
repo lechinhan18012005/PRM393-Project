@@ -32,4 +32,6 @@ public class AccountInvitation {
     @ManyToOne private GarageBranch branch;
     private LocalDateTime expiresAt;
     private boolean used;
+    private boolean revoked;
+    private LocalDateTime revokedAt;
 }

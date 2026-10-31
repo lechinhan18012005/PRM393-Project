@@ -5,6 +5,8 @@ class QuotationCatalogItem {
     required this.price,
     this.description,
     this.type,
+    this.itemCategoryType,
+    this.applicableVehicleType,
   });
 
   final int serviceId;
@@ -12,6 +14,8 @@ class QuotationCatalogItem {
   final double price;
   final String? description;
   final String? type;
+  final String? itemCategoryType;
+  final String? applicableVehicleType;
 
   factory QuotationCatalogItem.fromJson(Map<String, dynamic> json) =>
       QuotationCatalogItem(
@@ -20,6 +24,8 @@ class QuotationCatalogItem {
         price: (json['standardPrice'] as num?)?.toDouble() ?? 0,
         description: json['description'] as String?,
         type: json['serviceType'] as String?,
+        itemCategoryType: json['itemCategoryType'] as String?,
+        applicableVehicleType: json['applicableVehicleType'] as String?,
       );
 }
 

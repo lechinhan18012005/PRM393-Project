@@ -11,4 +11,6 @@ import java.util.List;
 public interface GarageBranchRepository extends JpaRepository<GarageBranch, Long> {
     List<GarageBranch> findByGarageIdOrderByCreatedAtAsc(Long garageId);
     List<GarageBranch> findByOperatingStatus(BranchStatus status);
+    boolean existsByGarageIdAndBranchNameIgnoreCase(Long garageId, String branchName);
+    boolean existsByGarageIdAndBranchNameIgnoreCaseAndIdNot(Long garageId, String branchName, Long id);
 }

@@ -56,11 +56,23 @@ export interface GarageMechanicBackend {
   createdAt?: string;
 }
 
+export interface PriceCeilingBackend {
+  id: number;
+  serviceType: string;
+  category: string;
+  itemCategoryType: string;
+  maxAllowedPrice: number;
+  description?: string;
+  active: boolean;
+}
+
 export interface ServiceItemBackend {
   id: number;
   serviceName: string;
   category: string;
-  serviceType: string;
+  serviceType: 'REPAIR_ONSITE' | 'TOWING' | 'CROSSING' | string;
+  itemCategoryType?: 'LABOR' | 'PART' | 'PACKAGE' | string;
+  applicableVehicleType?: 'ALL' | 'SCOOTER' | 'MANUAL_CLUTCH' | 'ELECTRIC' | string;
   standardPrice: number;
   minPrice: number;
   maxPrice: number;
@@ -68,6 +80,8 @@ export interface ServiceItemBackend {
   estimatedTimeMin: number;
   description: string;
   active: boolean;
+  deleted?: boolean;
+  adminCeilingSnapshot?: number | null;
   warrantyDays: number;
 }
 

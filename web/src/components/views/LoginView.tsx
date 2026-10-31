@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DEMO_MODE, useAuth } from '../../context/AuthContext';
 import { Role } from '../../types/auth';
-import { Shield, Building2, User, KeyRound, AlertCircle, ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { Shield, Building2, User, KeyRound, AlertCircle, ArrowRight, Loader2, Sparkles, Eye, EyeOff } from 'lucide-react';
 
 interface LoginViewProps {
   onSwitchToRegister: () => void;
@@ -12,6 +12,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActi
   const { login, demoLogin, isLoading } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -92,15 +93,27 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActi
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600">Mật khẩu</label>
               <span className="text-xs text-orange-600 hover:text-orange-300 cursor-pointer">Quên mật khẩu?</span>
             </div>
-            <div className="relative">
+            <div className="relative flex items-center">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Nhập mật khẩu..."
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+                className="w-full pl-4 pr-11 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
               />
-              <KeyRound className="w-4 h-4 text-slate-500 absolute right-3.5 top-3" />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 transition-colors focus:outline-none cursor-pointer"
+                title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
             </div>
           </div>
 

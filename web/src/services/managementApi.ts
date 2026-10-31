@@ -5,7 +5,8 @@ import { RegisterPayload, User } from '../types/auth';
 export class ApiError extends Error {
   constructor(
     message: string,
-    public status: number
+    public status: number,
+    public validationErrors?: Record<string, string>
   ) {
     super(message);
   }
@@ -17,9 +18,20 @@ export async function request<T>(path: string, method = 'GET', body?: unknown): 
     headers: getAuthHeaders(),
     body: body === undefined ? undefined : JSON.stringify(body)
   });
-  const json = await response.json();
-  if (!response.ok || !json.success) throw new ApiError(json.message || 'Thao tác thất bại', response.status);
-  return json.data;
+  let json: any = null;
+  const contentType = response.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    try {
+      json = await response.json();
+    } catch {
+      json = null;
+    }
+  }
+  if (!response.ok || (json && json.success === false)) {
+    const message = json?.message || `Lỗi hệ thống (${response.status})`;
+    throw new ApiError(message, response.status, json?.validationErrors);
+  }
+  return json?.data !== undefined ? json.data : json;
 }
 
 export interface Branch {

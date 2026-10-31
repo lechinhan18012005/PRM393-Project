@@ -1,8 +1,9 @@
-package com.prm393.floodrescue.features.kyc.service;
+package com.prm393.floodrescue.features.kyc.service.impl;
 
 import com.prm393.floodrescue.common.exception.BadRequestException;
 import com.prm393.floodrescue.common.exception.ResourceNotFoundException;
 import com.prm393.floodrescue.common.security.FileSignatureValidator;
+import com.prm393.floodrescue.features.kyc.service.SecureStorageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -13,7 +14,6 @@ import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -207,6 +207,7 @@ public class EncryptedLocalStorageServiceImpl implements SecureStorageService {
         }
     }
 
+    @Override
     public boolean validatePresignedSignature(String storageKey, long expiresAtEpoch, String signature) {
         if (Instant.now().getEpochSecond() > expiresAtEpoch) {
             log.warn("Pre-signed URL đã hết hạn tại epoch: {}", expiresAtEpoch);

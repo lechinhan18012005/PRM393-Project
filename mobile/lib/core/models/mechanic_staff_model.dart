@@ -11,6 +11,10 @@ class MechanicStaffModel {
   final int? branchId;
   final String? branchName;
   final String? branchAddress;
+  final String? branchOperatingStatus;
+  final bool isManualOverride;
+  final String? pausedAt;
+  final String? pauseReason;
   final double? currentLatitude;
   final double? currentLongitude;
   final String workingStatus; // OFFLINE, AVAILABLE, BUSY
@@ -34,6 +38,10 @@ class MechanicStaffModel {
     this.branchId,
     this.branchName,
     this.branchAddress,
+    this.branchOperatingStatus,
+    this.isManualOverride = false,
+    this.pausedAt,
+    this.pauseReason,
     this.currentLatitude,
     this.currentLongitude,
     required this.workingStatus,
@@ -47,6 +55,8 @@ class MechanicStaffModel {
 
   bool get isOnline => workingStatus == 'AVAILABLE';
   bool get isBusy => workingStatus == 'BUSY';
+  bool get isBranchOpen => branchOperatingStatus == null || branchOperatingStatus == 'OPEN';
+  bool get isPaused => isManualOverride && workingStatus == 'OFFLINE';
 
   factory MechanicStaffModel.fromJson(Map<String, dynamic> json) {
     return MechanicStaffModel(
@@ -62,6 +72,10 @@ class MechanicStaffModel {
       branchId: json['branchId'] != null ? int.tryParse(json['branchId'].toString()) : null,
       branchName: json['branchName'],
       branchAddress: json['branchAddress'],
+      branchOperatingStatus: json['branchOperatingStatus']?.toString(),
+      isManualOverride: json['isManualOverride'] == true || json['manualOverride'] == true,
+      pausedAt: json['pausedAt']?.toString(),
+      pauseReason: json['pauseReason']?.toString(),
       currentLatitude: (json['currentLatitude'] as num?)?.toDouble(),
       currentLongitude: (json['currentLongitude'] as num?)?.toDouble(),
       workingStatus: json['workingStatus'] ?? 'OFFLINE',
@@ -88,6 +102,10 @@ class MechanicStaffModel {
       'branchId': branchId,
       'branchName': branchName,
       'branchAddress': branchAddress,
+      'branchOperatingStatus': branchOperatingStatus,
+      'isManualOverride': isManualOverride,
+      'pausedAt': pausedAt,
+      'pauseReason': pauseReason,
       'currentLatitude': currentLatitude,
       'currentLongitude': currentLongitude,
       'workingStatus': workingStatus,

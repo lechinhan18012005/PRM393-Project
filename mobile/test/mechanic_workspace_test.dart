@@ -57,6 +57,7 @@ class _Mechanic extends MechanicProvider {
     required String status,
     double? latitude,
     double? longitude,
+    String? pauseReason,
   }) async {
     calls++;
     expect(latitude, isNull);

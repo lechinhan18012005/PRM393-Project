@@ -121,7 +121,9 @@ public class AuthServiceImpl implements AuthService {
         if (request.getPlatform() == LoginRequest.ClientPlatform.WEB
                 && user.getRole() != Role.ADMIN
                 && user.getRole() != Role.STAFF
-                && user.getRole() != Role.GARAGE_OWNER)
+                && user.getRole() != Role.GARAGE_OWNER
+                && user.getRole() != Role.KYC_VERIFIER
+                && user.getRole() != Role.SUPER_ADMIN)
             throw new org.springframework.security.access.AccessDeniedException(
                     "Tài khoản này vui lòng đăng nhập trên Mobile");
         String accessToken = jwtService.generateToken(user);

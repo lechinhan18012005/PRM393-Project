@@ -109,6 +109,7 @@ class MechanicProvider with ChangeNotifier {
     required String status, // AVAILABLE, OFFLINE, BUSY
     double? latitude,
     double? longitude,
+    String? pauseReason,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -118,6 +119,7 @@ class MechanicProvider with ChangeNotifier {
         workingStatus: status,
         latitude: latitude,
         longitude: longitude,
+        pauseReason: pauseReason,
       );
       _isLoading = false;
       notifyListeners();

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import com.prm393.floodrescue.features.auth.entity.Role;
 import com.prm393.floodrescue.features.auth.entity.User;
 import com.prm393.floodrescue.features.auth.repository.UserRepository;
+import com.prm393.floodrescue.features.garage.entity.BranchStatus;
 import com.prm393.floodrescue.features.garage.entity.Garage;
 import com.prm393.floodrescue.features.garage.entity.GarageBranch;
 import com.prm393.floodrescue.features.garage.repository.GarageBranchRepository;
@@ -20,8 +21,9 @@ import com.prm393.floodrescue.features.mechanic.entity.MechanicStatus;
 import com.prm393.floodrescue.common.exception.BadRequestException;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
 import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
+import java.time.LocalDateTime;
 import java.util.List;
-import com.prm393.floodrescue.features.mechanic.service.MechanicStaffService;
+import com.prm393.floodrescue.features.mechanic.service.impl.MechanicStaffServiceImpl;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,10 +50,11 @@ class MechanicStaffServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private RescueOrderRepository rescueOrderRepository;
 
-    @InjectMocks private MechanicStaffService mechanicService;
+    @InjectMocks private MechanicStaffServiceImpl mechanicService;
 
     private User sampleOwner;
     private Garage sampleGarage;
+    private GarageBranch sampleBranch;
 
     @BeforeEach
     void setUp() {
@@ -64,6 +67,14 @@ class MechanicStaffServiceTest {
                         .owner(sampleOwner)
                         .garageName("Gara Toàn Thắng")
                         .status(com.prm393.floodrescue.features.garage.entity.GarageStatus.APPROVED)
+                        .build();
+
+        sampleBranch =
+                GarageBranch.builder()
+                        .id(101L)
+                        .branchName("Chi nhánh 1 (Q7)")
+                        .garage(sampleGarage)
+                        .operatingStatus(BranchStatus.OPEN)
                         .build();
     }
 
@@ -84,6 +95,7 @@ class MechanicStaffServiceTest {
                 .thenReturn(Optional.of(sampleGarage));
         when(userRepository.existsByUsername("tech_01")).thenReturn(false);
         when(userRepository.existsByPhone("0909123456")).thenReturn(false);
+        when(userRepository.existsByEmail("tech_01@floodrescue.vn")).thenReturn(false);
         when(passwordEncoder.encode("Password@123")).thenReturn("hashedPassword");
 
         User savedUser =
@@ -96,20 +108,14 @@ class MechanicStaffServiceTest {
                         .build();
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
 
-        GarageBranch branch =
-                GarageBranch.builder()
-                        .id(101L)
-                        .branchName("Chi nhánh 1 (Q7)")
-                        .garage(sampleGarage)
-                        .build();
-        when(branchRepository.findById(101L)).thenReturn(Optional.of(branch));
+        when(branchRepository.findById(101L)).thenReturn(Optional.of(sampleBranch));
 
         MechanicStaff staff =
                 MechanicStaff.builder()
                         .id(200L)
                         .user(savedUser)
                         .garage(sampleGarage)
-                        .branch(branch)
+                        .branch(sampleBranch)
                         .workingStatus(MechanicStatus.OFFLINE)
                         .shiftName("Ca Chiều (Trực Bão)")
                         .build();
@@ -140,6 +146,7 @@ class MechanicStaffServiceTest {
                         .id(200L)
                         .user(mechanicUser)
                         .garage(sampleGarage)
+                        .branch(sampleBranch)
                         .workingStatus(MechanicStatus.OFFLINE)
                         .build();
 
@@ -164,10 +171,92 @@ class MechanicStaffServiceTest {
     }
 
     @Test
+    @DisplayName("UC-07: Chặn thợ bật AVAILABLE khi chưa được phân bổ vào chi nhánh")
+    void toggleStatus_BlockedWhenNoBranch() {
+        User mechanicUser = User.builder().id(50L).username("tech_01").role(Role.FIELD_MECHANIC).build();
+        MechanicStaff staff = MechanicStaff.builder()
+                .id(200L)
+                .user(mechanicUser)
+                .garage(sampleGarage)
+                .branch(null)
+                .workingStatus(MechanicStatus.OFFLINE)
+                .build();
+
+        when(mechanicRepository.findByUserId(50L)).thenReturn(Optional.of(staff));
+
+        ToggleMechanicStatusRequest toggleRequest = ToggleMechanicStatusRequest.builder()
+                .workingStatus(MechanicStatus.AVAILABLE)
+                .build();
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> mechanicService.toggleStatus(mechanicUser, toggleRequest));
+        assertTrue(ex.getMessage().contains("chưa được phân bổ vào chi nhánh"));
+    }
+
+    @Test
+    @DisplayName("UC-07: Chặn thợ bật AVAILABLE khi chi nhánh đang đóng cửa bảo trì")
+    void toggleStatus_BlockedWhenBranchClosed() {
+        User mechanicUser = User.builder().id(50L).username("tech_01").role(Role.FIELD_MECHANIC).build();
+        GarageBranch closedBranch = GarageBranch.builder()
+                .id(101L)
+                .branchName("Chi nhánh 1 (Q7)")
+                .garage(sampleGarage)
+                .operatingStatus(BranchStatus.CLOSED_MAINTENANCE)
+                .build();
+
+        MechanicStaff staff = MechanicStaff.builder()
+                .id(200L)
+                .user(mechanicUser)
+                .garage(sampleGarage)
+                .branch(closedBranch)
+                .workingStatus(MechanicStatus.OFFLINE)
+                .build();
+
+        when(mechanicRepository.findByUserId(50L)).thenReturn(Optional.of(staff));
+
+        ToggleMechanicStatusRequest toggleRequest = ToggleMechanicStatusRequest.builder()
+                .workingStatus(MechanicStatus.AVAILABLE)
+                .build();
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> mechanicService.toggleStatus(mechanicUser, toggleRequest));
+        assertTrue(ex.getMessage().contains("tạm đóng cửa bảo trì"));
+    }
+
+    @Test
+    @DisplayName("UC-07: Thợ tạm nghỉ có lý do (pauseReason & isManualOverride = true)")
+    void toggleStatus_PauseWithReason() {
+        User mechanicUser = User.builder().id(50L).username("tech_01").role(Role.FIELD_MECHANIC).build();
+        MechanicStaff staff = MechanicStaff.builder()
+                .id(200L)
+                .user(mechanicUser)
+                .garage(sampleGarage)
+                .branch(sampleBranch)
+                .workingStatus(MechanicStatus.AVAILABLE)
+                .build();
+
+        when(mechanicRepository.findByUserId(50L)).thenReturn(Optional.of(staff));
+        when(mechanicRepository.save(any(MechanicStaff.class))).thenAnswer(i -> i.getArgument(0));
+
+        ToggleMechanicStatusRequest toggleRequest = ToggleMechanicStatusRequest.builder()
+                .workingStatus(MechanicStatus.OFFLINE)
+                .pauseReason("Nghỉ ăn trưa và kiểm tra đồ nghề")
+                .build();
+
+        MechanicStaffResponse response = mechanicService.toggleStatus(mechanicUser, toggleRequest);
+
+        assertNotNull(response);
+        assertEquals(MechanicStatus.OFFLINE, response.getWorkingStatus());
+        assertTrue(response.isManualOverride());
+        assertEquals("Nghỉ ăn trưa và kiểm tra đồ nghề", response.getPauseReason());
+        assertNotNull(response.getPausedAt());
+    }
+
+    @Test
     @DisplayName("Chặn thợ tự đặt trạng thái BUSY qua toggleStatus")
     void toggleStatus_CannotSetBusyManually() {
         User mechanicUser = User.builder().id(50L).username("tech_01").role(Role.FIELD_MECHANIC).build();
-        MechanicStaff staff = MechanicStaff.builder().id(200L).user(mechanicUser).garage(sampleGarage).workingStatus(MechanicStatus.OFFLINE).build();
+        MechanicStaff staff = MechanicStaff.builder().id(200L).user(mechanicUser).garage(sampleGarage).branch(sampleBranch).workingStatus(MechanicStatus.OFFLINE).build();
 
         when(mechanicRepository.findByUserId(50L)).thenReturn(Optional.of(staff));
 
@@ -182,7 +271,7 @@ class MechanicStaffServiceTest {
     @DisplayName("Chặn thợ đổi sang AVAILABLE/OFFLINE để thoát đơn khi đang có đơn active")
     void toggleStatus_CannotEscapeActiveOrder() {
         User mechanicUser = User.builder().id(50L).username("tech_01").role(Role.FIELD_MECHANIC).build();
-        MechanicStaff staff = MechanicStaff.builder().id(200L).user(mechanicUser).garage(sampleGarage).workingStatus(MechanicStatus.BUSY).build();
+        MechanicStaff staff = MechanicStaff.builder().id(200L).user(mechanicUser).garage(sampleGarage).branch(sampleBranch).workingStatus(MechanicStatus.BUSY).build();
 
         when(mechanicRepository.findByUserId(50L)).thenReturn(Optional.of(staff));
         when(rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(eq(200L), anyList())).thenReturn(true);
@@ -323,5 +412,110 @@ class MechanicStaffServiceTest {
         when(rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(eq(200L), anyList())).thenReturn(true);
 
         assertThrows(BadRequestException.class, () -> mechanicService.removeMechanic(sampleOwner, 200L));
+    }
+
+    @Test
+    @DisplayName("UC-05: Kiem tra tinh toan khung gio ca truc chinh xac (isWithinShift)")
+    void isWithinShift_Calculation() {
+        // Daytime shift: 06:00 - 14:00
+        String morningShift = "Ca 1: Sáng (06:00 - 14:00)";
+        assertTrue(MechanicStaffServiceImpl.isWithinShift(morningShift, java.time.LocalTime.of(8, 30)));
+        assertTrue(MechanicStaffServiceImpl.isWithinShift(morningShift, java.time.LocalTime.of(6, 0)));
+        assertFalse(MechanicStaffServiceImpl.isWithinShift(morningShift, java.time.LocalTime.of(15, 0)));
+
+        // Afternoon/evening shift: 14:00 - 22:00
+        String afternoonShift = "Ca 2: Chiều tối (14:00 - 22:00)";
+        assertTrue(MechanicStaffServiceImpl.isWithinShift(afternoonShift, java.time.LocalTime.of(18, 0)));
+        assertFalse(MechanicStaffServiceImpl.isWithinShift(afternoonShift, java.time.LocalTime.of(10, 0)));
+
+        // Overnight shift: 22:00 - 06:00 (crosses midnight)
+        String nightShift = "Ca 3: Đêm trực bão (22:00 - 06:00)";
+        assertTrue(MechanicStaffServiceImpl.isWithinShift(nightShift, java.time.LocalTime.of(23, 30)));
+        assertTrue(MechanicStaffServiceImpl.isWithinShift(nightShift, java.time.LocalTime.of(3, 15)));
+        assertFalse(MechanicStaffServiceImpl.isWithinShift(nightShift, java.time.LocalTime.of(12, 0)));
+
+        // 24/7 shift
+        String allDayShift = "Ca Trực chiến 24/7 (00:00 - 23:59)";
+        assertTrue(MechanicStaffServiceImpl.isWithinShift(allDayShift, java.time.LocalTime.of(12, 0)));
+        assertTrue(MechanicStaffServiceImpl.isWithinShift(allDayShift, java.time.LocalTime.of(2, 0)));
+    }
+
+    @Test
+    @DisplayName("UC-05: Dong bo trang thai tho theo khung gio ca truc (AVAILABLE trong ca, OFFLINE ngoai ca)")
+    void syncStatusWithShift_FollowsShiftSchedule() {
+        User user = User.builder().id(50L).fullName("Nguyễn Văn Thợ").active(true).build();
+        MechanicStaff staff = MechanicStaff.builder()
+                .id(200L)
+                .user(user)
+                .shiftName("Ca 2: Chiều tối (14:00 - 22:00)")
+                .workingStatus(MechanicStatus.OFFLINE)
+                .isManualOverride(false)
+                .build();
+
+        // 1. When time is 18:00 (within shift), status should transition to AVAILABLE
+        mechanicService.syncStatusWithShift(staff, java.time.LocalTime.of(18, 0));
+        assertEquals(MechanicStatus.AVAILABLE, staff.getWorkingStatus());
+
+        // 2. When time is 23:00 (outside shift), status should transition to OFFLINE
+        mechanicService.syncStatusWithShift(staff, java.time.LocalTime.of(23, 0));
+        assertEquals(MechanicStatus.OFFLINE, staff.getWorkingStatus());
+
+        // 3. When staff is BUSY on active rescue, status must NOT be modified
+        staff.setWorkingStatus(MechanicStatus.BUSY);
+        mechanicService.syncStatusWithShift(staff, java.time.LocalTime.of(23, 0));
+        assertEquals(MechanicStatus.BUSY, staff.getWorkingStatus());
+    }
+
+    @Test
+    @DisplayName("BR-MECH-008: Tôn trọng quyết định tạm nghỉ thủ công của thợ (isManualOverride = true)")
+    void syncStatusWithShift_RespectsManualOverride() {
+        User user = User.builder().id(50L).fullName("Nguyễn Văn Thợ").active(true).build();
+        MechanicStaff staff = MechanicStaff.builder()
+                .id(200L)
+                .user(user)
+                .shiftName("Ca 2: Chiều tối (14:00 - 22:00)")
+                .workingStatus(MechanicStatus.OFFLINE)
+                .isManualOverride(true)
+                .pauseReason("Nghỉ ăn cơm")
+                .build();
+
+        // Dù đang trong ca (18:00), hệ thống vẫn giữ nguyên OFFLINE vì thợ chủ động tạm nghỉ
+        mechanicService.syncStatusWithShift(staff, java.time.LocalTime.of(18, 0));
+        assertEquals(MechanicStatus.OFFLINE, staff.getWorkingStatus());
+    }
+
+    @Test
+    @DisplayName("BR-MECH-009: Reaper tự động hạ OFFLINE các thợ mất tín hiệu định vị > 10 phút")
+    void autoOfflineStaleMechanics_ReapsStaleMechanics() {
+        User user1 = User.builder().id(50L).username("tho_01").active(true).build();
+        User user2 = User.builder().id(51L).username("tho_02").active(true).build();
+
+        // Thợ 1: AVAILABLE nhưng heartbeat từ 15 phút trước -> bị reaper hạ OFFLINE
+        MechanicStaff staleStaff = MechanicStaff.builder()
+                .id(201L)
+                .user(user1)
+                .workingStatus(MechanicStatus.AVAILABLE)
+                .lastGpsUpdatedAt(LocalDateTime.now().minusMinutes(15))
+                .build();
+
+        // Thợ 2: AVAILABLE và heartbeat vừa cập nhật 2 phút trước -> giữ nguyên AVAILABLE
+        MechanicStaff freshStaff = MechanicStaff.builder()
+                .id(202L)
+                .user(user2)
+                .workingStatus(MechanicStatus.AVAILABLE)
+                .lastGpsUpdatedAt(LocalDateTime.now().minusMinutes(2))
+                .build();
+
+        when(mechanicRepository.findAll()).thenReturn(List.of(staleStaff, freshStaff));
+        when(rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(eq(201L), anyList())).thenReturn(false);
+
+        mechanicService.autoOfflineStaleMechanics();
+
+        assertEquals(MechanicStatus.OFFLINE, staleStaff.getWorkingStatus());
+        assertFalse(staleStaff.isManualOverride());
+        assertTrue(staleStaff.getPauseReason().contains("BR-MECH-009"));
+        assertEquals(MechanicStatus.AVAILABLE, freshStaff.getWorkingStatus());
+        verify(mechanicRepository).save(staleStaff);
+        verify(mechanicRepository, never()).save(freshStaff);
     }
 }
