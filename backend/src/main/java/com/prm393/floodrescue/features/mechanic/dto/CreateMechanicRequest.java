@@ -29,4 +29,5 @@ public class CreateMechanicRequest {
     private Long branchId;
     private String shiftName;
     private String speciality;
+    private Boolean hasCrossingCapability;
 }

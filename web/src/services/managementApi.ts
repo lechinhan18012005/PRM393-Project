@@ -36,6 +36,8 @@ export interface Branch {
 
 export interface Mechanic {
   id: number;
+  userId?: number;
+  username?: string;
   fullName: string;
   email: string;
   phone?: string;
@@ -45,9 +47,31 @@ export interface Mechanic {
   avatarUrl?: string;
   branchId: number | null;
   branchName: string;
+  branchAddress?: string;
   shiftName: string;
   workingStatus: string;
   active: boolean;
+}
+
+export interface CreateMechanicPayload {
+  username: string;
+  fullName: string;
+  phone: string;
+  email?: string;
+  password: string;
+  branchId?: number;
+  shiftName?: string;
+  speciality?: string;
+  hasCrossingCapability?: boolean;
+}
+
+export interface UpdateMechanicPayload {
+  fullName?: string;
+  phone?: string;
+  branchId?: number;
+  shiftName?: string;
+  speciality?: string;
+  hasCrossingCapability?: boolean;
 }
 
 export interface Invitation {
@@ -60,6 +84,18 @@ export const managementApi = {
   garage: () => request<GarageBackendResponse>('/garages/me'),
   branches: () => request<Branch[]>('/garages/branches'),
   mechanics: () => request<Mechanic[]>('/garages/mechanics'),
+  createMechanic: (payload: CreateMechanicPayload) =>
+    request<Mechanic>('/garages/mechanics', 'POST', payload),
+  updateMechanic: (id: number, payload: UpdateMechanicPayload) =>
+    request<Mechanic>(`/garages/mechanics/${id}`, 'PUT', payload),
+  resetMechanicPassword: (id: number) =>
+    request<string>(`/garages/mechanics/${id}/reset-password`, 'POST'),
+  removeMechanic: (id: number) =>
+    request<void>(`/garages/mechanics/${id}`, 'DELETE'),
+  allocateMechanic: (id: number, branchId: number, shiftName?: string) =>
+    request<Mechanic>(`/garages/mechanics/${id}/allocate`, 'PATCH', { branchId, shiftName }),
+  toggleMechanicStatus: (id: number, active: boolean) =>
+    request<Mechanic>(`/garages/mechanics/${id}/status`, 'PATCH', { active }),
   staff: () => request<User[]>('/admin/staff'),
   invite: (staff: boolean, email: string, branchId?: number) =>
     request<Invitation>(staff ? '/admin/staff/invitations' : '/garages/mechanics/invitations', 'POST', {

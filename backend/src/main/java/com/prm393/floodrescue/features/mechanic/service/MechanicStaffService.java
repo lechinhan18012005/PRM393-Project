@@ -13,6 +13,7 @@ import com.prm393.floodrescue.features.mechanic.dto.AllocateBranchRequest;
 import com.prm393.floodrescue.features.mechanic.dto.CreateMechanicRequest;
 import com.prm393.floodrescue.features.mechanic.dto.MechanicStaffResponse;
 import com.prm393.floodrescue.features.mechanic.dto.ToggleMechanicStatusRequest;
+import com.prm393.floodrescue.features.mechanic.dto.UpdateMechanicRequest;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStaff;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStatus;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
@@ -109,6 +110,7 @@ public class MechanicStaffService {
                                 request.getSpeciality() != null
                                         ? request.getSpeciality()
                                         : "Cứu hộ xe ngập nước & Sấy bugi")
+                        .hasCrossingCapability(Boolean.TRUE.equals(request.getHasCrossingCapability()))
                         .ratingAvg(5.0)
                         .build();
 
@@ -265,11 +267,152 @@ public class MechanicStaffService {
         if (!staff.getGarage().getId().equals(garage.getId()))
             throw new org.springframework.security.access.AccessDeniedException(
                     "Thợ không thuộc gara của bạn");
+
+        if (!active && rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(
+                staffId, List.of(RescueOrderStatus.DISPATCHED, RescueOrderStatus.ARRIVED, RescueOrderStatus.IN_PROGRESS))) {
+            throw new BadRequestException("Không thể khóa quyền làm việc khi thợ đang thực hiện đơn cứu hộ!");
+        }
+
         staff.getUser().setActive(active);
         userRepository.save(staff.getUser());
         if (!active) staff.setWorkingStatus(MechanicStatus.OFFLINE);
         mechanicRepository.save(staff);
         return mapToResponse(staff);
+    }
+
+    @Transactional
+    public MechanicStaffResponse updateMechanic(
+            User owner, Long staffId, UpdateMechanicRequest request) {
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(owner.getId())
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Chưa tìm thấy garage của tài khoản này!"));
+        com.prm393.floodrescue.features.garage.service.GarageAccess.requireApproved(garage);
+
+        MechanicStaff staff =
+                mechanicRepository
+                        .findById(staffId)
+                        .orElseThrow(
+                                () ->
+                                        new ResourceNotFoundException(
+                                                "Không tìm thấy thợ với id: " + staffId));
+
+        if (!staff.getGarage().getId().equals(garage.getId())) {
+            throw new ResourceNotFoundException("Thợ không thuộc quyền quản lý của garage bạn!");
+        }
+
+        if (request.getBranchId() != null
+                && (staff.getBranch() == null || !request.getBranchId().equals(staff.getBranch().getId()))) {
+            if (rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(
+                    staffId,
+                    List.of(
+                            RescueOrderStatus.DISPATCHED,
+                            RescueOrderStatus.ARRIVED,
+                            RescueOrderStatus.IN_PROGRESS))) {
+                throw new BadRequestException("Không thể điều chuyển chi nhánh khi thợ đang thực hiện đơn cứu hộ!");
+            }
+            GarageBranch branch =
+                    branchRepository
+                            .findById(request.getBranchId())
+                            .orElseThrow(
+                                    () ->
+                                            new ResourceNotFoundException(
+                                                    "Chi nhánh không tồn tại: " + request.getBranchId()));
+            if (!branch.getGarage().getId().equals(garage.getId())) {
+                throw new org.springframework.security.access.AccessDeniedException(
+                        "Chi nhánh không thuộc gara của bạn");
+            }
+            staff.setBranch(branch);
+        }
+
+        if (request.getFullName() != null && !request.getFullName().isBlank()) {
+            staff.getUser().setFullName(request.getFullName().trim());
+        }
+
+        if (request.getPhone() != null && !request.getPhone().isBlank()
+                && !request.getPhone().trim().equals(staff.getUser().getPhone())) {
+            if (userRepository.existsByPhone(request.getPhone().trim())) {
+                throw new BadRequestException("Số điện thoại đã được đăng ký bởi tài khoản khác!");
+            }
+            staff.getUser().setPhone(request.getPhone().trim());
+        }
+
+        if (request.getShiftName() != null) {
+            staff.setShiftName(request.getShiftName().trim());
+        }
+
+        if (request.getSpeciality() != null) {
+            staff.setSpeciality(request.getSpeciality().trim());
+        }
+
+        if (request.getHasCrossingCapability() != null) {
+            staff.setHasCrossingCapability(request.getHasCrossingCapability());
+        }
+
+        userRepository.save(staff.getUser());
+        staff = mechanicRepository.save(staff);
+        return mapToResponse(staff);
+    }
+
+    @Transactional
+    public String resetPassword(User owner, Long staffId) {
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(owner.getId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+        com.prm393.floodrescue.features.garage.service.GarageAccess.requireApproved(garage);
+
+        MechanicStaff staff =
+                mechanicRepository
+                        .findById(staffId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thợ"));
+
+        if (!staff.getGarage().getId().equals(garage.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Thợ không thuộc gara của bạn");
+        }
+
+        String tempPassword = "FR@" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        staff.getUser().setPassword(passwordEncoder.encode(tempPassword));
+        userRepository.save(staff.getUser());
+        log.info("Reset password for mechanic staffId: {}, username: {}", staffId, staff.getUser().getUsername());
+        return tempPassword;
+    }
+
+    @Transactional
+    public void removeMechanic(User owner, Long staffId) {
+        Garage garage =
+                garageRepository
+                        .findByOwnerId(owner.getId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Chưa tìm thấy garage của tài khoản này!"));
+        com.prm393.floodrescue.features.garage.service.GarageAccess.requireApproved(garage);
+
+        MechanicStaff staff =
+                mechanicRepository
+                        .findById(staffId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thợ"));
+
+        if (!staff.getGarage().getId().equals(garage.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Thợ không thuộc gara của bạn");
+        }
+
+        if (rescueOrderRepository.existsByMechanicStaffIdAndStatusIn(
+                staffId,
+                List.of(
+                        RescueOrderStatus.DISPATCHED,
+                        RescueOrderStatus.ARRIVED,
+                        RescueOrderStatus.IN_PROGRESS))) {
+            throw new BadRequestException("Không thể cho thợ thôi việc khi đang thực hiện đơn cứu hộ!");
+        }
+
+        staff.getUser().setActive(false);
+        userRepository.save(staff.getUser());
+        staff.setWorkingStatus(MechanicStatus.OFFLINE);
+        staff.setBranch(null);
+        mechanicRepository.save(staff);
+        log.info("Mechanic staffId: {} offboarded / soft-deleted from garage: {}", staffId, garage.getId());
     }
 
     public MechanicStaffResponse mapToResponse(MechanicStaff staff) {

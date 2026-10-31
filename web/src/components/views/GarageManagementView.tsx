@@ -23,7 +23,10 @@ import {
   Waves,
   Save,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Key,
+  Trash2,
+  UserPlus
 } from 'lucide-react';
 import { GarageHeading, GarageStat, GaragePanel, GarageDrawer, GarageError } from '../garage/GarageUI';
 
@@ -129,7 +132,16 @@ async function searchAddressGeocoding(queryText: string): Promise<AddressSuggest
 }
 
 export function GarageManagementView({ onShowToast }: GarageManagementViewProps) {
-  const [drawer, setDrawer] = useState<'branch' | 'invite' | null>(null);
+  const [drawer, setDrawer] = useState<'branch' | 'invite' | 'createMechanic' | 'editMechanic' | null>(null);
+  const [selectedMechanic, setSelectedMechanic] = useState<Mechanic | null>(null);
+  const [tempPasswordModal, setTempPasswordModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    username: string;
+    fullName: string;
+    password: string;
+  } | null>(null);
+  const [copiedTempPassword, setCopiedTempPassword] = useState(false);
   const [tab, setTab] = useState<'branches' | 'team'>('branches');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
@@ -438,10 +450,14 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     });
   };
 
-  // Lưu phân bổ chi nhánh & ca làm cho thợ
+  // Lưu phân bổ chi nhánh & ca làm cho thợ (UC-05)
   async function handleAllocateMechanic(mechanic: Mechanic, branchId: number, shiftName: string) {
     if (!branchId) {
       notify('Yêu cầu chi nhánh', 'Vui lòng chọn chi nhánh làm việc cho thợ.', 'warning');
+      return;
+    }
+    if (mechanic.workingStatus === 'BUSY') {
+      notify('Không thể điều chuyển', 'Không thể điều chuyển chi nhánh khi thợ đang thực hiện đơn cứu hộ!', 'error');
       return;
     }
     await mutate(
@@ -452,9 +468,160 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     );
   }
 
-  // Bật/Tắt quyền làm việc của thợ kèm xác nhận
+  // Cấp lại mật khẩu tạm thời cho thợ (UC-05 Alt Flow 5.5)
+  const handleResetPasswordConfirm = (mechanic: Mechanic) => {
+    setConfirmModal({
+      isOpen: true,
+      title: `Cấp lại mật khẩu: ${mechanic.fullName}`,
+      message: `Hệ thống sẽ tạo một mật khẩu tạm thời mới cho thợ ${mechanic.fullName} (${mechanic.email}). Bạn có chắc muốn cấp lại mật khẩu?`,
+      confirmLabel: 'Tạo mật khẩu mới',
+      tone: 'warning',
+      action: async () => {
+        try {
+          setBusy(true);
+          const tempPass = await managementApi.resetMechanicPassword(mechanic.id);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          setTempPasswordModal({
+            isOpen: true,
+            title: `Cấp lại mật khẩu thành công: ${mechanic.fullName}`,
+            username: mechanic.username || mechanic.email,
+            fullName: mechanic.fullName,
+            password: tempPass
+          });
+          notify('Thành công', `Đã cấp lại mật khẩu tạm thời cho thợ ${mechanic.fullName}`, 'success');
+        } catch (e) {
+          const msg = (e as Error).message || 'Không thể cấp lại mật khẩu';
+          notify('Lỗi thao tác', msg, 'error');
+        } finally {
+          setBusy(false);
+        }
+      }
+    });
+  };
+
+  // Cho thợ thôi việc / gỡ khỏi chi nhánh (UC-05 Alt Flow 5.4)
+  const handleRemoveMechanicConfirm = (mechanic: Mechanic) => {
+    if (mechanic.workingStatus === 'BUSY') {
+      notify('Không thể cho thôi việc', 'Không thể cho thợ thôi việc khi đang thực hiện đơn cứu hộ!', 'error');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: `Cho thôi việc: ${mechanic.fullName}`,
+      message: `Thợ ${mechanic.fullName} sẽ bị gỡ khỏi chi nhánh và vô hiệu hóa tài khoản. Toàn bộ lịch sử các cuốc cứu hộ và đánh giá cũ vẫn được bảo toàn. Bạn có chắc chắn?`,
+      confirmLabel: 'Cho thôi việc',
+      tone: 'danger',
+      action: async () => {
+        await mutate(
+          `/garages/mechanics/${mechanic.id}`,
+          'DELETE',
+          undefined,
+          `Đã cho thợ ${mechanic.fullName} thôi việc và bảo toàn lịch sử cứu hộ.`
+        );
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  // Thêm thợ trực tiếp (UC-05 Normal Flow)
+  async function handleCreateMechanicSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    const username = String(data.get('username') || '').trim();
+    const fullName = String(data.get('fullName') || '').trim();
+    const phone = String(data.get('phone') || '').trim();
+    const email = String(data.get('email') || '').trim();
+    const password = String(data.get('password') || '').trim();
+    const branchId = Number(data.get('branchId'));
+    const shiftName = String(data.get('shiftName') || '').trim();
+    const speciality = String(data.get('speciality') || '').trim();
+    const hasCrossingCapability = data.get('hasCrossingCapability') === 'on';
+
+    if (!username || !fullName || !phone || !password || !branchId) {
+      notify('Thiếu thông tin', 'Vui lòng điền đầy đủ các trường bắt buộc (*)', 'warning');
+      setBusy(false);
+      return;
+    }
+
+    try {
+      await managementApi.createMechanic({
+        username,
+        fullName,
+        phone,
+        email: email || undefined,
+        password,
+        branchId,
+        shiftName: shiftName || undefined,
+        speciality: speciality || undefined,
+        hasCrossingCapability
+      });
+      await load();
+      setDrawer(null);
+      setTempPasswordModal({
+        isOpen: true,
+        title: 'Thêm thợ cứu hộ mới thành công!',
+        username,
+        fullName,
+        password
+      });
+      notify('Thành công', `Đã tạo tài khoản thợ cho ${fullName}`, 'success');
+    } catch (e) {
+      const msg = (e as Error).message || 'Không thể tạo thợ mới';
+      setError(msg);
+      notify('Lỗi tạo thợ', msg, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Cập nhật thông tin thợ (UC-05 Alt Flow 5.2)
+  async function handleUpdateMechanicSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!selectedMechanic) return;
+    setBusy(true);
+    setError('');
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    const fullName = String(data.get('fullName') || '').trim();
+    const phone = String(data.get('phone') || '').trim();
+    const branchId = Number(data.get('branchId')) || undefined;
+    const shiftName = String(data.get('shiftName') || '').trim();
+    const speciality = String(data.get('speciality') || '').trim();
+    const hasCrossingCapability = data.get('hasCrossingCapability') === 'on';
+
+    try {
+      await managementApi.updateMechanic(selectedMechanic.id, {
+        fullName,
+        phone,
+        branchId,
+        shiftName,
+        speciality,
+        hasCrossingCapability
+      });
+      await load();
+      setDrawer(null);
+      setSelectedMechanic(null);
+      notify('Thành công', `Đã cập nhật thông tin thợ ${fullName}`, 'success');
+    } catch (e) {
+      const msg = (e as Error).message || 'Không thể cập nhật thông tin thợ';
+      setError(msg);
+      notify('Lỗi cập nhật', msg, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Bật/Tắt quyền làm việc của thợ kèm xác nhận (UC-05 Alt Flow 5.3)
   const handleToggleMechanicActiveConfirm = (mechanic: Mechanic) => {
     const nextActive = !mechanic.active;
+    if (!nextActive && mechanic.workingStatus === 'BUSY') {
+      notify('Không thể khóa quyền', 'Không thể khóa quyền làm việc khi thợ đang thực hiện đơn cứu hộ!', 'error');
+      return;
+    }
     const actionLabel = nextActive ? 'Mở lại quyền làm việc' : 'Khóa quyền làm việc';
 
     setConfirmModal({
@@ -501,7 +668,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     return mechanics.filter((m) => {
       if (teamStatusFilter === 'available' && (!m.active || m.workingStatus !== 'AVAILABLE')) return false;
       if (teamStatusFilter === 'busy' && (!m.active || m.workingStatus !== 'BUSY')) return false;
-      if (teamStatusFilter === 'offline' && (!m.active || m.workingStatus !== 'AVAILABLE' || m.workingStatus !== 'BUSY')) return false;
+      if (teamStatusFilter === 'offline' && (!m.active || !['AVAILABLE', 'BUSY'].includes(m.workingStatus))) return false;
       if (teamStatusFilter === 'disabled' && m.active) return false;
 
       if (query.trim()) {
@@ -557,6 +724,22 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
         action={
           <div className="flex items-center gap-2 flex-wrap">
             <button
+              style={{
+                backgroundColor: '#168B8B',
+                color: '#ffffff',
+                borderColor: '#168B8B'
+              }}
+              className="px-3.5 py-2 rounded-lg font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs hover:opacity-90 disabled:opacity-50"
+              onClick={() => {
+                setDrawer('createMechanic');
+              }}
+              disabled={!branches.length}
+              title={!branches.length ? 'Hãy thêm ít nhất một chi nhánh trước khi thêm thợ' : 'Thêm tài khoản thợ trực tiếp'}
+            >
+              <UserPlus size={16} />
+              <span>Thêm thợ mới</span>
+            </button>
+            <button
               className="garage-button px-3 py-2 rounded-lg border border-surface-container bg-white hover:bg-surface-container-low text-on-surface font-label-md flex items-center gap-1.5 transition cursor-pointer shadow-xs disabled:opacity-50"
               onClick={() => {
                 setInvitation(null);
@@ -566,7 +749,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               title={!branches.length ? 'Hãy thêm ít nhất một chi nhánh trước khi mời thợ' : 'Tạo mã mời cho thợ'}
             >
               <Users size={16} className="text-primary" />
-              <span>Mời thợ cứu hộ</span>
+              <span>Mời qua mã</span>
             </button>
             <button
               style={{
@@ -982,8 +1165,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                         />
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        {/* Nút lưu phân công */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Nút lưu phân công / chuyển chi nhánh */}
                         <button
                           type="submit"
                           disabled={busy}
@@ -992,11 +1175,48 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                             color: '#c2410c',
                             borderColor: '#fed7aa'
                           }}
-                          className="h-9 px-3 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
+                          className="h-9 px-2.5 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90 disabled:opacity-50"
                           title="Lưu chi nhánh và ca làm mới"
                         >
-                          <Save size={14} />
+                          <Save size={13} />
                           <span>Lưu ca</span>
+                        </button>
+
+                        {/* Nút Sửa thông tin thợ */}
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setSelectedMechanic(mechanic);
+                            setDrawer('editMechanic');
+                          }}
+                          style={{
+                            backgroundColor: '#f1f5f9',
+                            color: '#334155',
+                            borderColor: '#cbd5e1'
+                          }}
+                          className="h-9 px-2.5 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
+                          title="Chỉnh sửa ca trực, chuyên môn, năng lực vượt ngập và số điện thoại"
+                        >
+                          <Edit3 size={13} />
+                          <span>Sửa</span>
+                        </button>
+
+                        {/* Nút Cấp lại mật khẩu */}
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleResetPasswordConfirm(mechanic)}
+                          style={{
+                            backgroundColor: '#fefce8',
+                            color: '#a16207',
+                            borderColor: '#fef08a'
+                          }}
+                          className="h-9 px-2.5 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
+                          title="Cấp lại mật khẩu tạm thời cho thợ"
+                        >
+                          <Key size={13} />
+                          <span>Reset MK</span>
                         </button>
 
                         {/* Nút Khóa / Mở quyền thợ */}
@@ -1009,10 +1229,27 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                             color: mechanic.active ? '#b91c1c' : '#047857',
                             borderColor: mechanic.active ? '#fecaca' : '#a7f3d0'
                           }}
-                          className="h-9 px-3 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
+                          className="h-9 px-2.5 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
+                          title={mechanic.active ? 'Khóa quyền làm việc' : 'Mở lại quyền làm việc'}
                         >
                           {mechanic.active ? <Power size={13} /> : <CheckCircle2 size={13} />}
-                          <span>{mechanic.active ? 'Khóa quyền' : 'Mở lại'}</span>
+                          <span>{mechanic.active ? 'Khóa' : 'Mở lại'}</span>
+                        </button>
+
+                        {/* Nút Cho thôi việc */}
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleRemoveMechanicConfirm(mechanic)}
+                          style={{
+                            backgroundColor: '#faf5ff',
+                            color: '#7e22ce',
+                            borderColor: '#e9d5ff'
+                          }}
+                          className="h-9 px-2 rounded-lg font-label-md font-bold flex items-center gap-1 transition cursor-pointer text-xs border hover:opacity-90"
+                          title="Cho thôi việc (gỡ khỏi chi nhánh & bảo toàn lịch sử cứu hộ)"
+                        >
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     </form>
@@ -1433,6 +1670,334 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
             </div>
           )}
         </GarageDrawer>
+      )}
+
+      {/* DRAWER 3: THÊM THỢ CỨU HỘ TRỰC TIẾP (UC-05 Normal Flow) */}
+      {drawer === 'createMechanic' && (
+        <GarageDrawer
+          title="Thêm thợ cứu hộ trực tiếp"
+          description="Khởi tạo tài khoản thợ, phân bổ chi nhánh và cấp quyền cứu hộ vượt ngập."
+          onClose={() => {
+            if (!busy) setDrawer(null);
+          }}
+        >
+          <GarageError message={error} />
+          <form onSubmit={handleCreateMechanicSubmit} className="space-y-4 p-4">
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Tên đăng nhập (Username): <span className="text-error">*</span>
+              </label>
+              <input
+                name="username"
+                required
+                placeholder="VD: tho_tuananh_01"
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Họ và tên thợ: <span className="text-error">*</span>
+              </label>
+              <input
+                name="fullName"
+                required
+                placeholder="VD: Phạm Tuấn Anh"
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-on-surface mb-1">
+                  Số điện thoại: <span className="text-error">*</span>
+                </label>
+                <input
+                  name="phone"
+                  required
+                  placeholder="VD: 0909123456"
+                  className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-on-surface mb-1">
+                  Email (tùy chọn):
+                </label>
+                <input
+                  name="email"
+                  type="email"
+                  placeholder="VD: tuananh@gmail.com"
+                  className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Mật khẩu ban đầu: <span className="text-error">*</span>
+              </label>
+              <input
+                name="password"
+                required
+                defaultValue="FR@Pass2026"
+                placeholder="Mật khẩu tạm thời"
+                className="w-full h-10 px-3 text-sm font-mono bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              <span className="text-[11px] text-secondary mt-1 block">
+                Mật khẩu tạm thời để thợ đăng nhập ứng dụng Mobile lần đầu.
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Phân bổ chi nhánh trực thuộc: <span className="text-error">*</span>
+              </label>
+              <select
+                required
+                name="branchId"
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
+              >
+                <option value="">-- Chọn chi nhánh làm việc --</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.branchName} ({b.operatingStatus === 'OPEN' ? 'Đang mở' : 'Bảo trì'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Ca làm việc:
+              </label>
+              <input
+                name="shiftName"
+                defaultValue="Ca 2: Chiều tối (14:00 - 22:00)"
+                placeholder="VD: Ca Chiều trực bão (14:00 - 22:00)"
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Chuyên môn cứu hộ:
+              </label>
+              <input
+                name="speciality"
+                defaultValue="Cứu hộ xe ngập nước & Sấy bugi"
+                placeholder="VD: Cứu hộ thủy kích, xả nhớt sủi bọt, kéo xe"
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
+              <input
+                type="checkbox"
+                id="createHasCrossingCapability"
+                name="hasCrossingCapability"
+                className="w-4 h-4 text-primary rounded cursor-pointer"
+              />
+              <label htmlFor="createHasCrossingCapability" className="text-xs font-semibold text-blue-900 cursor-pointer">
+                Thợ có phương tiện & năng lực chở xe vượt ngập sâu (Xe bán tải / Ba gác chuyên dụng)
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              disabled={busy || !branches.length}
+              style={{
+                backgroundColor: '#168B8B',
+                color: '#ffffff',
+                borderColor: '#168B8B'
+              }}
+              className="w-full py-2.5 rounded-lg font-label-md font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? <RefreshCw size={16} className="animate-spin" /> : <UserPlus size={16} />}
+              <span>Tạo tài khoản thợ mới</span>
+            </button>
+          </form>
+        </GarageDrawer>
+      )}
+
+      {/* DRAWER 4: CHỈNH SỬA THÔNG TIN THỢ (UC-05 Alt Flow 5.2) */}
+      {drawer === 'editMechanic' && selectedMechanic && (
+        <GarageDrawer
+          title={`Chỉnh sửa: ${selectedMechanic.fullName}`}
+          description="Cập nhật chuyên môn, ca trực, số điện thoại và năng lực cứu hộ vượt ngập."
+          onClose={() => {
+            if (!busy) {
+              setDrawer(null);
+              setSelectedMechanic(null);
+            }
+          }}
+        >
+          <GarageError message={error} />
+          <form onSubmit={handleUpdateMechanicSubmit} className="space-y-4 p-4">
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Họ và tên thợ: <span className="text-error">*</span>
+              </label>
+              <input
+                name="fullName"
+                required
+                defaultValue={selectedMechanic.fullName}
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Số điện thoại: <span className="text-error">*</span>
+              </label>
+              <input
+                name="phone"
+                required
+                defaultValue={selectedMechanic.phone || ''}
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Chi nhánh trực thuộc:
+              </label>
+              <select
+                name="branchId"
+                defaultValue={selectedMechanic.branchId ?? ''}
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
+              >
+                <option value="">-- Chưa gán chi nhánh --</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.branchName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Ca làm việc:
+              </label>
+              <input
+                name="shiftName"
+                defaultValue={selectedMechanic.shiftName || ''}
+                placeholder="VD: Ca đêm trực bão"
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface mb-1">
+                Chuyên môn kỹ thuật:
+              </label>
+              <input
+                name="speciality"
+                defaultValue={selectedMechanic.speciality || ''}
+                placeholder="VD: Cứu hộ thủy kích & sấy bugi"
+                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
+              <input
+                type="checkbox"
+                id="editHasCrossingCapability"
+                name="hasCrossingCapability"
+                defaultChecked={Boolean(selectedMechanic.hasCrossingCapability)}
+                className="w-4 h-4 text-primary rounded cursor-pointer"
+              />
+              <label htmlFor="editHasCrossingCapability" className="text-xs font-semibold text-blue-900 cursor-pointer">
+                Thợ có phương tiện & năng lực chở xe vượt ngập sâu (Xe bán tải / Ba gác chuyên dụng)
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              disabled={busy}
+              style={{
+                backgroundColor: '#d65322',
+                color: '#ffffff',
+                borderColor: '#d65322'
+              }}
+              className="w-full py-2.5 rounded-lg font-label-md font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+              <span>Lưu thay đổi thông tin thợ</span>
+            </button>
+          </form>
+        </GarageDrawer>
+      )}
+
+      {/* POPUP HIỂN THỊ MẬT KHẨU TẠM THỜI BÀN GIAO CHO THỢ */}
+      {tempPasswordModal?.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white max-w-md w-full p-6 rounded-2xl shadow-2xl border border-surface-container animate-scale-in space-y-4">
+            <div className="flex items-center gap-3 text-emerald-700">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                <CheckCircle2 size={22} />
+              </div>
+              <div>
+                <h3 className="font-headline-sm font-bold text-on-surface text-base">
+                  {tempPasswordModal.title}
+                </h3>
+                <p className="text-xs text-secondary">
+                  Thông tin đăng nhập ứng dụng Mobile của thợ
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-surface-container-low border border-surface-container space-y-2 text-xs font-mono">
+              <div>
+                <span className="text-secondary font-sans font-bold">Họ và tên:</span>{' '}
+                <strong className="text-on-surface">{tempPasswordModal.fullName}</strong>
+              </div>
+              <div>
+                <span className="text-secondary font-sans font-bold">Tài khoản:</span>{' '}
+                <strong className="text-primary">{tempPasswordModal.username}</strong>
+              </div>
+              <div>
+                <span className="text-secondary font-sans font-bold">Mật khẩu tạm thời:</span>{' '}
+                <strong className="text-emerald-700 text-sm px-2 py-0.5 rounded bg-emerald-100 border border-emerald-300">
+                  {tempPasswordModal.password}
+                </strong>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const textToCopy = `Thông tin tài khoản thợ cứu hộ:
+Tài khoản: ${tempPasswordModal.username}
+Mật khẩu: ${tempPasswordModal.password}
+Vui lòng đăng nhập và đổi mật khẩu trên ứng dụng Mobile Cứu Hộ.`;
+                  navigator.clipboard.writeText(textToCopy);
+                  setCopiedTempPassword(true);
+                  notify('Đã sao chép', 'Đã sao chép thông tin tài khoản và mật khẩu.', 'info');
+                  setTimeout(() => setCopiedTempPassword(false), 3000);
+                }}
+                className="px-4 py-2 rounded-lg border border-surface-container bg-surface-container-high hover:bg-surface-container text-on-surface font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer"
+              >
+                {copiedTempPassword ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                <span>{copiedTempPassword ? 'Đã sao chép' : 'Sao chép thông tin'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTempPasswordModal(null)}
+                style={{
+                  backgroundColor: '#d65322',
+                  color: '#ffffff',
+                  borderColor: '#d65322'
+                }}
+                className="px-5 py-2 rounded-lg font-label-md font-bold transition cursor-pointer shadow-xs hover:opacity-90"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* CONFIRMATION DIALOG MODAL */}
