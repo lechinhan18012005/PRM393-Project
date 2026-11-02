@@ -1,5 +1,6 @@
 package com.prm393.floodrescue.features.floodmap.service;
 
+import com.prm393.floodrescue.common.exception.BadRequestException;
 import com.prm393.floodrescue.common.exception.ResourceNotFoundException;
 import com.prm393.floodrescue.features.auth.entity.User;
 import com.prm393.floodrescue.features.floodmap.dto.CreateFloodReportRequest;
@@ -26,27 +27,43 @@ public class FloodReportService {
 
     @Transactional
     public FloodReportResponse createReport(User reporter, CreateFloodReportRequest request) {
-        // Spatial Clustering logic (SRS FEAT-10 & Main Workflow 4):
-        // Scan active/recent reports within 150 meters in the last 60 minutes
+        // PRE-3 / 5.2.E2: Geofencing validation (Lãnh thổ Việt Nam / Vùng hoạt động PRM393)
+        if (request.getLatitude() == null || request.getLongitude() == null
+                || request.getLatitude() < 8.0 || request.getLatitude() > 24.0
+                || request.getLongitude() < 102.0 || request.getLongitude() > 110.0) {
+            throw new BadRequestException("Tọa độ báo cáo nằm ngoài khu vực cứu hộ và hỗ trợ ngập lụt của hệ thống PRM393. Vui lòng kiểm tra lại thiết bị định vị!");
+        }
+
+        // BR-MAP-004 & Spatial Clustering: Quét báo cáo trong 60 phút gần đây
         LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
+        LocalDateTime fifteenMinutesAgo = LocalDateTime.now().minusMinutes(15);
         List<FloodReportPoint> recentReports = floodReportRepository.findAll();
 
         List<FloodReportPoint> nearbyClusterPoints = new ArrayList<>();
         for (FloodReportPoint p : recentReports) {
+            double distanceMeters = calculateDistance(request.getLatitude(), request.getLongitude(), p.getLatitude(), p.getLongitude());
+
+            // BR-MAP-004: Chống spam - cùng tài khoản gửi liên tiếp trong bán kính 150m trong vòng 15 phút
+            if (reporter != null && reporter.getId() != null
+                    && p.getReportedBy() != null && reporter.getId().equals(p.getReportedBy().getId())) {
+                boolean isWithin15Mins = p.getCreatedAt() != null && p.getCreatedAt().isAfter(fifteenMinutesAgo);
+                if (isWithin15Mins && distanceMeters <= 150.0) {
+                    throw new BadRequestException("Bạn đã gửi báo cáo tại khu vực này cách đây ít phút. Để chống spam, vui lòng đợi 15 phút trước khi cập nhật lại tình hình (BR-MAP-004).");
+                }
+            }
+
             boolean isRecent = p.getCreatedAt() == null || p.getCreatedAt().isAfter(oneHourAgo);
             boolean isValidCandidate = p.getModerationStatus() != FloodStatus.REJECTED
                     && p.getModerationStatus() != FloodStatus.EXPIRED;
-            if (isRecent && isValidCandidate) {
-                double distanceMeters = calculateDistance(request.getLatitude(), request.getLongitude(), p.getLatitude(), p.getLongitude());
-                if (distanceMeters <= 150) {
-                    nearbyClusterPoints.add(p);
-                }
+            if (isRecent && isValidCandidate && distanceMeters <= 150.0) {
+                nearbyClusterPoints.add(p);
             }
         }
 
         int nearbyCount = nearbyClusterPoints.size();
         int clusterCount = nearbyCount + 1;
-        int confidenceScore = Math.min(5, clusterCount >= 3 ? 5 : clusterCount * 2);
+        int baseScore = (request.getImageUrls() != null && !request.getImageUrls().trim().isEmpty()) ? 2 : 1;
+        int confidenceScore = Math.min(5, clusterCount >= 3 ? 5 : baseScore + (clusterCount - 1) * 2);
 
         if (clusterCount >= 3) {
             for (FloodReportPoint existing : nearbyClusterPoints) {
@@ -80,7 +97,7 @@ public class FloodReportService {
                 .build();
 
         point = floodReportRepository.save(point);
-        log.info("Flood report created id: {} by user: {} with clusterCount: {}", point.getId(), reporter.getUsername(), clusterCount);
+        log.info("Flood report created id: {} by user: {} with clusterCount: {}", point.getId(), reporter != null ? reporter.getUsername() : "anonymous", clusterCount);
         return mapToResponse(point);
     }
 
@@ -135,6 +152,21 @@ public class FloodReportService {
 
         point = floodReportRepository.save(point);
         log.info("Flood report id: {} resolved (water receded) by staff: {}", reportId, staff.getUsername());
+        return mapToResponse(point);
+    }
+
+    // UC-20 (4.2.4): Cộng đồng gửi phản hồi nước đã rút tại điểm ngập
+    @Transactional
+    public FloodReportResponse reportWaterRecededByCommunity(User user, Long reportId) {
+        FloodReportPoint point = floodReportRepository.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy điểm báo ngập với id: " + reportId));
+
+        String reporterName = (user != null && user.getFullName() != null) ? user.getFullName() : "Người dùng cộng đồng";
+        point.setModerationStatus(FloodStatus.EXPIRED);
+        point.setModeratorNote("Cộng đồng báo nước đã rút (Xác nhận bởi " + reporterName + "). Tuyến đường đã lưu thông an toàn.");
+
+        point = floodReportRepository.save(point);
+        log.info("Flood report id: {} marked as water receded by community user: {}", reportId, user != null ? user.getUsername() : "anonymous");
         return mapToResponse(point);
     }
 

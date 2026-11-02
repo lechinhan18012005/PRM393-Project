@@ -1,5 +1,6 @@
 package com.prm393.floodrescue.features.vehicle.service;
 
+import com.prm393.floodrescue.features.vehicle.dto.CreateVehicleRequest;
 import com.prm393.floodrescue.features.vehicle.dto.VehicleDto;
 
 import java.util.List;
@@ -17,4 +18,12 @@ public interface VehicleLookupService {
     Optional<VehicleDto> getVehicleByIdAndCustomer(Long vehicleId, Long customerId);
 
     VehicleDto getDefaultVehicleByCustomer(Long customerId);
+
+    VehicleDto createVehicle(Long customerId, CreateVehicleRequest request);
+
+    VehicleDto updateVehicle(Long customerId, Long vehicleId, CreateVehicleRequest request);
+
+    void deleteVehicle(Long customerId, Long vehicleId);
+
+    VehicleDto setDefaultVehicle(Long customerId, Long vehicleId);
 }

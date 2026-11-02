@@ -7,6 +7,7 @@ import '../../core/widgets/rescue_map_painter.dart';
 import '../../core/models/flood_report_model.dart';
 import '../../providers/flood_report_provider.dart';
 import 'community_flood_report_screen.dart';
+import 'my_flood_reports_screen.dart';
 
 class FloodMapScreen extends StatefulWidget {
   const FloodMapScreen({super.key});
@@ -56,6 +57,17 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Báo cáo của tôi',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const MyFloodReportsScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.history, color: AppColors.secondary),
+          ),
+          IconButton(
             tooltip: 'Tải lại điểm ngập',
             onPressed: provider.isLoading
                 ? null
@@ -76,7 +88,8 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
                 RescueIntro(
                   eyebrow: 'THÔNG TIN ĐƯỜNG ĐI',
                   title: 'Chủ động trước điểm ngập',
-                  description: 'Theo dõi danh sách được tải từ hệ thống. Sơ đồ bên dưới chỉ minh họa, không định vị hoặc dẫn đường.',
+                  description:
+                      'Theo dõi danh sách được tải từ hệ thống. Sơ đồ bên dưới chỉ minh họa, không định vị hoặc dẫn đường.',
                 ),
                 const SizedBox(height: 14),
                 RescuePanel(
@@ -181,7 +194,8 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
                     child: RescueInfo(
                       icon: Icons.layers_clear_outlined,
                       title: 'Chưa có điểm ngập phù hợp',
-                      value: 'Danh sách hiện chưa có dữ liệu theo bộ lọc này. Hãy tải lại hoặc đổi bộ lọc.',
+                      value:
+                          'Danh sách hiện chưa có dữ liệu theo bộ lọc này. Hãy tải lại hoặc đổi bộ lọc.',
                     ),
                   ),
                 for (final point in visible)
@@ -328,6 +342,63 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
               ],
             ),
           ],
+          const Divider(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (dCtx) => AlertDialog(
+                      title: const Text('Xác nhận nước đã rút'),
+                      content: Text(
+                        'Bạn xác nhận nước tại "${pt.address}" đã rút và các phương tiện có thể lưu thông an toàn?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dCtx, false),
+                          child: const Text('Hủy'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(dCtx, true),
+                          child: const Text('Xác nhận rút nước'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true && context.mounted) {
+                    final ok = await context
+                        .read<FloodReportProvider>()
+                        .reportWaterReceded(pt.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(ok
+                              ? 'Cảm ơn bạn! Điểm ngập đã được cập nhật giải tỏa.'
+                              : 'Cập nhật thất bại: ${context.read<FloodReportProvider>().errorMessage}'),
+                          backgroundColor: ok ? Colors.green : Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(
+                  Icons.check_circle_outline,
+                  size: 16,
+                  color: Colors.teal,
+                ),
+                label: const Text(
+                  'Báo nước đã rút',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.teal,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

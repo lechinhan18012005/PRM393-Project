@@ -54,4 +54,16 @@ public class FloodReportController {
         List<FloodReportResponse> list = floodReportService.getMyReports(user);
         return ResponseEntity.ok(ApiResponse.success(list));
     }
+
+    // UC-20: Community reports water receded at flood point
+    @PatchMapping("/{id}/recede")
+    @Operation(summary = "UC-20: Người dân báo cáo nước đã rút tại điểm ngập")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<ApiResponse<FloodReportResponse>> reportWaterReceded(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id
+    ) {
+        FloodReportResponse response = floodReportService.reportWaterRecededByCommunity(user, id);
+        return ResponseEntity.ok(ApiResponse.success("Đã ghi nhận báo cáo nước rút! Cảm ơn bạn đã đóng góp cho cộng đồng.", response));
+    }
 }

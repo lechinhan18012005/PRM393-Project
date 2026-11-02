@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/logout_dialog.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/services/rescue_service.dart';
 import '../../core/widgets/rescue_ui.dart';
 import '../../core/widgets/rescue_map_painter.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/vehicle_provider.dart';
 import 'service_selection_screen.dart';
 import '../../features/batch_transport/customer_batch_trip_screen.dart';
 import 'community_flood_report_screen.dart';
@@ -45,7 +47,12 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadActiveOrder());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadActiveOrder();
+      try {
+        context.read<VehicleProvider?>()?.fetchVehicles();
+      } catch (_) {}
+    });
   }
 
   Future<void> _loadActiveOrder() async {
@@ -86,43 +93,90 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
       Navigator.of(context)
           .push(MaterialPageRoute<void>(builder: (_) => screen))
           .then((_) => _loadActiveOrder());
-  void _chooseVehicle() => showModalBottomSheet<void>(
-    context: context,
-    builder: (sheet) => SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Chọn xe', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            const RescueDemoNote(
-              'Xe minh họa · Lựa chọn chỉ lưu trong phiên này',
-            ),
-            ...customerDemoVehicles.indexed.map(
-              (entry) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(
-                  backgroundColor: AppColors.primaryContainer,
-                  child: Icon(Icons.two_wheeler, color: AppColors.primary),
-                ),
-                title: Text(entry.$2.name),
-                subtitle: Text(entry.$2.plate),
-                trailing: _vehicle == entry.$1
-                    ? const Icon(Icons.check_circle, color: AppColors.primary)
-                    : null,
-                onTap: () {
-                  setState(() => _vehicle = entry.$1);
-                  Navigator.pop(sheet);
-                },
+  void _chooseVehicle() {
+    VehicleProvider? vehicleProvider;
+    try {
+      vehicleProvider = context.read<VehicleProvider?>();
+    } catch (_) {}
+    final realVehicles = vehicleProvider?.vehicles ?? const [];
+    final activeId = vehicleProvider?.selectedVehicle?.id;
+
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Chọn xe', style: Theme.of(context).textTheme.titleLarge),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(sheet);
+                      _select(3);
+                    },
+                    child: const Text('Quản lý xe'),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              if (realVehicles.isNotEmpty) ...[
+                ...realVehicles.map(
+                  (v) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.primaryContainer,
+                      child: Icon(
+                        v.vehicleType == 'ELECTRIC'
+                            ? Icons.electric_moped
+                            : Icons.two_wheeler,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    title: Text(v.displayName),
+                    subtitle: Text('${v.licensePlate} · ${v.typeDisplayName}'),
+                    trailing: (activeId == v.id)
+                        ? const Icon(Icons.check_circle, color: AppColors.primary)
+                        : null,
+                    onTap: () {
+                      vehicleProvider?.selectVehicle(v);
+                      Navigator.pop(sheet);
+                    },
+                  ),
+                ),
+              ] else ...[
+                const RescueDemoNote(
+                  'Xe minh họa · Lựa chọn chỉ lưu trong phiên này',
+                ),
+                ...customerDemoVehicles.indexed.map(
+                  (entry) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      backgroundColor: AppColors.primaryContainer,
+                      child: Icon(Icons.two_wheeler, color: AppColors.primary),
+                    ),
+                    title: Text(entry.$2.name),
+                    subtitle: Text(entry.$2.plate),
+                    trailing: _vehicle == entry.$1
+                        ? const Icon(Icons.check_circle, color: AppColors.primary)
+                        : null,
+                    onTap: () {
+                      setState(() => _vehicle = entry.$1);
+                      Navigator.pop(sheet);
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppColors.background,
@@ -148,6 +202,12 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
               ],
             ),
             actions: [
+              IconButton(
+                key: const Key('customer-logout-btn'),
+                tooltip: 'Đăng xuất',
+                icon: const Icon(Icons.logout, color: AppColors.error),
+                onPressed: () => showLogoutConfirmationDialog(context),
+              ),
               IconButton(
                 key: const Key('open-account'),
                 tooltip: 'Tài khoản',
@@ -223,7 +283,9 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
   );
   Widget _home() {
     final name = context.watch<AuthProvider?>()?.user?.fullName;
-    final vehicle = customerDemoVehicles[_vehicle];
+    final realVehicle = context.watch<VehicleProvider?>()?.selectedVehicle;
+    final vehicleName = realVehicle?.displayName ?? customerDemoVehicles[_vehicle].name;
+    final vehiclePlate = realVehicle?.licensePlate ?? customerDemoVehicles[_vehicle].plate;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
@@ -289,7 +351,7 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  vehicle.name,
+                                  vehicleName,
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,
@@ -297,7 +359,7 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  vehicle.plate,
+                                  vehiclePlate,
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.secondary,
@@ -320,8 +382,8 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                     key: const Key('request-rescue'),
                     onPressed: () => _open(
                       ServiceSelectionScreen(
-                        vehicleName: vehicle.name,
-                        vehiclePlate: vehicle.plate,
+                        vehicleName: vehicleName,
+                        vehiclePlate: vehiclePlate,
                       ),
                     ),
                     icon: const Icon(Icons.sos_rounded, size: 24),
@@ -593,8 +655,10 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
       onTap: () => _open(
         ServiceSelectionScreen(
           initialService: index,
-          vehicleName: customerDemoVehicles[_vehicle].name,
-          vehiclePlate: customerDemoVehicles[_vehicle].plate,
+          vehicleName: context.read<VehicleProvider?>()?.selectedVehicle?.displayName ??
+              customerDemoVehicles[_vehicle].name,
+          vehiclePlate: context.read<VehicleProvider?>()?.selectedVehicle?.licensePlate ??
+              customerDemoVehicles[_vehicle].plate,
         ),
       ),
       child: Padding(
