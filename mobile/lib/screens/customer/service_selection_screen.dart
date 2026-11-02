@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/models/rescue_order_model.dart';
+import '../../core/models/vehicle_model.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/rescue_service.dart';
 import '../../core/widgets/info_details.dart';
 import '../../core/widgets/rescue_ui.dart';
 import '../../providers/rescue_provider.dart';
+import '../../providers/vehicle_provider.dart';
 import '../../features/batch_transport/batch_trip_api.dart';
 import '../../features/batch_transport/batch_trip_models.dart';
 import '../../features/batch_transport/customer_batch_trip_screen.dart';
@@ -17,14 +19,17 @@ class ServiceSelectionScreen extends StatefulWidget {
   const ServiceSelectionScreen({
     super.key,
     this.initialService = 0,
-    this.vehicleName = 'Honda SH 150i',
-    this.vehiclePlate = '59-B1 892.44',
-    this.vehicleId = 1,
+    this.vehicleName,
+    this.vehiclePlate,
+    this.vehicleId,
+    this.initialVehicle,
     this.batchTripApi,
   });
+
   final int initialService;
-  final String vehicleName, vehiclePlate;
-  final int vehicleId;
+  final String? vehicleName, vehiclePlate;
+  final int? vehicleId;
+  final VehicleModel? initialVehicle;
   final BatchTripApi? batchTripApi;
 
   @override
@@ -35,17 +40,17 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
   late int _selectedService;
   int _waterLevel = 1;
 
-  final TextEditingController _pickupController = TextEditingController(
-    text: '85 Huỳnh Tấn Phát, P. Tân Thuận Đông, Quận 7, TP.HCM',
-  );
-  final TextEditingController _dropoffController = TextEditingController(
-    text: 'Cầu Phú Mỹ (Khu vực gò cao khô ráo), Quận 7, TP.HCM',
-  );
+  final TextEditingController _pickupController = TextEditingController();
+  final TextEditingController _dropoffController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
 
-  double? _pickupLat = 10.7385;
-  double? _pickupLng = 106.7215;
-  double? _dropoffLat = 10.7490;
-  double? _dropoffLng = 106.7290;
+  double? _pickupLat;
+  double? _pickupLng;
+  double? _dropoffLat;
+  double? _dropoffLng;
+
+  VehicleModel? _selectedVehicle;
+
   String _clientRequestId = UniqueKey().toString();
   bool _isLocating = false;
   bool _isProgrammaticAddressUpdate = false;
@@ -69,14 +74,16 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
       price: 'Chọn chuyến riêng hoặc chuyến gom',
       note: 'Chở xe và người tới vùng khô ráo',
       icon: Icons.local_shipping_outlined,
-      detail: 'Bạn có thể chọn chuyến riêng để được điều phối ngay, hoặc tham gia một chuyến gom đã được thợ hoặc gara mở sẵn để nhận giá ưu đãi.',
+      detail:
+          'Bạn có thể chọn chuyến riêng để được điều phối ngay, hoặc tham gia một chuyến gom đã được thợ hoặc gara mở sẵn để nhận giá ưu đãi.',
     ),
     (
-      title: 'Cứu hộ và kiểm tra xe',
-      price: 'Báo giá sau kiểm tra',
-      note: 'Thợ quyết định sửa tại chỗ hoặc kéo về gara',
+      title: 'Cứu hộ và kiểm tra xe tại chỗ',
+      price: 'Báo giá minh bạch sau kiểm tra',
+      note: 'Thợ đến hiện trường hỗ trợ nổ máy hoặc kéo về gara',
       icon: Icons.build_circle_outlined,
-      detail: 'Thợ kiểm tra tình trạng xe tại hiện trường. Nếu có thể khắc phục, thợ lập báo giá sửa tại chỗ; nếu hư hỏng nặng, thợ lập báo giá kéo xe về gara để khách duyệt.',
+      detail:
+          'Thợ cứu hộ kiểm tra tình trạng xe tại hiện trường. Nếu có thể khắc phục, thợ lập báo giá sửa tại chỗ; nếu hư hỏng nặng, thợ lập báo giá kéo xe về gara để bạn phê duyệt trước khi sửa.',
     ),
   ];
 
@@ -85,27 +92,33 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
   String get _orderType =>
       const ['SINGLE_CROSSING', 'ONSITE_REPAIR'][_selectedService];
   String get _customerNote => const [
-    'Chở xe vượt ngập đơn lẻ đến nơi khô ráo',
-    'Yêu cầu thợ kiểm tra xe và báo giá phương án xử lý phù hợp',
-  ][_selectedService];
+        'Chở xe vượt ngập đơn lẻ đến nơi khô ráo',
+        'Yêu cầu thợ kiểm tra xe ngập và báo giá phương án xử lý phù hợp',
+      ][_selectedService];
   String get _introTitle => const [
-    'Chở xe vượt ngập an toàn',
-    'Cứu hộ và kiểm tra xe ngập',
-  ][_selectedService];
+        'Chở xe vượt ngập an toàn',
+        'Cứu hộ và kiểm tra xe ngập',
+      ][_selectedService];
   String get _optionHeading => const [
-    'Gara cung cấp dịch vụ chở xe trong bán kính',
-    'Gara có thợ cứu hộ đang sẵn sàng',
-  ][_selectedService];
+        'Gara cung cấp dịch vụ chở xe trong bán kính',
+        'Gara có thợ cứu hộ đang sẵn sàng',
+      ][_selectedService];
 
   @override
   void initState() {
     super.initState();
     _batchTripApi = widget.batchTripApi ?? BatchTripApi();
     _selectedService = widget.initialService.clamp(0, _services.length - 1);
+
+    if (widget.initialVehicle != null) {
+      _selectedVehicle = widget.initialVehicle;
+    }
+
     _pickupController.addListener(_onPickupAddressChanged);
     _dropoffController.addListener(_onDropoffAddressChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadServiceOptions();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _initializeVehicleAndLocation();
     });
   }
 
@@ -115,7 +128,52 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     _dropoffController.removeListener(_onDropoffAddressChanged);
     _pickupController.dispose();
     _dropoffController.dispose();
+    _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _initializeVehicleAndLocation() async {
+    // 1. Đồng bộ thông tin phương tiện từ VehicleProvider
+    VehicleProvider? vehicleProvider;
+    try {
+      vehicleProvider = Provider.of<VehicleProvider?>(context, listen: false);
+    } catch (_) {}
+
+    if (vehicleProvider != null) {
+      if (vehicleProvider.vehicles.isEmpty) {
+        await vehicleProvider.fetchVehicles();
+      }
+
+      if (_selectedVehicle == null) {
+        if (widget.vehicleId != null) {
+          final match = vehicleProvider.vehicles.where((v) => v.id == widget.vehicleId).firstOrNull;
+          _selectedVehicle = match;
+        }
+        _selectedVehicle ??= vehicleProvider.selectedVehicle ??
+            (vehicleProvider.vehicles.isNotEmpty ? vehicleProvider.vehicles.first : null);
+      }
+    }
+
+    // 2. Tự động lấy vị trí GPS hiện tại của thiết bị
+    await _syncCurrentGpsLocation(silent: true);
+
+    // 3. Khởi tạo điểm trả xe an toàn mặc định cho dịch vụ chở xe
+    if (_selectedService == 0 && (_dropoffLat == null || _dropoffLng == null)) {
+      _setSafeHighlandDropoff();
+    }
+
+    if (mounted) {
+      setState(() {});
+      _loadServiceOptions();
+    }
+  }
+
+  void _setSafeHighlandDropoff() {
+    _isProgrammaticAddressUpdate = true;
+    _dropoffLat = 10.7490;
+    _dropoffLng = 106.7290;
+    _dropoffController.text = 'Vùng gò cao khô ráo (khu vực an toàn lân cận)';
+    _isProgrammaticAddressUpdate = false;
   }
 
   void _onPickupAddressChanged() {
@@ -129,10 +187,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
       });
       return;
     }
-    final loc = LocationService.instance.resolveAddressCoordinates(
-      text,
-      isDropoff: false,
-    );
+    final loc = LocationService.instance.resolveAddressCoordinates(text, isDropoff: false);
     setState(() {
       if (loc != null) {
         _pickupLat = loc.latitude;
@@ -159,10 +214,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
       });
       return;
     }
-    final loc = LocationService.instance.resolveAddressCoordinates(
-      text,
-      isDropoff: true,
-    );
+    final loc = LocationService.instance.resolveAddressCoordinates(text, isDropoff: true);
     setState(() {
       if (loc != null) {
         _dropoffLat = loc.latitude;
@@ -182,7 +234,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     }
   }
 
-  Future<void> _syncCurrentGpsLocation() async {
+  Future<void> _syncCurrentGpsLocation({bool silent = false}) async {
     setState(() => _isLocating = true);
     try {
       final loc = await LocationService.instance.getCurrentLocation();
@@ -193,7 +245,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           _pickupLat = loc.latitude;
           _pickupLng = loc.longitude;
           _pickupController.text =
-              'Tọa độ GPS thiết bị (${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)})';
+              'Vị trí GPS hiện tại (${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)})';
           _selectedOption = null;
           _selectedBatchTrip = null;
           _isLocating = false;
@@ -201,47 +253,55 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
         _isProgrammaticAddressUpdate = false;
 
         _loadServiceOptions();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Đã cập nhật tọa độ đón từ GPS thiết bị: ${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)} (±${loc.accuracyMeters.toStringAsFixed(0)}m)',
+        if (!silent && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Đã cập nhật vị trí từ GPS thiết bị: ${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)} (±${loc.accuracyMeters.toStringAsFixed(0)}m)',
+              ),
+              backgroundColor: Colors.green,
             ),
-            backgroundColor: Colors.green,
-          ),
-        );
+          );
+        }
       } else {
+        // Nếu không lấy được GPS thiết bị, đặt mặc định vị trí ngập phổ biến TP.HCM để demo không gián đoạn
+        if (_pickupLat == null || _pickupLng == null) {
+          _isProgrammaticAddressUpdate = true;
+          _pickupLat = 10.7385;
+          _pickupLng = 106.7215;
+          _pickupController.text = 'Huỳnh Tấn Phát, Tân Thuận Đông, Quận 7, TP.HCM';
+          _isProgrammaticAddressUpdate = false;
+        }
         setState(() => _isLocating = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Không thể lấy vị trí từ thiết bị. Vui lòng bật GPS và cấp quyền truy cập vị trí.',
+        if (!silent && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Không thể lấy vị trí từ GPS thiết bị. Vui lòng bật GPS hoặc nhập địa chỉ.'),
+              backgroundColor: Colors.orange,
             ),
-            backgroundColor: Colors.orange,
-          ),
-        );
+          );
+        }
       }
     } catch (e) {
       _isProgrammaticAddressUpdate = false;
       if (mounted) {
         setState(() => _isLocating = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Lỗi đọc GPS: ${e.toString().replaceFirst("Exception: ", "")}',
+        if (!silent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Lỗi đọc GPS: ${e.toString().replaceFirst("Exception: ", "")}'),
+              backgroundColor: Colors.red,
             ),
-            backgroundColor: Colors.red,
-          ),
-        );
+          );
+        }
       }
     }
   }
 
   Future<void> _loadServiceOptions() async {
+    if (_pickupLat == null || _pickupLng == null) return;
     try {
-      final rescueProvider = Provider.of<RescueProvider?>(
-        context,
-        listen: false,
-      );
+      final rescueProvider = Provider.of<RescueProvider?>(context, listen: false);
       if (rescueProvider != null) {
         if (_serviceType == 'CROSSING') {
           await rescueProvider.loadCrossingOptions(
@@ -312,13 +372,85 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     }
   }
 
+  void _showSelectVehicleSheet(BuildContext context) {
+    VehicleProvider? vehicleProvider;
+    try {
+      vehicleProvider = Provider.of<VehicleProvider?>(context, listen: false);
+    } catch (_) {}
+    final vehicles = vehicleProvider?.vehicles ?? const [];
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Chọn xe yêu cầu cứu hộ',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(sheetCtx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (vehicles.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: Text(
+                      'Bạn chưa có phương tiện nào được lưu.',
+                      style: TextStyle(color: AppColors.secondary),
+                    ),
+                  ),
+                )
+              else
+                ...vehicles.map((v) {
+                  final isCurrent = _selectedVehicle?.id == v.id;
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                    leading: CircleAvatar(
+                      backgroundColor: isCurrent ? AppColors.primaryContainer : AppColors.surfaceContainerLow,
+                      child: Icon(
+                        v.vehicleType == 'ELECTRIC' ? Icons.electric_moped : Icons.two_wheeler,
+                        color: isCurrent ? AppColors.primary : AppColors.secondary,
+                      ),
+                    ),
+                    title: Text(v.displayName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text('${v.licensePlate} • ${v.typeDisplayName}'),
+                    trailing: isCurrent ? const Icon(Icons.check_circle, color: AppColors.primary) : null,
+                    onTap: () {
+                      setState(() {
+                        _selectedVehicle = v;
+                      });
+                      vehicleProvider?.selectVehicle(v);
+                      Navigator.pop(sheetCtx);
+                    },
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _submitSos() async {
     if (_pickupLat == null || _pickupLng == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Vui lòng chọn hoặc định vị tọa độ điểm đón hợp lệ qua GPS!',
-          ),
+          content: Text('Vui lòng chọn hoặc định vị tọa độ điểm đón hợp lệ qua GPS!'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -328,9 +460,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     if (_selectedService == 0 && (_dropoffLat == null || _dropoffLng == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Vui lòng nhập điểm đến hợp lệ hoặc chọn tọa độ khô ráo!',
-          ),
+          content: Text('Vui lòng nhập điểm đến hợp lệ hoặc chọn tọa độ khô ráo!'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -340,9 +470,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     if (_selectedBatchTrip == null && _selectedOption == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Vui lòng chọn một gara cứu hộ khả dụng trước khi gửi yêu cầu!',
-          ),
+          content: Text('Vui lòng chọn một gara cứu hộ khả dụng trước khi gửi yêu cầu!'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -354,6 +482,13 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
         : _dropoffController.text.trim();
     final dropoffLatitude = _selectedService == 1 ? _pickupLat! : _dropoffLat!;
     final dropoffLongitude = _selectedService == 1 ? _pickupLng! : _dropoffLng!;
+
+    final customNote = _notesController.text.trim();
+    final fullCustomerNotes = customNote.isNotEmpty
+        ? '$_customerNote. Ghi chú thêm: $customNote'
+        : _customerNote;
+
+    final targetVehicleId = _selectedVehicle?.id ?? widget.vehicleId ?? 1;
 
     final rescueProvider = Provider.of<RescueProvider?>(context, listen: false);
     setState(() => _isSubmitting = true);
@@ -367,7 +502,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           'orderType': 'BATCH_CROSSING',
           'garageId': trip.garageId,
           'serviceItemId': trip.serviceItemId,
-          'vehicleId': widget.vehicleId,
+          'vehicleId': targetVehicleId,
           'pickupAddress': _pickupController.text.trim(),
           'pickupLatitude': _pickupLat!,
           'pickupLongitude': _pickupLng!,
@@ -375,7 +510,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           'dropoffLatitude': dropoffLatitude,
           'dropoffLongitude': dropoffLongitude,
           'waterLevel': _waterLabels[_waterLevel],
-          'customerNotes': 'Tham gia chuyến gom #${trip.id}',
+          'customerNotes': fullCustomerNotes,
           'clientRequestId': _clientRequestId,
         };
         final joined = await _batchTripApi.createOrderAndJoin(
@@ -407,7 +542,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           orderType: _orderType,
           garageId: _selectedOption!.garageId,
           serviceItemId: _selectedOption!.serviceItemId,
-          vehicleId: widget.vehicleId,
+          vehicleId: targetVehicleId,
           pickupAddress: _pickupController.text.trim(),
           pickupLatitude: _pickupLat!,
           pickupLongitude: _pickupLng!,
@@ -415,7 +550,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           dropoffLatitude: dropoffLatitude,
           dropoffLongitude: dropoffLongitude,
           waterLevel: _waterLabels[_waterLevel],
-          customerNotes: _customerNote,
+          customerNotes: fullCustomerNotes,
           clientRequestId: _clientRequestId,
           expectedServiceBasePrice: _selectedOption!.serviceBasePrice,
           expectedBookingFee: _selectedOption!.bookingFee,
@@ -426,7 +561,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           orderType: _orderType,
           garageId: _selectedOption!.garageId,
           serviceItemId: _selectedOption!.serviceItemId,
-          vehicleId: widget.vehicleId,
+          vehicleId: targetVehicleId,
           pickupAddress: _pickupController.text.trim(),
           pickupLatitude: _pickupLat!,
           pickupLongitude: _pickupLng!,
@@ -434,7 +569,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           dropoffLatitude: dropoffLatitude,
           dropoffLongitude: dropoffLongitude,
           waterLevel: _waterLabels[_waterLevel],
-          customerNotes: _customerNote,
+          customerNotes: fullCustomerNotes,
           clientRequestId: _clientRequestId,
           expectedServiceBasePrice: _selectedOption!.serviceBasePrice,
           expectedBookingFee: _selectedOption!.bookingFee,
@@ -444,8 +579,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
 
       if (mounted) {
         final destination = RadarDispatchScreen(orderId: order.id);
-        Navigator.of(context)
-            .pushReplacement(MaterialPageRoute(builder: (_) => destination));
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => destination));
       }
     } catch (e) {
       if (mounted) {
@@ -454,9 +588,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           _clientRequestId = UniqueKey().toString();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                'Mức giá dịch vụ đã thay đổi trên hệ thống. Đang tải lại mức giá mới!',
-              ),
+              content: const Text('Mức giá dịch vụ đã thay đổi trên hệ thống. Đang tải lại mức giá mới!'),
               backgroundColor: Colors.orange.shade800,
             ),
           );
@@ -481,8 +613,11 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     final options = rescueProvider?.crossingOptions ?? <CrossingOptionModel>[];
     final isLoading = rescueProvider?.isLoading ?? false;
 
+    final vehicleDisplayName = _selectedVehicle?.displayName ?? widget.vehicleName ?? 'Xe máy của bạn';
+    final vehiclePlate = _selectedVehicle?.licensePlate ?? widget.vehiclePlate ?? '';
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Chọn dịch vụ')),
+      appBar: AppBar(title: const Text('Chọn dịch vụ cứu hộ')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -493,7 +628,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
               title: _introTitle,
               description: _selectedService == 0
                   ? 'Xác nhận điểm đón và điểm trả, sau đó chọn chuyến riêng hoặc tham gia chuyến gom do thợ mở sẵn.'
-                  : 'Xác nhận điểm xe đang gặp nạn, chọn gara khả dụng; thợ sẽ kiểm tra và gửi báo giá để bạn duyệt.',
+                  : 'Xác nhận điểm xe đang gặp nạn, chọn gara khả dụng; thợ sẽ đến kiểm tra và gửi báo giá để bạn duyệt.',
             ),
             const SizedBox(height: 12),
 
@@ -502,12 +637,20 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  RescueInfo(
-                    icon: Icons.two_wheeler,
-                    title: 'Phương tiện đang chọn',
-                    value: '${widget.vehicleName} · ${widget.vehiclePlate}',
+                  InkWell(
+                    onTap: () => _showSelectVehicleSheet(context),
+                    borderRadius: BorderRadius.circular(10),
+                    child: RescueInfo(
+                      icon: Icons.two_wheeler,
+                      title: 'Phương tiện đang chọn (chạm để đổi xe)',
+                      value: vehiclePlate.isNotEmpty
+                          ? '$vehicleDisplayName · $vehiclePlate'
+                          : vehicleDisplayName,
+                    ),
                   ),
-                  const Divider(),
+                  const Divider(height: 20),
+
+                  // Điểm đón
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -522,7 +665,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Điểm đón (nơi xe đang kẹt)',
+                              'Điểm đón (nơi xe đang ngập/kẹt)',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: AppColors.secondary,
@@ -537,17 +680,16 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                               ),
                               decoration: const InputDecoration(
                                 isDense: true,
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 4,
-                                ),
+                                hintText: 'Nhập địa chỉ hoặc bấm nút GPS để định vị...',
+                                contentPadding: EdgeInsets.symmetric(vertical: 6),
                                 border: UnderlineInputBorder(),
                               ),
                             ),
                             if (_pickupLat == null)
                               const Padding(
-                                padding: EdgeInsets.only(top: 2),
+                                padding: EdgeInsets.only(top: 4),
                                 child: Text(
-                                  'Chưa xác định được tọa độ đón. Hãy bấm "Định vị GPS thực tế" hoặc nhập (lat, lon).',
+                                  'Chưa có tọa độ đón. Hãy bấm "Định vị GPS thực tế" hoặc nhập địa chỉ.',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.deepOrange,
@@ -561,16 +703,12 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                                   visualDensity: VisualDensity.compact,
                                   padding: EdgeInsets.zero,
                                 ),
-                                onPressed: _isLocating
-                                    ? null
-                                    : _syncCurrentGpsLocation,
+                                onPressed: _isLocating ? null : () => _syncCurrentGpsLocation(silent: false),
                                 icon: _isLocating
                                     ? const SizedBox(
                                         width: 12,
                                         height: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 1.5,
-                                        ),
+                                        child: CircularProgressIndicator(strokeWidth: 1.5),
                                       )
                                     : const Icon(
                                         Icons.my_location,
@@ -578,12 +716,11 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                                         color: AppColors.primaryOrange,
                                       ),
                                 label: Text(
-                                  _isLocating
-                                      ? 'Đang đọc GPS...'
-                                      : 'Định vị GPS thực tế',
+                                  _isLocating ? 'Đang đọc GPS...' : 'Định vị GPS thực tế',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     color: AppColors.primaryOrange,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
@@ -593,58 +730,97 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.wb_sunny_outlined,
-                        color: Colors.green,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Điểm trả xe (vùng khô ráo an toàn)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.secondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            TextField(
-                              controller: _dropoffController,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              decoration: const InputDecoration(
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 4,
+
+                  // Điểm trả xe (chỉ hiển thị khi là chở xe vượt ngập)
+                  if (_selectedService == 0) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.wb_sunny_outlined,
+                          color: Colors.green,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Điểm trả xe (vùng khô ráo an toàn)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.secondary,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                border: UnderlineInputBorder(),
                               ),
-                            ),
-                            if (_dropoffLat == null)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 2),
-                                child: Text(
-                                  'Chưa xác định được tọa độ trả xe. Hãy nhập điểm quen thuộc hoặc dạng (lat, lon).',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.deepOrange,
+                              TextField(
+                                controller: _dropoffController,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  hintText: 'Nhập điểm đến an toàn...',
+                                  contentPadding: EdgeInsets.symmetric(vertical: 6),
+                                  border: UnderlineInputBorder(),
+                                ),
+                              ),
+                              if (_dropoffLat == null)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    'Chưa xác định tọa độ trả xe. Nhập địa chỉ hoặc chọn "Vùng gò cao".',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.deepOrange,
+                                    ),
+                                  ),
+                                ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  onPressed: _setSafeHighlandDropoff,
+                                  icon: const Icon(Icons.terrain_outlined, size: 14, color: Colors.blueAccent),
+                                  label: const Text(
+                                    'Chọn vùng gò cao',
+                                    style: TextStyle(fontSize: 11, color: Colors.blueAccent, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ),
-                          ],
+                            ],
+                          ),
                         ),
+                      ],
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
-                  ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Thợ cứu hộ sẽ đến trực tiếp điểm đón để kiểm tra và khắc phục xe tại chỗ.',
+                              style: TextStyle(fontSize: 11, color: Colors.blue),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -722,9 +898,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                     onChanged: (val) {
                       if (val != null) {
                         setState(() {
-                          _selectedOption = options.firstWhere(
-                            (o) => o.garageId == val,
-                          );
+                          _selectedOption = options.firstWhere((o) => o.garageId == val);
                         });
                       }
                     },
@@ -733,57 +907,57 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                         for (final opt in options)
                           RadioListTile<int>(
                             value: opt.garageId,
-                            title: Text(
-                              opt.garageName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
+                          title: Text(
+                            opt.garageName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
                             ),
-                            subtitle: Text(
-                              '${opt.branchAddress ?? opt.branchName ?? "Chi nhánh phục vụ"} • ${opt.serviceBasePrice.toStringAsFixed(0)} ₫',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            secondary: Text(
-                              '~ ${opt.estimatedTimeMin} phút',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            contentPadding: EdgeInsets.zero,
                           ),
-                        const Divider(),
-                        if (_selectedOption != null) ...[
-                          _priceRow(
-                            'Cước dịch vụ niêm yết',
-                            '${_selectedOption!.serviceBasePrice.toStringAsFixed(0)} ₫',
+                          subtitle: Text(
+                            '${opt.branchAddress ?? opt.branchName ?? "Chi nhánh phục vụ"} • ${opt.serviceBasePrice.toStringAsFixed(0)} ₫',
+                            style: const TextStyle(fontSize: 12),
                           ),
-                          const SizedBox(height: 4),
-                          _priceRow(
-                            'Phí đặt xe (nền tảng)',
-                            '${_selectedOption!.bookingFee.toStringAsFixed(0)} ₫',
-                          ),
-                          const Divider(height: 16),
-                          _priceRow(
-                            'Tổng thanh toán dự kiến',
-                            '${_selectedOption!.totalAmount.toStringAsFixed(0)} ₫',
-                            isBold: true,
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            '✓ Giá niêm yết cố định, không phát sinh phụ phí tại hiện trường',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.green,
+                          secondary: Text(
+                            '~ ${opt.estimatedTimeMin} phút',
+                            style: const TextStyle(
                               fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
                             ),
                           ),
-                        ],
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      const Divider(),
+                      if (_selectedOption != null) ...[
+                        _priceRow(
+                          'Cước dịch vụ niêm yết',
+                          '${_selectedOption!.serviceBasePrice.toStringAsFixed(0)} ₫',
+                        ),
+                        const SizedBox(height: 4),
+                        _priceRow(
+                          'Phí đặt xe (nền tảng)',
+                          '${_selectedOption!.bookingFee.toStringAsFixed(0)} ₫',
+                        ),
+                        const Divider(height: 16),
+                        _priceRow(
+                          'Tổng thanh toán dự kiến',
+                          '${_selectedOption!.totalAmount.toStringAsFixed(0)} ₫',
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          '✓ Giá niêm yết cố định, không phát sinh phụ phí tại hiện trường',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.green,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
-                )
+                ),
+              )
               else if (isLoading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 24),
@@ -806,7 +980,8 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        rescueProvider?.errorMessage ?? 'Không tìm thấy gara cứu hộ nào có thợ sẵn sàng trong bán kính phục vụ quanh điểm đón.',
+                        rescueProvider?.errorMessage ??
+                            'Không tìm thấy gara cứu hộ nào có thợ sẵn sàng trong bán kính phục vụ quanh điểm đón.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 13,
@@ -857,6 +1032,27 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                   ),
               ],
             ),
+            const SizedBox(height: 18),
+
+            // Ghi chú của khách hàng
+            Text(
+              'Ghi chú cho đội cứu hộ (tùy chọn)',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _notesController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Ví dụ: Xe bị ngập qua bugi đề không nổ, đang đứng cạnh trạm xe buýt...',
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.outlineVariant),
+                ),
+              ),
+            ),
             const SizedBox(height: 30),
           ],
         ),
@@ -886,8 +1082,8 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                 isLoading || _isSubmitting
                     ? 'Đang tạo đơn...'
                     : _selectedBatchTrip != null
-                    ? 'Xác nhận tham gia chuyến'
-                    : 'Tìm cứu hộ',
+                        ? 'Xác nhận tham gia chuyến'
+                        : 'Tìm cứu hộ',
               ),
             ),
           ),
@@ -900,14 +1096,17 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: isBold ? 14 : 12,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            color: isBold ? AppColors.primary : AppColors.secondary,
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: isBold ? 14 : 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: isBold ? AppColors.primary : AppColors.secondary,
+            ),
           ),
         ),
+        const SizedBox(width: 8),
         Text(
           value,
           style: TextStyle(

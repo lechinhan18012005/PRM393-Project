@@ -1,5 +1,6 @@
 package com.prm393.floodrescue.features.floodmap;
 
+import com.prm393.floodrescue.common.exception.BadRequestException;
 import com.prm393.floodrescue.common.exception.ResourceNotFoundException;
 import com.prm393.floodrescue.features.auth.entity.Role;
 import com.prm393.floodrescue.features.auth.entity.User;
@@ -121,26 +122,27 @@ class FloodReportServiceTest {
         FloodReportPoint point2 = FloodReportPoint.builder()
                 .id(402L)
                 .reportedBy(customer2)
-                .latitude(10.74230) // Cách ~35m
-                .longitude(106.70220)
-                .address("Bến Bình Đông (Chân cầu Chà Và), Q.8")
+                .latitude(10.74230)
+                .longitude(106.70210)
+                .address("Số 250 Bến Bình Đông, Q.8")
                 .waterDepthLevel(DepthLevel.SEAT_60CM_PLUS)
-                .confidenceScore(4)
+                .confidenceScore(2)
                 .clusterCount(2)
                 .moderationStatus(FloodStatus.PENDING)
-                .createdAt(LocalDateTime.now().minusMinutes(8))
+                .createdAt(LocalDateTime.now().minusMinutes(10))
                 .build();
 
-        // Một điểm cách xa > 2km không được tính vào cụm
         FloodReportPoint farPoint = FloodReportPoint.builder()
                 .id(403L)
                 .reportedBy(customer1)
                 .latitude(10.79000)
-                .longitude(106.72000)
-                .address("Nguyễn Hữu Cảnh, Q. Bình Thạnh")
-                .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
-                .moderationStatus(FloodStatus.APPROVED)
-                .createdAt(LocalDateTime.now().minusMinutes(10))
+                .longitude(106.69000)
+                .address("Đoạn đường Q.Phú Nhuận xa 5km")
+                .waterDepthLevel(DepthLevel.ANKLE_20CM)
+                .confidenceScore(1)
+                .clusterCount(1)
+                .moderationStatus(FloodStatus.PENDING)
+                .createdAt(LocalDateTime.now().minusMinutes(5))
                 .build();
 
         when(floodReportRepository.findAll()).thenReturn(List.of(point1, point2, farPoint));
@@ -175,6 +177,76 @@ class FloodReportServiceTest {
         assertEquals(FloodStatus.APPROVED, point2.getModerationStatus());
         assertEquals(3, point2.getClusterCount());
         assertEquals(5, point2.getConfidenceScore());
+    }
+
+    @Test
+    @DisplayName("UC-20 (BR-MAP-004): Chống Spam - Cùng tài khoản gửi liên tiếp trong 150m trong vòng 15 phút -> Báo lỗi BadRequestException")
+    void createReport_SpamWithin15Minutes_ThrowsBadRequestException() {
+        FloodReportPoint existingReport = FloodReportPoint.builder()
+                .id(501L)
+                .reportedBy(customer1)
+                .latitude(10.7420)
+                .longitude(106.7020)
+                .address("Số 148 Trần Xuân Soạn, Q.7")
+                .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
+                .moderationStatus(FloodStatus.PENDING)
+                .createdAt(LocalDateTime.now().minusMinutes(5)) // Vừa gửi 5 phút trước
+                .build();
+
+        when(floodReportRepository.findAll()).thenReturn(List.of(existingReport));
+
+        CreateFloodReportRequest spamReq = CreateFloodReportRequest.builder()
+                .latitude(10.7422) // Cách điểm cũ ~30 mét
+                .longitude(106.7021)
+                .address("Số 150 Trần Xuân Soạn, Q.7")
+                .waterDepthLevel(DepthLevel.SEAT_60CM_PLUS)
+                .description("Nước đang lên nhanh")
+                .build();
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> floodReportService.createReport(customer1, spamReq));
+
+        assertTrue(ex.getMessage().contains("BR-MAP-004"));
+    }
+
+    @Test
+    @DisplayName("UC-20 (PRE-3 / 5.2.E2): Tọa độ nằm ngoài phạm vi lãnh thổ Việt Nam -> Báo lỗi BadRequestException")
+    void createReport_OutOfGeofenceCoordinates_ThrowsBadRequestException() {
+        CreateFloodReportRequest outOfBoundsReq = CreateFloodReportRequest.builder()
+                .latitude(48.8566) // Tọa độ Paris, Pháp
+                .longitude(2.3522)
+                .address("Tháp Eiffel, Paris")
+                .waterDepthLevel(DepthLevel.ANKLE_20CM)
+                .build();
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> floodReportService.createReport(customer1, outOfBoundsReq));
+
+        assertTrue(ex.getMessage().contains("nằm ngoài khu vực cứu hộ"));
+    }
+
+    @Test
+    @DisplayName("UC-20 (4.2.4): Người dùng cộng đồng báo nước đã rút tại điểm ngập -> Cập nhật sang EXPIRED")
+    void reportWaterRecededByCommunity_SetsStatusToExpired() {
+        FloodReportPoint activePoint = FloodReportPoint.builder()
+                .id(420L)
+                .reportedBy(customer2)
+                .latitude(10.7420)
+                .longitude(106.7020)
+                .address("Đường Trần Xuân Soạn, Q.7")
+                .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
+                .moderationStatus(FloodStatus.APPROVED)
+                .build();
+
+        when(floodReportRepository.findById(420L)).thenReturn(Optional.of(activePoint));
+        when(floodReportRepository.save(any(FloodReportPoint.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FloodReportResponse res = floodReportService.reportWaterRecededByCommunity(customer1, 420L);
+
+        assertNotNull(res);
+        assertEquals(FloodStatus.EXPIRED, res.getModerationStatus());
+        assertTrue(res.getModeratorNote().contains("Cộng đồng báo nước đã rút"));
+        assertTrue(res.getModeratorNote().contains("Lê Hoàng Nam"));
     }
 
     @Test

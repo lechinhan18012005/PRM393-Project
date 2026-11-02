@@ -7,6 +7,7 @@ import 'providers/auth_provider.dart';
 import 'providers/flood_report_provider.dart';
 import 'providers/mechanic_provider.dart';
 import 'providers/rescue_provider.dart';
+import 'providers/vehicle_provider.dart';
 import 'screens/splash_screen.dart';
 
 void main() {
@@ -25,6 +26,7 @@ class HydroRescueApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MechanicProvider()),
         ChangeNotifierProvider(create: (_) => FloodReportProvider()),
         ChangeNotifierProvider(create: (_) => RescueProvider()),
+        ChangeNotifierProvider(create: (_) => VehicleProvider()),
       ],
       child: MaterialApp(
         title: 'HydroRescue Vietnam',

@@ -34,10 +34,11 @@ class ApiConstants {
   static String get mechanicProfileUrl => '$baseUrl/mechanics/me/profile';
   static String get mechanicStatusUrl => '$baseUrl/mechanics/me/status';
 
-  // Flood Map Endpoints (Luồng 8)
+  // Flood Map Endpoints (Luồng 8 - UC-20 & UC-22)
   static String get floodReportsUrl => '$baseUrl/flood-reports';
   static String get activeFloodReportsUrl => '$baseUrl/flood-reports/active';
   static String get myFloodReportsUrl => '$baseUrl/flood-reports/my';
+  static String recedeFloodReportUrl(int id) => '$baseUrl/flood-reports/$id/recede';
 
   // Media Upload (Cloudinary)
   static String get uploadImageUrl => '$baseUrl/upload/image';
@@ -98,4 +99,11 @@ class ApiConstants {
       '$baseUrl/ratings/order/$rescueOrderId';
   static String ratingsByGarageUrl(int garageId) =>
       '$baseUrl/ratings/garage/$garageId';
+
+  // Customer Vehicle Management (FEAT-01B)
+  static String get vehiclesUrl => '$baseUrl/vehicles';
+  static String get defaultVehicleUrl => '$baseUrl/vehicles/default';
+  static String vehicleUrl(int vehicleId) => '$baseUrl/vehicles/$vehicleId';
+  static String setDefaultVehicleUrl(int vehicleId) =>
+      '$baseUrl/vehicles/$vehicleId/default';
 }

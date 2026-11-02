@@ -1,5 +1,6 @@
 package com.prm393.floodrescue.features.vehicle.service;
 
+import com.prm393.floodrescue.features.vehicle.dto.CreateVehicleRequest;
 import com.prm393.floodrescue.features.vehicle.dto.VehicleDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
@@ -37,5 +38,29 @@ public class ProdVehicleLookupServiceImpl implements VehicleLookupService {
     public VehicleDto getDefaultVehicleByCustomer(Long customerId) {
         log.error("Default vehicle lookup called on production but VehicleModule is not connected: customerId={}", customerId);
         throw new IllegalStateException("Dịch vụ tra cứu xe máy cá nhân hiện chưa khả dụng trên môi trường vận hành này. Vui lòng liên hệ quản trị viên!");
+    }
+
+    @Override
+    public VehicleDto createVehicle(Long customerId, CreateVehicleRequest request) {
+        log.error("Create vehicle called on production but VehicleModule is not connected: customerId={}", customerId);
+        throw new IllegalStateException("Dịch vụ lưu xe máy cá nhân hiện chưa khả dụng trên môi trường vận hành này. Vui lòng liên hệ quản trị viên!");
+    }
+
+    @Override
+    public VehicleDto updateVehicle(Long customerId, Long vehicleId, CreateVehicleRequest request) {
+        log.error("Update vehicle called on production but VehicleModule is not connected: vehicleId={}, customerId={}", vehicleId, customerId);
+        throw new IllegalStateException("Dịch vụ cập nhật xe máy cá nhân hiện chưa khả dụng trên môi trường vận hành này. Vui lòng liên hệ quản trị viên!");
+    }
+
+    @Override
+    public void deleteVehicle(Long customerId, Long vehicleId) {
+        log.error("Delete vehicle called on production but VehicleModule is not connected: vehicleId={}, customerId={}", vehicleId, customerId);
+        throw new IllegalStateException("Dịch vụ xóa xe máy cá nhân hiện chưa khả dụng trên môi trường vận hành này. Vui lòng liên hệ quản trị viên!");
+    }
+
+    @Override
+    public VehicleDto setDefaultVehicle(Long customerId, Long vehicleId) {
+        log.error("Set default vehicle called on production but VehicleModule is not connected: vehicleId={}, customerId={}", vehicleId, customerId);
+        throw new IllegalStateException("Dịch vụ cấu hình xe máy cá nhân hiện chưa khả dụng trên môi trường vận hành này. Vui lòng liên hệ quản trị viên!");
     }
 }

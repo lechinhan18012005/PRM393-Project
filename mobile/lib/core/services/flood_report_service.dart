@@ -72,6 +72,20 @@ class FloodReportService {
     throw Exception(data['message'] ?? 'Gửi báo cáo điểm ngập thất bại');
   }
 
+  // UC-20 (4.2.4): Cộng đồng gửi phản hồi nước đã rút tại điểm ngập
+  Future<FloodReportModel> reportWaterReceded(int id) async {
+    final headers = await _getHeaders();
+    final response = await _client.patch(
+      Uri.parse(ApiConstants.recedeFloodReportUrl(id)),
+      headers: headers,
+    );
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
+    if (response.statusCode == 200 && data['success'] == true) {
+      return FloodReportModel.fromJson(data['data']);
+    }
+    throw Exception(data['message'] ?? 'Báo cáo nước rút thất bại');
+  }
+
   Future<String> uploadImageBytes(List<int> bytes, String fileName, {String folder = 'flood_reports'}) async {
     try {
       final token = await _authService.getToken();

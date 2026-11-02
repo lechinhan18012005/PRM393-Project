@@ -140,5 +140,38 @@ void main() {
       expect(myReports.first.depthCm, equals('20cm - 30cm'));
       expect(myReports.first.levelLabel, equals('Theo dõi (Vàng)'));
     });
+
+    test('reportWaterReceded sends PATCH /api/v1/flood-reports/{id}/recede and returns updated point', () async {
+      final mockClient = MockClient((request) async {
+        expect(request.method, equals('PATCH'));
+        expect(request.url.path, endsWith('/api/v1/flood-reports/405/recede'));
+        expect(request.headers['Authorization'], equals('Bearer test-jwt-token-customer-q8'));
+
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({
+            'success': true,
+            'message': 'Đã ghi nhận báo cáo nước rút!',
+            'data': {
+              'id': 405,
+              'latitude': 10.7520,
+              'longitude': 106.7050,
+              'address': 'Số 148 Trần Xuân Soạn, Q.7',
+              'waterDepthLevel': 'ANKLE_20CM',
+              'moderationStatus': 'EXPIRED',
+              'moderatorNote': 'Cộng đồng báo nước đã rút. Tuyến đường đã lưu thông an toàn.',
+            },
+          })),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = FloodReportService(client: mockClient, authService: _FakeAuthService());
+      final updated = await service.reportWaterReceded(405);
+
+      expect(updated.id, equals(405));
+      expect(updated.moderationStatus, equals('EXPIRED'));
+      expect(updated.moderatorNote, contains('Cộng đồng báo nước đã rút'));
+    });
   });
 }
