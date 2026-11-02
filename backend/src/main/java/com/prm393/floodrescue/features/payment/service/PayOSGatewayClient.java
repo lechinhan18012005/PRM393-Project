@@ -16,7 +16,18 @@ import java.util.Map;
 public class PayOSGatewayClient {
     private final PayOSConfig config;
     private final ObjectMapper mapper;
-    private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(4)).build();
+    private volatile HttpClient client;
+
+    private HttpClient getClient() {
+        if (client == null) {
+            synchronized (this) {
+                if (client == null) {
+                    client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(4)).build();
+                }
+            }
+        }
+        return client;
+    }
 
     public JsonNode ensureLink(CreatePaymentLinkResponse attempt, boolean firstRequest) {
         if (!firstRequest) {
@@ -84,6 +95,6 @@ public class PayOSGatewayClient {
                 .header("x-api-key", config.getApiKey()).header("Content-Type", "application/json");
         if (body == null) request.GET();
         else request.POST(HttpRequest.BodyPublishers.ofString(body));
-        return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        return getClient().send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 }

@@ -29,7 +29,12 @@ public class OnboardingController {
             @NotNull @Valid RegisterRequest account,
             @NotNull @Valid RegisterGarageRequest application) {}
 
-    public record InviteRequest(@NotBlank @Email String email, Long branchId) {}
+    public record InviteRequest(
+            @NotBlank(message = "Email không được để trống")
+            @Email(message = "Định dạng email không hợp lệ")
+            @Size(max = 254, message = "Email không quá 254 ký tự")
+            String email,
+            Long branchId) {}
 
     public record Activation(@NotBlank String code, @NotNull @Valid RegisterRequest account) {}
 

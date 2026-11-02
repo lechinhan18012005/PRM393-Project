@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,6 +10,7 @@ import '../../core/widgets/rescue_ui.dart';
 import '../../core/widgets/rescue_map_painter.dart';
 import '../../providers/auth_provider.dart';
 import 'service_selection_screen.dart';
+import '../../features/batch_transport/customer_batch_trip_screen.dart';
 import 'community_flood_report_screen.dart';
 import 'flood_map_screen.dart';
 import 'rescue_history_screen.dart';
@@ -29,6 +32,7 @@ class StitchHydroRescueScreen extends StatefulWidget {
 class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
   final RescueService _rescueService = RescueService();
   RescueOrderModel? _activeOrder;
+  Timer? _batchOrderRefreshTimer;
 
   // Hot reload can retain a State created before these fields existed.
   // Read through defaults instead of relying on field initializers being rerun.
@@ -49,8 +53,23 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
       final order = await _rescueService.getActiveOrder();
       if (mounted) {
         setState(() => _activeOrder = order);
+        _batchOrderRefreshTimer?.cancel();
+        if (order != null &&
+            order.orderType == 'BATCH_CROSSING' &&
+            order.isRequested) {
+          _batchOrderRefreshTimer = Timer(
+            const Duration(seconds: 10),
+            _loadActiveOrder,
+          );
+        }
       }
     } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _batchOrderRefreshTimer?.cancel();
+    super.dispose();
   }
 
   void _select(int index) {
@@ -324,20 +343,14 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                   _service(
                     Icons.local_shipping_outlined,
                     'Chở qua ngập',
-                    'Ghép chuyến',
+                    'Chuyến riêng hoặc chuyến gom',
                     0,
                   ),
                   _service(
                     Icons.build_outlined,
-                    'Sửa tại chỗ',
-                    'Kiểm tra xe',
+                    'Cứu hộ xe',
+                    'Kiểm tra rồi báo giá',
                     1,
-                  ),
-                  _service(
-                    Icons.car_repair_outlined,
-                    'Kéo về gara',
-                    'Vận chuyển xe',
-                    2,
                   ),
                 ];
                 if (constraints.maxWidth < 330 ||
@@ -471,20 +484,35 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
     String actionLabel = 'Xem trạng thái đơn';
     VoidCallback onAction;
 
-    if (order.isRequested) {
+    if (order.isRequested && order.orderType == 'BATCH_CROSSING') {
+      badgeColor = Colors.orange;
+      actionLabel = 'Chọn chuyến gom gần bạn';
+      onAction = () => _open(
+        CustomerBatchTripScreen(
+          orderId: order.id,
+          garageId: order.garageId,
+          latitude: order.pickupLatitude,
+          longitude: order.pickupLongitude,
+          destinationLatitude: order.dropoffLatitude,
+          destinationLongitude: order.dropoffLongitude,
+        ),
+      );
+    } else if (order.isRequested) {
       badgeColor = Colors.orange;
       actionLabel = 'Theo dõi tìm kiếm cứu hộ';
       onAction = () => _open(RadarDispatchScreen(orderId: order.id));
     } else if (order.status == 'PAYMENT_PENDING') {
       badgeColor = Colors.purple;
       actionLabel = 'Thanh toán đơn cứu hộ';
-      onAction = () => _open(VietQRPaymentScreen(
-        orderId: order.id,
-        garageId: order.garageId,
-        amount: order.totalAmount,
-        orderCode: order.orderCode,
-        rescueOrder: order,
-      ));
+      onAction = () => _open(
+        VietQRPaymentScreen(
+          orderId: order.id,
+          garageId: order.garageId,
+          amount: order.totalAmount,
+          orderCode: order.orderCode,
+          rescueOrder: order,
+        ),
+      );
     } else {
       badgeColor = Colors.green;
       actionLabel = 'Theo dõi trực tiếp xe cứu hộ';
@@ -498,12 +526,13 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              RescueLabel(
-                'ĐƠN ĐANG THỰC HIỆN',
-                color: badgeColor,
-              ),
+              RescueLabel('ĐƠN ĐANG THỰC HIỆN', color: badgeColor),
               IconButton(
-                icon: const Icon(Icons.refresh, size: 20, color: AppColors.secondary),
+                icon: const Icon(
+                  Icons.refresh,
+                  size: 20,
+                  color: AppColors.secondary,
+                ),
                 tooltip: 'Làm mới',
                 onPressed: _loadActiveOrder,
               ),
@@ -543,7 +572,10 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
             ),
             onPressed: onAction,
             icon: const Icon(Icons.navigation_outlined, size: 18),
-            label: Text(actionLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+            label: Text(
+              actionLabel,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),

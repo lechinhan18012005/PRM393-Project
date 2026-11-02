@@ -19,6 +19,7 @@ import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
 import com.prm393.floodrescue.features.rescue.service.MechanicEligibilityChecker;
 import com.prm393.floodrescue.features.rescue.service.RescueDispatchService;
 import com.prm393.floodrescue.features.rescue.service.RescueExecutionService;
+import com.prm393.floodrescue.features.rescue.service.MechanicAssignmentLifecycleService;
 import com.prm393.floodrescue.features.rescue.service.RescuePricingService;
 import com.prm393.floodrescue.features.rescue.service.RescueTrackingService;
 import com.prm393.floodrescue.features.vehicle.dto.VehicleDto;
@@ -60,6 +61,7 @@ class RescueSingleCrossingWorkflowTest {
     private MechanicEligibilityChecker eligibilityChecker;
     private RescuePricingService pricingService;
     private RescueDispatchService dispatchService;
+    private MechanicAssignmentLifecycleService mechanicLifecycle;
     private RescueTrackingService trackingService;
     private RescueExecutionService executionService;
 
@@ -91,9 +93,11 @@ class RescueSingleCrossingWorkflowTest {
 
         trackingService = new RescueTrackingService(rescueOrderRepository, mechanicRepository, messagingTemplate);
 
-        executionService = new RescueExecutionService(rescueOrderRepository, mechanicRepository, evidenceRepository, cloudinaryService, dispatchService);
+        mechanicLifecycle = new MechanicAssignmentLifecycleService(rescueOrderRepository, mechanicRepository);
+        ReflectionTestUtils.setField(mechanicLifecycle, "heartbeatValidMinutes", 5);
+        executionService = new RescueExecutionService(rescueOrderRepository, mechanicRepository, evidenceRepository,
+                cloudinaryService, dispatchService, mechanicLifecycle);
         ReflectionTestUtils.setField(executionService, "arrivalThresholdMeters", 30.0);
-        ReflectionTestUtils.setField(executionService, "heartbeatValidMinutes", 5);
 
         sampleCustomer = User.builder().id(10L).username("customer_hoang").role(Role.CUSTOMER).fullName("Hoàng Khách").active(true).build();
         sampleMechanicUser = User.builder().id(20L).username("mechanic_tuan").role(Role.FIELD_MECHANIC).fullName("Tuấn Thợ").active(true).build();
@@ -148,6 +152,32 @@ class RescueSingleCrossingWorkflowTest {
     }
 
     @Test
+    @DisplayName("Đơn gom chưa tham gia chuyến tự hết hạn sau 10 phút")
+    void staleUnjoinedBatchOrderIsClosedWhenCustomerRefreshes() {
+        RescueOrder staleOrder = RescueOrder.builder()
+                .id(1001L)
+                .orderCode("SOS-BATCH-OLD")
+                .customer(sampleCustomer)
+                .garage(sampleGarage)
+                .serviceItem(sampleCrossingService)
+                .orderType(OrderType.BATCH_CROSSING)
+                .status(RescueOrderStatus.REQUESTED)
+                .requestedAt(LocalDateTime.now().minusMinutes(11))
+                .transportStage(TransportStage.NONE)
+                .build();
+        when(rescueOrderRepository.findFirstByCustomerIdAndStatusInOrderByCreatedAtDesc(
+                eq(10L), anyList())).thenReturn(Optional.of(staleOrder));
+        when(rescueOrderRepository.save(staleOrder)).thenReturn(staleOrder);
+
+        var active = dispatchService.getActiveOrderByUser(sampleCustomer);
+
+        assertNull(active);
+        assertEquals(RescueOrderStatus.CANCELLED, staleOrder.getStatus());
+        assertEquals("Hết thời gian chờ tham gia chuyến gom", staleOrder.getCancelReason());
+        verify(auditRepository).save(any(RescueOrderAudit.class));
+    }
+
+    @Test
     @DisplayName("Tạo đơn: Chặn khi xe không thuộc quyền sở hữu của khách")
     void createOrder_BlockedWhenVehicleNotOwned() {
         when(rescueOrderRepository.existsByCustomerIdAndStatusIn(eq(10L), anyList())).thenReturn(false);
@@ -198,6 +228,44 @@ class RescueSingleCrossingWorkflowTest {
         assertEquals(new BigDecimal("30000"), response.getBookingFee());
         assertEquals(new BigDecimal("150000"), response.getTotalAmount());
         assertEquals("59-B1 892.44", response.getVehiclePlate());
+    }
+
+    @Test
+    @DisplayName("Luồng 4: Tạo trực tiếp đơn sửa tại chỗ và điều phối thợ không cần năng lực chở xe")
+    void createOnsiteRepairOrder_Success() {
+        VehicleDto myVehicle = VehicleDto.builder().id(1L).customerId(10L).licensePlate("59-B1 892.44")
+                .brand("Honda").model("SH 150i").vehicleType("SCOOTER").build();
+        ServiceItem onsiteService = ServiceItem.builder()
+                .id(502L).garage(sampleGarage).serviceName("Sửa xe tại chỗ")
+                .serviceType(ServiceType.REPAIR_ONSITE).standardPrice(new BigDecimal("80000"))
+                .active(true).build();
+        sampleMechanic.setHasCrossingCapability(false);
+
+        when(rescueOrderRepository.existsByCustomerIdAndStatusIn(eq(10L), anyList())).thenReturn(false);
+        when(vehicleLookupService.getVehicleByIdAndCustomer(1L, 10L)).thenReturn(Optional.of(myVehicle));
+        when(garageRepository.findById(1L)).thenReturn(Optional.of(sampleGarage));
+        when(serviceItemRepository.findById(502L)).thenReturn(Optional.of(onsiteService));
+        when(rescueOrderRepository.save(any(RescueOrder.class))).thenAnswer(i -> {
+            RescueOrder order = i.getArgument(0);
+            order.setId(1002L);
+            return order;
+        });
+        when(rescueOfferRepository.findByRescueOrderIdOrderByCreatedAtAsc(1002L)).thenReturn(List.of());
+        when(mechanicRepository.findByGarageIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(sampleMechanic));
+        when(rescueOfferRepository.save(any(RescueOffer.class))).thenAnswer(i -> i.getArgument(0));
+
+        CreateRescueOrderRequest request = CreateRescueOrderRequest.builder()
+                .orderType(OrderType.ONSITE_REPAIR)
+                .garageId(1L).serviceItemId(502L).vehicleId(1L)
+                .pickupAddress("Huỳnh Tấn Phát, Q7").pickupLatitude(10.7410).pickupLongitude(106.7110)
+                .dropoffAddress("Huỳnh Tấn Phát, Q7").dropoffLatitude(10.7410).dropoffLongitude(106.7110)
+                .build();
+
+        RescueOrderResponse response = dispatchService.createSingleCrossingOrder(sampleCustomer, request);
+
+        assertEquals(OrderType.ONSITE_REPAIR, response.getOrderType());
+        assertEquals(new BigDecimal("110000"), response.getTotalAmount());
+        verify(rescueOfferRepository).save(any(RescueOffer.class));
     }
 
     @Test

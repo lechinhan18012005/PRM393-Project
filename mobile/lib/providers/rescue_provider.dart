@@ -1,5 +1,7 @@
-﻿import 'dart:async';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../core/models/rescue_order_model.dart';
 import '../core/services/rescue_service.dart';
 
@@ -45,12 +47,28 @@ class RescueProvider with ChangeNotifier {
   }
 
   // 2. Táº£i danh sÃ¡ch lá»±a chá»n chá»Ÿ xe vÆ°á»£t ngáº­p
-  Future<void> loadCrossingOptions({double? pickupLatitude, double? pickupLongitude}) async {
+  Future<void> loadCrossingOptions({
+    double? pickupLatitude,
+    double? pickupLongitude,
+  }) async {
+    return loadRescueOptions(
+      serviceType: 'CROSSING',
+      pickupLatitude: pickupLatitude,
+      pickupLongitude: pickupLongitude,
+    );
+  }
+
+  Future<void> loadRescueOptions({
+    required String serviceType,
+    double? pickupLatitude,
+    double? pickupLongitude,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      _crossingOptions = await _rescueService.getCrossingOptions(
+      _crossingOptions = await _rescueService.getRescueOptions(
+        serviceType: serviceType,
         pickupLatitude: pickupLatitude,
         pickupLongitude: pickupLongitude,
       );
@@ -64,6 +82,7 @@ class RescueProvider with ChangeNotifier {
 
   // 3. KhÃ¡ch táº¡o Ä‘Æ¡n SOS
   Future<RescueOrderModel> createSingleCrossingOrder({
+    String orderType = 'SINGLE_CROSSING',
     required int garageId,
     required int serviceItemId,
     required int vehicleId,
@@ -85,6 +104,7 @@ class RescueProvider with ChangeNotifier {
     notifyListeners();
     try {
       final order = await _rescueService.createSingleCrossingOrder(
+        orderType: orderType,
         garageId: garageId,
         serviceItemId: serviceItemId,
         vehicleId: vehicleId,

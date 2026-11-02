@@ -40,6 +40,8 @@ class PaymentSuccessScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resolvedOrderId =
+        transaction?.rescueOrderId ?? order?.id ?? orderId;
     final code = transaction?.rescueCode ??
         order?.orderCode ??
         rescueCode ??
@@ -130,9 +132,11 @@ class PaymentSuccessScreen extends StatelessWidget {
                   _buildReceiptRow('Đơn vị thực hiện:', garageName),
                   const SizedBox(height: 10),
                   _buildReceiptRow('Thợ thực hiện:', mechanicName),
-                  if (transaction?.payosOrderCode != null && transaction!.payosOrderCode > 0) ...[
+                  if (transaction?.payosOrderCode != null &&
+                      transaction!.payosOrderCode > 0) ...[
                     const SizedBox(height: 10),
-                    _buildReceiptRow('Mã giao dịch PayOS:', '#${transaction!.payosOrderCode}'),
+                    _buildReceiptRow(
+                        'Mã giao dịch PayOS:', '#${transaction!.payosOrderCode}'),
                   ],
                   const SizedBox(height: 10),
                   _buildReceiptRow('Thời gian:', paidAtStr),
@@ -169,16 +173,23 @@ class PaymentSuccessScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Button 2: Đánh giá thợ cứu hộ (Xem trước UI)
+            // Button 2: Đánh giá thợ cứu hộ (UC-19)
             OutlinedButton.icon(
               onPressed: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const RatingReviewScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => RatingReviewScreen(
+                      rescueOrderId: resolvedOrderId,
+                      rescueCode: code,
+                      garageName: garageName,
+                      mechanicName: mechanicName,
+                    ),
+                  ),
                 );
               },
               icon: const Icon(Icons.star, color: Colors.amber, size: 20),
               label: const Text(
-                'Đánh giá dịch vụ (Xem trước UI)',
+                'Đánh giá dịch vụ & Thợ cứu hộ (UC-19)',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               style: OutlinedButton.styleFrom(

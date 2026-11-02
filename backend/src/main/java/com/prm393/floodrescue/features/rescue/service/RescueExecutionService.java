@@ -6,7 +6,6 @@ import com.prm393.floodrescue.common.service.CloudinaryService;
 import com.prm393.floodrescue.common.utils.GeoDistanceUtils;
 import com.prm393.floodrescue.features.auth.entity.User;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStaff;
-import com.prm393.floodrescue.features.mechanic.entity.MechanicStatus;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
 import com.prm393.floodrescue.features.rescue.dto.CompleteOrderRequest;
 import com.prm393.floodrescue.features.rescue.dto.ConfirmArrivalRequest;
@@ -40,12 +39,10 @@ public class RescueExecutionService {
     private final RescueOrderEvidenceRepository evidenceRepository;
     private final CloudinaryService cloudinaryService;
     private final RescueDispatchService dispatchService;
+    private final MechanicAssignmentLifecycleService mechanicLifecycle;
 
     @Value("${app.rescue.arrival-threshold-meters:30.0}")
     private double arrivalThresholdMeters;
-
-    @Value("${app.rescue.heartbeat-valid-minutes:5}")
-    private int heartbeatValidMinutes;
 
     /**
      * Thợ xác nhận đã đến hiện trường đón xe (<30m)
@@ -250,20 +247,8 @@ public class RescueExecutionService {
 
         order = rescueOrderRepository.save(order);
 
-        // Giải phóng thợ về AVAILABLE (nếu còn trực tuyến & heartbeat mới) hoặc OFFLINE
-        if (staff != null) {
-            LocalDateTime threshold = now.minusMinutes(heartbeatValidMinutes);
-            boolean isHeartbeatFresh = staff.getLastHeartbeatAt() != null && staff.getLastHeartbeatAt().isAfter(threshold);
-
-            if (staff.getUser().isActive() && isHeartbeatFresh) {
-                staff.setWorkingStatus(MechanicStatus.AVAILABLE);
-            } else {
-                staff.setWorkingStatus(MechanicStatus.OFFLINE);
-            }
-            staff.setLastHeartbeatAt(now);
-            mechanicRepository.save(staff);
-            log.info("Mechanic {} released to status: {}", staff.getUser().getUsername(), staff.getWorkingStatus());
-        }
+        // PAYMENT_PENDING no longer occupies the mechanic.
+        mechanicLifecycle.releaseIfNoOtherActiveOrder(order, now);
 
         dispatchService.recordAudit(order.getId(), previousStatus, RescueOrderStatus.PAYMENT_PENDING,
                 mechanicUser.getId(), mechanicUser.getUsername(), "Thợ hoàn tất chở xe, nghiệm thu có ảnh bàn giao. Đơn chuyển sang PAYMENT_PENDING.");
@@ -321,6 +306,9 @@ public class RescueExecutionService {
         order.setPaymentOrderCode(paymentOrderCode);
 
         order = rescueOrderRepository.save(order);
+
+        // Defensive reconciliation for legacy/completed orders whose mechanic was left BUSY.
+        mechanicLifecycle.releaseIfNoOtherActiveOrder(order, resolvedPaidAt);
 
         dispatchService.recordAudit(order.getId(), previousStatus, RescueOrderStatus.COMPLETED,
                 null, "PAYMENT_GATEWAY", String.format("Thanh toán thành công qua %s (Mã GD: %s, Mã PayOS: %s, Số tiền: %s VND). Đơn cứu hộ hoàn tất.",

@@ -33,6 +33,16 @@ public class ServiceItem {
     @Column(name = "service_type", nullable = false, length = 30)
     private ServiceType serviceType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "item_category_type", nullable = false, length = 20)
+    @Builder.Default
+    private ItemCategoryType itemCategoryType = ItemCategoryType.LABOR;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "applicable_vehicle_type", nullable = false, length = 20)
+    @Builder.Default
+    private ApplicableVehicleType applicableVehicleType = ApplicableVehicleType.ALL;
+
     @Column(name = "standard_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal standardPrice;
 
@@ -56,6 +66,13 @@ public class ServiceItem {
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private boolean active = true;
+
+    @Column(name = "is_deleted", nullable = false)
+    @Builder.Default
+    private boolean deleted = false;
+
+    @Column(name = "admin_ceiling_snapshot", precision = 12, scale = 2)
+    private BigDecimal adminCeilingSnapshot;
 
     @Column(name = "warranty_days")
     @Builder.Default

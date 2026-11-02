@@ -129,6 +129,7 @@ public class DataInitializer implements CommandLineRunner {
             // 5. Seed service catalog for garage
             seedServiceItemIfNotExists(garage, "Chở xe qua ngập (Chuyến riêng)", ServiceType.CROSSING, new BigDecimal("120000"), "Chở riêng 1 xe máy và khách qua đoạn đường ngập sâu bằng phương tiện chuyên dụng đến nơi khô ráo");
             seedServiceItemIfNotExists(garage, "Sấy bugi & Xả nước buồng đốt", ServiceType.REPAIR_ONSITE, new BigDecimal("80000"), "Khắc phục xe chết máy do ngập nước tại chỗ");
+            seedServiceItemIfNotExists(garage, "Kéo xe ngập nước về gara", ServiceType.TOWING, new BigDecimal("150000"), "Kéo xe không thể sửa tại chỗ về gara để kiểm tra và khắc phục");
         }
     }
 

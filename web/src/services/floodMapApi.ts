@@ -20,6 +20,15 @@ export interface FloodReportBackendResponse {
   createdAt: string;
 }
 
+export interface CreateFloodReportPayload {
+  latitude: number;
+  longitude: number;
+  address: string;
+  waterDepthLevel: 'ANKLE_20CM' | 'HALF_WHEEL_40CM' | 'SEAT_60CM_PLUS';
+  description?: string;
+  imageUrls?: string;
+}
+
 export const floodMapApi = {
   // Staff methods (UC-21)
   getAllFloodReports: async (): Promise<FloodReportBackendResponse[]> => {
@@ -53,6 +62,18 @@ export const floodMapApi = {
     });
     const json = await res.json();
     if (!json.success) throw new Error(json.message || 'Cập nhật nước rút thất bại');
+    return json.data;
+  },
+
+  // Customer / Community report (UC-20)
+  createFloodReport: async (payload: CreateFloodReportPayload): Promise<FloodReportBackendResponse> => {
+    const res = await fetch(`${API_BASE_URL}/flood-reports`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'Gửi báo cáo điểm ngập thất bại');
     return json.data;
   },
 

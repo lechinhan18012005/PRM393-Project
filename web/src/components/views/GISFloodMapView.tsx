@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { FloodPoint } from '../../types';
-import { floodMapApi, FloodReportBackendResponse } from '../../services/floodMapApi';
+import { floodMapApi } from '../../services/floodMapApi';
 
 interface GISFloodMapViewProps {
   floodPoints: FloodPoint[];
   onShowToast: (title: string, msg: string) => void;
+}
+
+interface AuditEntry {
+  text: string;
+  time: string;
+  isDanger?: boolean;
 }
 
 export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, onShowToast }) => {
@@ -14,6 +20,13 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
   const [autoPushAlert, setAutoPushAlert] = useState<boolean>(true);
   const [isBroadcasting, setIsBroadcasting] = useState<boolean>(false);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([
+    { text: 'Đã duyệt #FL-398 (Nguyễn Hữu Cảnh) → Cam', time: '10:14:22' },
+    { text: 'Đã hạ cảnh báo #FL-391 (Ung Văn Khiêm) → Xanh', time: '09:58:05' },
+    { text: 'Đánh dấu spam 4 báo cáo khu vực Q.7', time: '09:42:19', isDanger: true }
+  ]);
+
+  const nowTimeStr = () => new Date().toTimeString().slice(0, 8);
 
   // Load real flood reports from backend
   useEffect(() => {
@@ -27,41 +40,61 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
             return { level: 1, severity: 'YELLOW', label: 'Ngập 20cm (Ngập mắt cá chân)', depthCm: 20 };
           };
 
-          const mapped: FloodPoint[] = liveReports.map((item) => {
-            const meta = depthToLevel(item.waterDepthLevel);
-            return {
-              id: `FL-${item.id}`,
-              name: item.address || `Điểm ngập #${item.id}`,
-              district: item.address?.includes('Q.') ? 'Quận 8' : 'TP. Hồ Chí Minh',
-              address: item.address,
-              waterLevel: meta.label,
-              depthCm: meta.depthCm,
-              level: meta.level as 1 | 2 | 3,
-              severity: meta.severity as 'RED' | 'ORANGE' | 'YELLOW',
-              reportsCount: item.clusterCount || 1,
-              confidenceScore: item.confidenceScore || 85,
-              coords: { lat: item.latitude, lng: item.longitude },
-              photos: item.imageUrls ? item.imageUrls.split(',').filter(Boolean).map((u) => ({
-                url: u.trim(),
-                time: 'Vừa gửi',
-                caption: `Hiện trường điểm ngập #${item.id}`
-              })) : [
-                {
-                  url: 'https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=400&q=80',
-                  time: '15 phút trước',
-                  caption: 'Ảnh từ cộng đồng'
-                }
-              ],
-              recentReports: [
-                {
-                  author: item.reportedByName || 'Người dân ẩn danh',
-                  role: 'Cư dân tại chỗ',
-                  text: item.description || 'Nước dâng nhanh qua nửa bánh xe, nhiều phương tiện chết máy',
-                  time: 'Vừa gửi'
-                }
-              ]
-            };
-          });
+          const mapped: FloodPoint[] = liveReports
+            .filter((item) => item.moderationStatus !== 'REJECTED')
+            .map((item) => {
+              const meta = depthToLevel(item.waterDepthLevel);
+              const normalizedConfidence = item.confidenceScore
+                ? item.confidenceScore <= 5
+                  ? Math.min(98, item.confidenceScore * 19 + 3)
+                  : item.confidenceScore
+                : 85;
+              return {
+                id: `FL-${item.id}`,
+                name: item.address || `Điểm ngập #${item.id}`,
+                district: item.address?.includes('Q.8') || item.address?.includes('Quận 8')
+                  ? 'Quận 8'
+                  : item.address?.includes('Bình Thạnh')
+                  ? 'Bình Thạnh'
+                  : item.address?.includes('Thủ Đức')
+                  ? 'Thủ Đức'
+                  : item.address?.includes('Nhà Bè')
+                  ? 'Nhà Bè'
+                  : 'TP. Hồ Chí Minh',
+                address: item.address,
+                waterLevel: item.moderationStatus === 'EXPIRED' ? 'Nước đã rút (< 15cm)' : meta.label,
+                depthCm: item.moderationStatus === 'EXPIRED' ? 10 : meta.depthCm,
+                level: (item.moderationStatus === 'EXPIRED' ? 1 : meta.level) as 1 | 2 | 3,
+                severity: (item.moderationStatus === 'EXPIRED' ? 'YELLOW' : meta.severity) as 'RED' | 'ORANGE' | 'YELLOW',
+                reportsCount: item.clusterCount || 1,
+                confidenceScore: normalizedConfidence,
+                coords: { lat: item.latitude, lng: item.longitude },
+                photos: item.imageUrls
+                  ? item.imageUrls
+                      .split(',')
+                      .filter(Boolean)
+                      .map((u) => ({
+                        url: u.trim(),
+                        time: 'Vừa gửi',
+                        caption: `Hiện trường điểm ngập #${item.id}`
+                      }))
+                  : [
+                      {
+                        url: 'https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=400&q=80',
+                        time: '15 phút trước',
+                        caption: 'Ảnh từ cộng đồng'
+                      }
+                    ],
+                recentReports: [
+                  {
+                    author: item.reportedByName || 'Người dân ẩn danh',
+                    role: 'Cư dân tại chỗ',
+                    text: item.description || 'Nước dâng nhanh qua nửa bánh xe, nhiều phương tiện chết máy',
+                    time: 'Vừa gửi'
+                  }
+                ]
+              };
+            });
 
           setPointsList((prev) => {
             const existingIds = new Set(prev.map((p) => p.id));
@@ -76,7 +109,16 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
     fetchFloodReports();
   }, []);
 
-  const selectedPoint = pointsList.find((p) => p.id === selectedPointId) || pointsList[0];
+  const filteredPoints =
+    districtFilter === 'all'
+      ? pointsList
+      : pointsList.filter((p) => p.district.includes(districtFilter) || p.address.includes(districtFilter));
+
+  const selectedPoint =
+    filteredPoints.find((p) => p.id === selectedPointId) ||
+    pointsList.find((p) => p.id === selectedPointId) ||
+    filteredPoints[0] ||
+    pointsList[0];
 
   const handleBroadcastAlert = async () => {
     setIsBroadcasting(true);
@@ -84,7 +126,12 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
       const rawId = selectedPoint.id.replace('FL-', '');
       const numId = parseInt(rawId, 10);
       if (!isNaN(numId)) {
-        await floodMapApi.moderateFloodReport(numId, 'APPROVED', 'Phát cảnh báo khẩn cấp bán kính 1km');
+        await floodMapApi.moderateFloodReport(
+          numId,
+          'APPROVED',
+          'Phát cảnh báo khẩn cấp bán kính 1km',
+          'Đã kích hoạt 3 Gara ứng cứu lân cận'
+        );
       }
     } catch (err) {
       console.warn('Backend moderate report:', err);
@@ -93,6 +140,10 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
       setPointsList((prev) =>
         prev.map((p) => (p.id === selectedPoint.id ? { ...p, severity: 'RED', level: 3 } : p))
       );
+      setAuditLogs((prev) => [
+        { text: `Đã duyệt & phát cảnh báo đỏ #${selectedPoint.id} (${selectedPoint.name})`, time: nowTimeStr() },
+        ...prev
+      ]);
       onShowToast(
         'Đã Phát Cảnh Báo Đỏ!',
         `Phát lệnh cảnh báo ngập sâu (>60cm) tới 1,842 tài xế và cư dân trong bán kính 1km quanh ${selectedPoint.name}.`
@@ -111,9 +162,18 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
       console.warn('Backend resolve water:', err);
     }
     setPointsList((prev) =>
-      prev.map((p) => (p.id === selectedPoint.id ? { ...p, severity: 'YELLOW', level: 1, waterLevel: 'Nước đã rút (< 15cm)' } : p))
+      prev.map((p) =>
+        p.id === selectedPoint.id ? { ...p, severity: 'YELLOW', level: 1, waterLevel: 'Nước đã rút (< 15cm)' } : p
+      )
     );
-    onShowToast('Hạ Cảnh Báo', `Đã ghi nhận nước rút tại ${selectedPoint.name}. Bản đồ dân cư đã chuyển sang mức lưu thông an toàn.`);
+    setAuditLogs((prev) => [
+      { text: `Đã hạ cảnh báo #${selectedPoint.id} (${selectedPoint.name}) → Nước rút`, time: nowTimeStr() },
+      ...prev
+    ]);
+    onShowToast(
+      'Hạ Cảnh Báo',
+      `Đã ghi nhận nước rút tại ${selectedPoint.name}. Bản đồ dân cư đã chuyển sang mức lưu thông an toàn.`
+    );
   };
 
   const handleReportSpam = async () => {
@@ -127,16 +187,26 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
       console.warn('Backend spam report:', err);
     }
     setPointsList((prev) => prev.filter((p) => p.id !== selectedPoint.id));
+    setAuditLogs((prev) => [
+      { text: `Đánh dấu spam & loại trừ điểm #${selectedPoint.id}`, time: nowTimeStr(), isDanger: true },
+      ...prev
+    ]);
     onShowToast('Báo Cáo Spam', `Đã đánh dấu rác và loại trừ các tin báo giả mạo tại điểm ${selectedPoint.id}.`);
   };
 
   const handleDispatchChot = () => {
-    onShowToast('Lập Chốt Vượt Ngập', `Đã điều động 3 Gara liên minh thiết lập trạm xe tải sàn nâng hỗ trợ phương tiện qua đoạn ${selectedPoint.name}.`);
+    onShowToast(
+      'Lập Chốt Vượt Ngập',
+      `Đã điều động 3 Gara liên minh thiết lập trạm xe tải sàn nâng hỗ trợ phương tiện qua đoạn ${selectedPoint.name}.`
+    );
   };
 
   return (
     <div className="flex flex-col w-full space-y-space-md">
-      <div><h1>Bản đồ ngập</h1><p className="text-secondary text-body-sm mt-1">Theo dõi điểm ngập và xác minh tin báo.</p></div>
+      <div>
+        <h1>Bản đồ ngập</h1>
+        <p className="text-secondary text-body-sm mt-1">Theo dõi điểm ngập và xác minh tin báo.</p>
+      </div>
       {/* TOP STATS & CRITICAL METRICS STRIP */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-md">
         <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex items-center justify-between border border-surface-container">
@@ -208,7 +278,7 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
               districtFilter === 'all' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container-low text-on-surface hover:bg-surface-container-high'
             }`}
           >
-            Tất cả quận
+            Tất cả quận ({pointsList.length})
           </button>
           <button
             onClick={() => setDistrictFilter('Quận 8')}
@@ -216,7 +286,7 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
               districtFilter === 'Quận 8' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container-low text-on-surface hover:bg-surface-container-high'
             }`}
           >
-            Quận 8 (4 điểm)
+            Quận 8
           </button>
           <button
             onClick={() => setDistrictFilter('Bình Thạnh')}
@@ -224,7 +294,7 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
               districtFilter === 'Bình Thạnh' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container-low text-on-surface hover:bg-surface-container-high'
             }`}
           >
-            Bình Thạnh (5 điểm)
+            Bình Thạnh
           </button>
           <button
             onClick={() => setDistrictFilter('Thủ Đức')}
@@ -232,7 +302,7 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
               districtFilter === 'Thủ Đức' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container-low text-on-surface hover:bg-surface-container-high'
             }`}
           >
-            Thủ Đức (3 điểm)
+            Thủ Đức
           </button>
           <button
             onClick={() => setDistrictFilter('Nhà Bè')}
@@ -240,7 +310,7 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
               districtFilter === 'Nhà Bè' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container-low text-on-surface hover:bg-surface-container-high'
             }`}
           >
-            Nhà Bè (2 điểm)
+            Nhà Bè
           </button>
 
           <div className="h-5 w-px bg-surface-container-high mx-space-xs hidden lg:block"></div>
@@ -295,7 +365,7 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
                     Bản đồ TP. Hồ Chí Minh
                   </span>
                   <span className="font-data-mono text-data-mono text-secondary text-[10px]">
-                    Phạm vi theo dõi: 12 km
+                    Phạm vi theo dõi: 12 km • Gom cụm bán kính 150m
                   </span>
                 </div>
               </div>
@@ -429,6 +499,28 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
 
         {/* RIGHT PANE: Cluster Detail & Verification Inspector */}
         <div className="lg:col-span-5 flex flex-col gap-space-md">
+          {/* Quick Selector Strip for all points in pointsList */}
+          <div className="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm border border-surface-container flex items-center gap-space-xs overflow-x-auto">
+            {filteredPoints.map((pt) => (
+              <button
+                key={pt.id}
+                onClick={() => setSelectedPointId(pt.id)}
+                className={`px-3 py-1.5 rounded-lg font-label-sm text-label-sm whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  selectedPoint?.id === pt.id
+                    ? 'bg-primary text-on-primary font-bold'
+                    : 'bg-surface-container-low text-on-surface hover:bg-surface-container'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    pt.severity === 'RED' ? 'bg-error' : pt.severity === 'ORANGE' ? 'bg-primary-container' : 'bg-tertiary'
+                  }`}
+                ></span>
+                <span>#{pt.id}</span>
+              </button>
+            ))}
+          </div>
+
           {/* MAIN INSPECTOR CARD */}
           <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col border border-surface-container">
             {/* Header & Point Identity */}
@@ -603,18 +695,12 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
               <span className="font-data-mono text-data-mono text-secondary">CA TRỰC #02</span>
             </div>
             <div className="space-y-space-xs font-body-sm text-body-sm">
-              <div className="flex items-center justify-between py-1">
-                <span className="text-on-surface">Đã duyệt #FL-398 (Nguyễn Hữu Cảnh) → Cam</span>
-                <span className="font-data-mono text-[11px] text-secondary">10:14:22</span>
-              </div>
-              <div className="flex items-center justify-between py-1">
-                <span className="text-on-surface">Đã hạ cảnh báo #FL-391 (Ung Văn Khiêm) → Xanh</span>
-                <span className="font-data-mono text-[11px] text-secondary">09:58:05</span>
-              </div>
-              <div className="flex items-center justify-between py-1">
-                <span className="text-error font-medium">Đánh dấu spam 4 báo cáo khu vực Q.7</span>
-                <span className="font-data-mono text-[11px] text-secondary">09:42:19</span>
-              </div>
+              {auditLogs.slice(0, 4).map((entry, idx) => (
+                <div key={idx} className="flex items-center justify-between py-1">
+                  <span className={entry.isDanger ? 'text-error font-medium' : 'text-on-surface'}>{entry.text}</span>
+                  <span className="font-data-mono text-[11px] text-secondary">{entry.time}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -38,4 +38,14 @@ public interface SecureStorageService {
      * @param storageKey the storage key
      */
     void deleteSecureFile(String storageKey);
+
+    /**
+     * Verifies the cryptographic HMAC signature and TTL of a Pre-signed URL.
+     *
+     * @param storageKey the storage key
+     * @param expiresAtEpoch epoch second when URL expires
+     * @param signature HMAC signature string
+     * @return true if signature is valid and not expired, false otherwise
+     */
+    boolean validatePresignedSignature(String storageKey, long expiresAtEpoch, String signature);
 }

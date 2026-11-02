@@ -4,8 +4,10 @@ import '../../core/constants/app_colors.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/services/rescue_service.dart';
 import '../../core/widgets/rescue_ui.dart';
-import 'radar_dispatch_screen.dart';
+import 'electronic_invoice_screen.dart';
 import 'live_tracking_screen.dart';
+import 'radar_dispatch_screen.dart';
+import 'rating_review_screen.dart';
 import 'vietqr_payment_screen.dart';
 
 class RescueHistoryScreen extends StatefulWidget {
@@ -37,7 +39,9 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
   }
 
   void _openScreen(Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen)).then((_) => _loadHistory());
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => screen))
+        .then((_) => _loadHistory());
   }
 
   void _navigateToOrder(RescueOrderModel order) {
@@ -71,7 +75,10 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
             children: [
               Text(
                 'Chi tiết đơn #${o.orderCode}',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               RescueLabel(o.statusDescription, color: AppColors.primary),
@@ -111,6 +118,37 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
                 title: 'Tổng chi phí',
                 value: '${o.totalAmount.toStringAsFixed(0)} ₫',
               ),
+              if (o.status == 'COMPLETED') ...[
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _openScreen(
+                      RatingReviewScreen(
+                        rescueOrderId: o.id,
+                        rescueCode: o.orderCode,
+                        garageName: o.garageName,
+                        mechanicName: o.mechanicName,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.star, color: Colors.amber),
+                  label: const Text('Đánh giá dịch vụ & Thợ cứu hộ (UC-19)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryOrange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _openScreen(ElectronicInvoiceScreen(order: o));
+                  },
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('Xem biên nhận & Gửi khiếu nại / Hoàn tiền'),
+                ),
+              ],
             ],
           ),
         ),
@@ -152,217 +190,261 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
   ];
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AppColors.background,
-    appBar: AppBar(
-      title: const Text(
-        'Lịch sử cứu hộ',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-      ),
-    ),
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const RescueIntro(
-              eyebrow: 'NHẬT KÝ HÀNH TRÌNH',
-              title: 'Mọi lần hỗ trợ,\ntrong một nơi',
-              description:
-                  'Xem lại dịch vụ, chi phí và đội cứu hộ đã hỗ trợ bạn.',
-            ),
-            const RescueSection('Các lần cứu hộ'),
-            if (_realOrders != null && _realOrders!.isNotEmpty) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  RescueLabel(
-                    'Lịch sử thực tế (${_realOrders!.length} đơn)',
-                    color: AppColors.primary,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, size: 20, color: AppColors.secondary),
-                    onPressed: _loadHistory,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ..._realOrders!.map((o) => _buildRealOrderCard(o)),
-            ] else ...[
-              const RescueDemoNote('Lịch sử minh họa · Chưa tải đơn thực tế'),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final item in [
-                    'Tất cả',
-                    'Sửa tại chỗ',
-                    'Vận chuyển',
-                  ].indexed)
-                    ChoiceChip(
-                      label: Text(item.$2),
-                      selected: _filter == item.$1,
-                      onSelected: (_) => setState(() => _filter = item.$1),
-                      selectedColor: AppColors.primaryContainer,
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        color: _filter == item.$1
-                            ? AppColors.primary
-                            : AppColors.secondary,
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text(
+            'Lịch sử cứu hộ',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+        ),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const RescueIntro(
+                  eyebrow: 'NHẬT KÝ HÀNH TRÌNH',
+                  title: 'Mọi lần hỗ trợ,\ntrong một nơi',
+                  description:
+                      'Xem lại dịch vụ, chi phí và đội cứu hộ đã hỗ trợ bạn.',
+                ),
+                const RescueSection('Các lần cứu hộ'),
+                if (_realOrders != null && _realOrders!.isNotEmpty) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      RescueLabel(
+                        'Lịch sử thực tế (${_realOrders!.length} đơn)',
+                        color: AppColors.primary,
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              ..._orders
-                  .where(
-                    (o) => _filter == 0 || (_filter == 1 ? o.repair : !o.repair),
-                  )
-                  .map(
-                    (o) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: RescuePanel(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  o.id,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.secondary,
-                                  ),
-                                ),
-                              ),
-                              const RescueLabel('Hoàn tất · Mẫu'),
-                            ],
+                      IconButton(
+                        icon: const Icon(
+                          Icons.refresh,
+                          size: 20,
+                          color: AppColors.secondary,
+                        ),
+                        onPressed: _loadHistory,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ..._realOrders!.map((o) => _buildRealOrderCard(o)),
+                ] else ...[
+                  const RescueDemoNote('Lịch sử minh họa · Chưa tải đơn thực tế'),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final item in [
+                        'Tất cả',
+                        'Sửa tại chỗ',
+                        'Vận chuyển',
+                      ].indexed)
+                        ChoiceChip(
+                          label: Text(item.$2),
+                          selected: _filter == item.$1,
+                          onSelected: (_) => setState(() => _filter = item.$1),
+                          selectedColor: AppColors.primaryContainer,
+                          labelStyle: TextStyle(
+                            fontSize: 12,
+                            color: _filter == item.$1
+                                ? AppColors.primary
+                                : AppColors.secondary,
                           ),
-                          const SizedBox(height: 14),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryContainer,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(
-                                  o.icon,
-                                  color: AppColors.primary,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  ..._orders
+                      .where(
+                        (o) =>
+                            _filter == 0 || (_filter == 1 ? o.repair : !o.repair),
+                      )
+                      .map(
+                        (o) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: RescuePanel(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
-                                    Text(
-                                      o.title,
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
+                                    Expanded(
+                                      child: Text(
+                                        o.id,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.secondary,
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(height: 5),
-                                    Text(
-                                      o.date,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.secondary,
-                                      ),
-                                    ),
+                                    const RescueLabel('Hoàn tất · Mẫu'),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 28),
-                          Text(
-                            o.garage,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.secondary,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            spacing: 12,
-                            runSpacing: 8,
-                            children: [
-                              Text(
-                                o.price,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () => showModalBottomSheet<void>(
-                                  context: context,
-                                  builder: (_) => SafeArea(
-                                    child: SingleChildScrollView(
-                                      padding: const EdgeInsets.all(20),
+                                const SizedBox(height: 14),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryContainer,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Icon(
+                                        o.icon,
+                                        color: AppColors.primary,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
                                       child: Column(
-                                        mainAxisSize: MainAxisSize.min,
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          const RescueDemoNote(
-                                            'Chi tiết đơn minh họa',
-                                          ),
                                           Text(
-                                            o.id,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleLarge,
+                                            o.title,
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                            ),
                                           ),
-                                          RescueInfo(
-                                            icon: o.icon,
-                                            title: 'Dịch vụ',
-                                            value: o.title,
-                                          ),
-                                          RescueInfo(
-                                            icon: Icons.storefront_outlined,
-                                            title: 'Đơn vị hỗ trợ',
-                                            value: o.garage,
-                                          ),
-                                          RescueInfo(
-                                            icon: Icons.engineering_outlined,
-                                            title: 'Nhân viên cứu hộ',
-                                            value: o.mechanic,
-                                          ),
-                                          RescueInfo(
-                                            icon: Icons.payments_outlined,
-                                            title: 'Chi phí mẫu',
-                                            value: o.price,
+                                          const SizedBox(height: 5),
+                                          Text(
+                                            o.date,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.secondary,
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
+                                  ],
+                                ),
+                                const Divider(height: 28),
+                                Text(
+                                  o.garage,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.secondary,
                                   ),
                                 ),
-                                child: const Text('Xem chi tiết'),
-                              ),
-                            ],
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  children: [
+                                    Text(
+                                      o.price,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          showModalBottomSheet<void>(
+                                        context: context,
+                                        builder: (_) => SafeArea(
+                                          child: SingleChildScrollView(
+                                            padding: const EdgeInsets.all(20),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                const RescueDemoNote(
+                                                  'Chi tiết đơn minh họa',
+                                                ),
+                                                Text(
+                                                  o.id,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleLarge,
+                                                ),
+                                                RescueInfo(
+                                                  icon: o.icon,
+                                                  title: 'Dịch vụ',
+                                                  value: o.title,
+                                                ),
+                                                RescueInfo(
+                                                  icon:
+                                                      Icons.storefront_outlined,
+                                                  title: 'Đơn vị hỗ trợ',
+                                                  value: o.garage,
+                                                ),
+                                                RescueInfo(
+                                                  icon:
+                                                      Icons.engineering_outlined,
+                                                  title: 'Nhân viên cứu hộ',
+                                                  value: o.mechanic,
+                                                ),
+                                                RescueInfo(
+                                                  icon: Icons.payments_outlined,
+                                                  title: 'Chi phí mẫu',
+                                                  value: o.price,
+                                                ),
+                                                const SizedBox(height: 12),
+                                                ElevatedButton.icon(
+                                                  onPressed: () {
+                                                    Navigator.of(context).pop();
+                                                    _openScreen(
+                                                      RatingReviewScreen(
+                                                        rescueCode: o.id,
+                                                        garageName: o.garage,
+                                                        mechanicName: o.mechanic,
+                                                      ),
+                                                    );
+                                                  },
+                                                  icon: const Icon(
+                                                    Icons.star,
+                                                    color: Colors.amber,
+                                                  ),
+                                                  label: const Text(
+                                                    'Đánh giá dịch vụ (UC-19)',
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                OutlinedButton.icon(
+                                                  onPressed: () {
+                                                    Navigator.of(context).pop();
+                                                    _openScreen(
+                                                      const ElectronicInvoiceScreen(),
+                                                    );
+                                                  },
+                                                  icon: const Icon(
+                                                    Icons.receipt_long_outlined,
+                                                  ),
+                                                  label: const Text(
+                                                    'Biên nhận & Gửi khiếu nại',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Text('Xem chi tiết'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-            ],
-          ],
+                ],
+              ],
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 
   Widget _buildRealOrderCard(RescueOrderModel o) {
     final isActive = o.isActive;
@@ -386,7 +468,9 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
                 ),
                 RescueLabel(
                   o.statusDescription,
-                  color: isActive ? AppColors.primaryOrange : (o.status == 'COMPLETED' ? Colors.green : Colors.grey),
+                  color: isActive
+                      ? AppColors.primaryOrange
+                      : (o.status == 'COMPLETED' ? Colors.green : Colors.grey),
                 ),
               ],
             ),

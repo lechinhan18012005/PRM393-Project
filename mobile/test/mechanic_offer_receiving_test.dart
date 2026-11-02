@@ -63,6 +63,7 @@ class _TestMechanicProvider extends MechanicProvider {
     required String status,
     double? latitude,
     double? longitude,
+    String? pauseReason,
   }) async {
     toggleCalls++;
     this.status = status;

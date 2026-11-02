@@ -14,7 +14,8 @@ import {
   Activity,
   Store,
   Wrench,
-  LifeBuoy
+  LifeBuoy,
+  Truck
 } from 'lucide-react';
 const navigation = {
   admin: [
@@ -31,6 +32,7 @@ const navigation = {
     { id: 'verification', label: 'Duyệt gara', icon: BadgeCheck },
     { id: 'moderation', label: 'Bản đồ ngập', icon: Map },
     { id: 'disputes', label: 'Tranh chấp', icon: Scale },
+    { id: 'batch-trips', label: 'Chuyến gom', icon: Truck },
     { id: 'monitoring', label: 'Chất lượng dịch vụ', icon: Activity }
   ],
   owner: [

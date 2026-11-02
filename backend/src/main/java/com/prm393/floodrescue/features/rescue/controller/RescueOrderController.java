@@ -9,6 +9,7 @@ import com.prm393.floodrescue.features.mechanic.entity.MechanicStaff;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
 import com.prm393.floodrescue.features.rescue.dto.*;
 import com.prm393.floodrescue.features.rescue.entity.RescueOrder;
+import com.prm393.floodrescue.features.garage.entity.ServiceType;
 import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
 import com.prm393.floodrescue.features.rescue.service.RescueDispatchService;
 import com.prm393.floodrescue.features.rescue.service.RescueExecutionService;
@@ -47,15 +48,27 @@ public class RescueOrderController {
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách lựa chọn chở xe vượt ngập thành công", options));
     }
 
+    @GetMapping("/api/v1/rescue/options")
+    @Operation(summary = "Lấy gara đủ điều kiện theo loại dịch vụ cứu hộ")
+    public ResponseEntity<ApiResponse<List<CrossingOptionDto>>> getRescueOptions(
+            @RequestParam ServiceType serviceType,
+            @RequestParam(required = false) Double pickupLatitude,
+            @RequestParam(required = false) Double pickupLongitude
+    ) {
+        List<CrossingOptionDto> options = pricingService.getEligibleGarages(serviceType, pickupLatitude, pickupLongitude);
+        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách lựa chọn cứu hộ thành công", options));
+    }
+
     @PostMapping("/api/v1/rescue/orders")
     @PreAuthorize("hasRole('CUSTOMER')")
-    @Operation(summary = "Khách hàng tạo yêu cầu SOS chở xe vượt ngập đơn lẻ")
+    @Operation(summary = "Khách hàng tạo yêu cầu SOS theo loại dịch vụ đã chọn")
     public ResponseEntity<ApiResponse<RescueOrderResponse>> createSingleCrossingOrder(
             @AuthenticationPrincipal User customer,
             @Valid @RequestBody CreateRescueOrderRequest request
     ) {
         RescueOrderResponse response = dispatchService.createSingleCrossingOrder(customer, request);
-        return ResponseEntity.ok(ApiResponse.success("Tạo yêu cầu cứu hộ thành công, đang điều phối thợ", response));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Tạo yêu cầu cứu hộ thành công, đang điều phối thợ", response));
     }
 
     @GetMapping("/api/v1/rescue/orders/active")

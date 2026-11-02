@@ -7,7 +7,6 @@ import com.prm393.floodrescue.features.auth.entity.User;
 import com.prm393.floodrescue.features.garage.entity.Garage;
 import com.prm393.floodrescue.features.garage.repository.GarageRepository;
 import com.prm393.floodrescue.features.kyc.entity.KycAuditAction;
-import com.prm393.floodrescue.features.kyc.service.EncryptedLocalStorageServiceImpl;
 import com.prm393.floodrescue.features.kyc.service.KycAuditService;
 import com.prm393.floodrescue.features.kyc.service.KycLifecycleService;
 import com.prm393.floodrescue.features.kyc.service.SecureStorageService;
@@ -38,7 +37,6 @@ import java.util.Map;
 public class SecureKycController {
 
     private final SecureStorageService secureStorageService;
-    private final EncryptedLocalStorageServiceImpl encryptedStorageImpl;
     private final KycAuditService auditService;
     private final KycLifecycleService lifecycleService;
     private final GarageRepository garageRepo;
@@ -165,7 +163,7 @@ public class SecureKycController {
         String storageKey = new String(Base64.getUrlDecoder().decode(encodedKey), StandardCharsets.UTF_8);
 
         // Verify cryptographic signature and TTL
-        if (!encryptedStorageImpl.validatePresignedSignature(storageKey, expiresAtEpoch, signature)) {
+        if (!secureStorageService.validatePresignedSignature(storageKey, expiresAtEpoch, signature)) {
             return ResponseEntity.status(403).build();
         }
 

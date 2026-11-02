@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { ArrowUpRight, Building2, Check, ChevronRight, Inbox, RefreshCw, X } from 'lucide-react';
+
 export function GarageHeading({
   title,
   description,
@@ -22,6 +23,7 @@ export function GarageHeading({
     </header>
   );
 }
+
 export function GarageStat({
   label,
   value,
@@ -46,6 +48,7 @@ export function GarageStat({
     </article>
   );
 }
+
 export function GaragePanel({
   title,
   description,
@@ -72,6 +75,7 @@ export function GaragePanel({
     </section>
   );
 }
+
 export function GarageEmpty({
   title,
   description,
@@ -92,6 +96,7 @@ export function GarageEmpty({
     </div>
   );
 }
+
 export function GarageError({ message, retry }: { message: string; retry?: () => void }) {
   return message ? (
     <div className="garage-error" role="alert">
@@ -105,6 +110,7 @@ export function GarageError({ message, retry }: { message: string; retry?: () =>
     </div>
   ) : null;
 }
+
 export function GarageBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: string }) {
   return (
     <span className={`garage-badge ${tone}`}>
@@ -112,17 +118,28 @@ export function GarageBadge({ children, tone = 'neutral' }: { children: React.Re
     </span>
   );
 }
+
 export function GarageDrawer({
   title,
   description,
   onClose,
-  children
+  children,
+  placement = 'right'
 }: {
   title: string;
   description?: string;
   onClose: () => void;
   children: React.ReactNode;
+  placement?: 'right' | 'center';
 }) {
+  if (placement === 'center') {
+    return (
+      <GarageModal title={title} description={description} onClose={onClose}>
+        {children}
+      </GarageModal>
+    );
+  }
+
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -186,6 +203,84 @@ export function GarageDrawer({
     </div>
   );
 }
+
+export function GarageModal({
+  title,
+  description,
+  onClose,
+  children,
+  maxWidth = 'max-w-2xl'
+}: {
+  title: string;
+  description?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  maxWidth?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const old = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    ref.current?.focus();
+    return () => {
+      document.body.style.overflow = old;
+      previous?.focus();
+    };
+  }, []);
+  function keys(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      onClose();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const nodes = ref.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]'
+    );
+    if (!nodes?.length) return;
+    const first = nodes[0],
+      last = nodes[nodes.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) {
+      last.focus();
+      e.preventDefault();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      first.focus();
+      e.preventDefault();
+    }
+  }
+  return (
+    <div
+      className="garage-modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={ref}
+        tabIndex={-1}
+        onKeyDown={keys}
+        className={`garage-modal ${maxWidth}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        <div className="garage-modal-heading">
+          <div>
+            <div className="garage-eyebrow">QUẢN LÝ GARA</div>
+            <h2 id={titleId}>{title}</h2>
+            {description && <p>{description}</p>}
+          </div>
+          <button className="garage-icon-button" aria-label="Đóng" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+        <div className="garage-modal-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export function GarageLink({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
     <button className="garage-text-button" onClick={onClick}>

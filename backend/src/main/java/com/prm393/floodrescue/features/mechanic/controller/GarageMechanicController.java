@@ -3,7 +3,9 @@ package com.prm393.floodrescue.features.mechanic.controller;
 import com.prm393.floodrescue.common.dto.ApiResponse;
 import com.prm393.floodrescue.features.auth.entity.User;
 import com.prm393.floodrescue.features.mechanic.dto.AllocateBranchRequest;
+import com.prm393.floodrescue.features.mechanic.dto.CreateMechanicRequest;
 import com.prm393.floodrescue.features.mechanic.dto.MechanicStaffResponse;
+import com.prm393.floodrescue.features.mechanic.dto.UpdateMechanicRequest;
 import com.prm393.floodrescue.features.mechanic.service.MechanicStaffService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -60,5 +62,42 @@ public class GarageMechanicController {
         MechanicStaffResponse response = mechanicService.allocateBranch(owner, id, request);
         return ResponseEntity.ok(
                 ApiResponse.success("Phân bổ chi nhánh cho thợ thành công!", response));
+    }
+
+    @PostMapping
+    @Operation(summary = "UC-05: Thêm mới nhân viên thợ cứu hộ và phân bổ chi nhánh")
+    public ResponseEntity<ApiResponse<MechanicStaffResponse>> createMechanic(
+            @AuthenticationPrincipal User owner,
+            @Valid @RequestBody CreateMechanicRequest request) {
+        MechanicStaffResponse response = mechanicService.createMechanic(owner, request);
+        return ResponseEntity.ok(ApiResponse.success("Thêm nhân viên thợ thành công!", response));
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "UC-05: Cập nhật thông tin, ca trực, chuyên môn hoặc năng lực vượt ngập của thợ")
+    public ResponseEntity<ApiResponse<MechanicStaffResponse>> updateMechanic(
+            @AuthenticationPrincipal User owner,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateMechanicRequest request) {
+        MechanicStaffResponse response = mechanicService.updateMechanic(owner, id, request);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật thông tin thợ thành công!", response));
+    }
+
+    @PostMapping("/{id}/reset-password")
+    @Operation(summary = "UC-05: Cấp lại mật khẩu tạm thời cho thợ")
+    public ResponseEntity<ApiResponse<String>> resetPassword(
+            @AuthenticationPrincipal User owner,
+            @PathVariable Long id) {
+        String tempPassword = mechanicService.resetPassword(owner, id);
+        return ResponseEntity.ok(ApiResponse.success("Cấp lại mật khẩu tạm thời thành công!", tempPassword));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "UC-05: Cho thợ thôi việc (vô hiệu hóa và gỡ khỏi chi nhánh)")
+    public ResponseEntity<ApiResponse<Void>> removeMechanic(
+            @AuthenticationPrincipal User owner,
+            @PathVariable Long id) {
+        mechanicService.removeMechanic(owner, id);
+        return ResponseEntity.ok(ApiResponse.success("Cho thợ thôi việc thành công!", null));
     }
 }

@@ -93,6 +93,7 @@ class MechanicService {
     required String workingStatus, // AVAILABLE, OFFLINE, BUSY
     double? latitude,
     double? longitude,
+    String? pauseReason,
   }) async {
     final headers = await _getHeaders();
     final response = await http.patch(
@@ -102,6 +103,7 @@ class MechanicService {
         'workingStatus': workingStatus,
         'latitude': latitude,
         'longitude': longitude,
+        if (pauseReason != null && pauseReason.isNotEmpty) 'pauseReason': pauseReason,
       }),
     );
     final data = jsonDecode(utf8.decode(response.bodyBytes));

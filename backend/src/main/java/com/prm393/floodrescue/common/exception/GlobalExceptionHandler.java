@@ -4,6 +4,7 @@ import com.prm393.floodrescue.common.dto.ErrorResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -75,16 +76,20 @@ public class GlobalExceptionHandler {
                 .getAllErrors()
                 .forEach(
                         (error) -> {
-                            String fieldName = ((FieldError) error).getField();
+                            String fieldName = error instanceof FieldError fieldError
+                                    ? fieldError.getField()
+                                    : error.getObjectName();
                             String errorMessage = error.getDefaultMessage();
                             errors.put(fieldName, errorMessage);
                         });
+
+        String primaryMessage = errors.values().stream().findFirst().orElse("Dữ liệu đầu vào không hợp lệ");
 
         ErrorResponse err =
                 ErrorResponse.builder()
                         .status(HttpStatus.BAD_REQUEST.value())
                         .error("Validation Failed")
-                        .message("Invalid input data")
+                        .message(primaryMessage)
                         .path(request.getRequestURI())
                         .validationErrors(errors)
                         .timestamp(LocalDateTime.now())
@@ -92,7 +97,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(err);
     }
 
-    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex, HttpServletRequest request) {
+        ErrorResponse err =
+                ErrorResponse.builder()
+                        .status(HttpStatus.CONFLICT.value())
+                        .error(HttpStatus.CONFLICT.getReasonPhrase())
+                        .message("Dữ liệu đã tồn tại hoặc vi phạm ràng buộc toàn vẹn hệ thống (trùng tên đăng nhập, email, số điện thoại hoặc tên chi nhánh).")
+                        .path(request.getRequestURI())
+                        .timestamp(LocalDateTime.now())
+                        .build();
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(err);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleForbidden(Exception ex, HttpServletRequest request) {
         return ResponseEntity.status(403)
                 .body(

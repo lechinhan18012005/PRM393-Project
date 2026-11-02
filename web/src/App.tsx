@@ -24,10 +24,11 @@ import { FinancialReportsView } from './components/views/FinancialReportsView';
 
 // Module B Views
 import { LiveDispatchDashboardView } from './components/views/LiveDispatchDashboardView';
-import { GarageVerificationView } from './components/views/GarageVerificationView';
+import GarageVerificationView from './components/views/GarageVerificationView';
 import { GISFloodMapView } from './components/views/GISFloodMapView';
 import { DisputeFraudView } from './components/views/DisputeFraudView';
 import { SLAMonitoringView } from './components/views/SLAMonitoringView';
+import { BatchTripMonitoringView } from './components/views/BatchTripMonitoringView';
 
 // Module C Views
 import { GarageOwnerDashboardView } from './components/views/GarageOwnerDashboardView';
@@ -279,6 +280,7 @@ function MainDashboard() {
               path="/staff/monitoring"
               element={<SLAMonitoringView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
             />
+            <Route path="/staff/batch-trips" element={<BatchTripMonitoringView />} />
 
             {/* Module C (Garage Owner) Views */}
             <Route
@@ -286,7 +288,7 @@ function MainDashboard() {
               element={<GarageOwnerDashboardView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
             />
             {user.role === 'GARAGE_OWNER' && (
-              <Route path="/owner/garage-team" element={<GarageManagementView />} />
+              <Route path="/owner/garage-team" element={<GarageManagementView onShowToast={showToast} />} />
             )}
             <Route
               path="/owner/garage-finance"

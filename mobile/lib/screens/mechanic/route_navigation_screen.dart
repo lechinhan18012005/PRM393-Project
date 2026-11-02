@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -7,6 +8,17 @@ import '../../core/services/location_service.dart';
 import '../../core/services/rescue_service.dart';
 import 'crossing_transport_screen.dart';
 import 'mechanic_ui.dart';
+import 'quotation_builder_screen.dart';
+
+Widget buildPostArrivalDestination({
+  required int orderId,
+  required String orderType,
+}) {
+  if (orderType == 'ONSITE_REPAIR' || orderType == 'TOWING') {
+    return QuotationBuilderScreen(orderId: orderId, orderType: orderType);
+  }
+  return CrossingTransportScreen(orderId: orderId);
+}
 
 class RouteNavigationScreen extends StatefulWidget {
   final int? orderId;
@@ -23,7 +35,10 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
   Timer? _locationTimer;
 
   // Cờ cấu hình: chỉ cho phép mô phỏng vị trí trong môi trường DEMO/TEST
-  static const bool _allowDemoSimulation = bool.fromEnvironment('DEMO_MODE', defaultValue: false);
+  static const bool _allowDemoSimulation = bool.fromEnvironment(
+    'DEMO_MODE',
+    defaultValue: false,
+  );
 
   // Dynamic mechanic device coordinates
   LocationData? _lastKnownLocation;
@@ -39,13 +54,19 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
   double? get _accuracyMeters => _lastKnownLocation?.accuracyMeters;
   DateTime? get _gpsTimestamp => _lastKnownLocation?.timestamp;
 
-  int? get _gpsAgeSeconds =>
-      _gpsTimestamp != null ? DateTime.now().difference(_gpsTimestamp!).abs().inSeconds : null;
+  int? get _gpsAgeSeconds => _gpsTimestamp != null
+      ? DateTime.now().difference(_gpsTimestamp!).abs().inSeconds
+      : null;
 
   bool get _isGpsFresh => _gpsAgeSeconds != null && _gpsAgeSeconds! <= 30;
 
   double? _calculateDistanceToPickup() {
-    if (_order == null || !_hasActiveGpsFix || _currentLat == null || _currentLng == null) return null;
+    if (_order == null ||
+        !_hasActiveGpsFix ||
+        _currentLat == null ||
+        _currentLng == null) {
+      return null;
+    }
     return LocationService.instance.calculateDistanceMeters(
       _currentLat!,
       _currentLng!,
@@ -110,7 +131,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
       });
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = e.toString().replaceFirst('Exception: ', ''));
+        setState(
+          () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+        );
       }
     }
   }
@@ -128,7 +151,8 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
         setState(() {
           _lastKnownLocation = loc;
           _hasActiveGpsFix = false;
-          _gpsStatusMessage = 'Tín hiệu GPS bị cũ (>30s), đang đợi vị trí mới...';
+          _gpsStatusMessage =
+              'Tín hiệu GPS bị cũ (>30s), đang đợi vị trí mới...';
         });
       } else {
         setState(() {
@@ -140,7 +164,8 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
     } else {
       setState(() {
         _hasActiveGpsFix = false;
-        _gpsStatusMessage = 'Mất tín hiệu GPS từ thiết bị. Đang đợi kết nối lại...';
+        _gpsStatusMessage =
+            'Mất tín hiệu GPS từ thiết bị. Đang đợi kết nối lại...';
       });
     }
   }
@@ -198,7 +223,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
     _reportLocation();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Đã cập nhật vị trí thợ: Cách điểm đón ~ 7 mét (Đủ điều kiện < 30m, ±5m).'),
+        content: Text(
+          'Đã cập nhật vị trí thợ: Cách điểm đón ~ 7 mét (Đủ điều kiện < 30m, ±5m).',
+        ),
         backgroundColor: Colors.blue,
       ),
     );
@@ -218,7 +245,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
     if (!_isEligibleToConfirm || _lastKnownLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_ineligibilityReason ?? 'Chưa đủ điều kiện xác nhận đến nơi!'),
+          content: Text(
+            _ineligibilityReason ?? 'Chưa đủ điều kiện xác nhận đến nơi!',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -235,7 +264,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Tín hiệu GPS bị cũ (>30s), vui lòng đợi tín hiệu mới trước khi xác nhận!'),
+          content: Text(
+            'Tín hiệu GPS bị cũ (>30s), vui lòng đợi tín hiệu mới trước khi xác nhận!',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -251,7 +282,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
     if (dist > 30.0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Bạn còn cách điểm đón ${dist.toStringAsFixed(0)}m, chưa đủ gần (≤30m) để xác nhận đến nơi!'),
+          content: Text(
+            'Bạn còn cách điểm đón ${dist.toStringAsFixed(0)}m, chưa đủ gần (≤30m) để xác nhận đến nơi!',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -269,15 +302,25 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
       );
 
       if (mounted) {
+        final requiresQuotation =
+            updated.orderType == 'ONSITE_REPAIR' ||
+            updated.orderType == 'TOWING';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Xác nhận đến nơi thành công! Bắt đầu các bước chuyên chở xe.'),
+          SnackBar(
+            content: Text(
+              requiresQuotation
+                  ? 'Xác nhận đến nơi thành công! Hãy kiểm tra xe và gửi báo giá cho khách.'
+                  : 'Xác nhận đến nơi thành công! Bắt đầu các bước chuyên chở xe.',
+            ),
             backgroundColor: Colors.green,
           ),
         );
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => CrossingTransportScreen(orderId: updated.id),
+            builder: (_) => buildPostArrivalDestination(
+              orderId: updated.id,
+              orderType: updated.orderType,
+            ),
           ),
         );
       }
@@ -322,7 +365,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                 Icon(
                   icon,
                   size: 13,
-                  color: isPassed ? const Color(0xFF1B6A45) : const Color(0xFFB82820),
+                  color: isPassed
+                      ? const Color(0xFF1B6A45)
+                      : const Color(0xFFB82820),
                 ),
                 const SizedBox(width: 3),
                 Expanded(
@@ -331,7 +376,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: isPassed ? const Color(0xFF1B6A45) : const Color(0xFFB82820),
+                      color: isPassed
+                          ? const Color(0xFF1B6A45)
+                          : const Color(0xFFB82820),
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -339,7 +386,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                 Icon(
                   isPassed ? Icons.check_circle : Icons.cancel,
                   size: 13,
-                  color: isPassed ? const Color(0xFF28A76C) : const Color(0xFFD32F2F),
+                  color: isPassed
+                      ? const Color(0xFF28A76C)
+                      : const Color(0xFFD32F2F),
                 ),
               ],
             ),
@@ -349,7 +398,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
-                color: isPassed ? const Color(0xFF0D4229) : const Color(0xFF7D120D),
+                color: isPassed
+                    ? const Color(0xFF0D4229)
+                    : const Color(0xFF7D120D),
               ),
             ),
             const SizedBox(height: 2),
@@ -357,7 +408,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
               subtext,
               style: TextStyle(
                 fontSize: 9,
-                color: isPassed ? const Color(0xFF2E7D56) : const Color(0xFF9E231C),
+                color: isPassed
+                    ? const Color(0xFF2E7D56)
+                    : const Color(0xFF9E231C),
               ),
             ),
           ],
@@ -383,7 +436,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
         children: [
           FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: isEligible ? AppColors.primaryOrange : Colors.grey.shade400,
+              backgroundColor: isEligible
+                  ? AppColors.primaryOrange
+                  : Colors.grey.shade400,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             onPressed: (_isLoading || !isEligible) ? null : _confirmArrival,
@@ -391,32 +446,48 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Icon(Icons.check_circle_outline),
             label: Text(
-              _isLoading ? 'Đang kiểm tra tọa độ...' : 'Đã đến điểm đón · Tiếp nhận xe (<30m)',
+              _isLoading
+                  ? 'Đang kiểm tra tọa độ...'
+                  : 'Đã đến điểm đón · Tiếp nhận xe (<30m)',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
           if (!isEligible) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: (_isLoading || _isRefreshingGps) ? null : _refreshGpsLocation,
+              onPressed: (_isLoading || _isRefreshingGps)
+                  ? null
+                  : _refreshGpsLocation,
               icon: _isRefreshingGps
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.my_location, size: 18),
               label: const Text('Lấy lại vị trí GPS'),
             ),
           ],
-          if (_allowDemoSimulation && distanceMeters != null && distanceMeters > 30) ...[
+          if (_allowDemoSimulation &&
+              distanceMeters != null &&
+              distanceMeters > 30) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _simulateArrivedPosition,
               icon: const Icon(Icons.gps_fixed, size: 18, color: Colors.blue),
               label: const Text(
                 'Mô phỏng thợ đã tới nơi (< 30m test)',
-                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -450,7 +521,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                       left: 16,
                       top: 16,
                       child: MechanicLabel(
-                        order != null ? 'ĐANG THEO DÕI TỌA ĐỘ THỰC' : 'SƠ ĐỒ MINH HỌA',
+                        order != null
+                            ? 'ĐANG THEO DÕI TỌA ĐỘ THỰC'
+                            : 'SƠ ĐỒ MINH HỌA',
                         color: AppColors.secondary,
                       ),
                     ),
@@ -484,7 +557,8 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                           child: Text(
                             distanceMeters != null
                                 ? '${(distanceMeters / 1000).toStringAsFixed(2)} km · Cách điểm đón ${distanceMeters.toStringAsFixed(0)} m'
-                                : (_gpsStatusMessage ?? 'Đang tìm tín hiệu GPS thiết bị...'),
+                                : (_gpsStatusMessage ??
+                                      'Đang tìm tín hiệu GPS thiết bị...'),
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
@@ -492,34 +566,44 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: isEligible
                                 ? Colors.green.shade100
-                                : (_hasActiveGpsFix ? Colors.orange.shade100 : Colors.red.shade100),
+                                : (_hasActiveGpsFix
+                                      ? Colors.orange.shade100
+                                      : Colors.red.shade100),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             isEligible
                                 ? 'Đủ điều kiện'
                                 : (!_hasActiveGpsFix
-                                    ? 'Mất tín hiệu GPS'
-                                    : (_isDistanceEligible
-                                        ? 'GPS chưa đạt'
-                                        : 'Chưa đủ gần')),
+                                      ? 'Mất tín hiệu GPS'
+                                      : (_isDistanceEligible
+                                            ? 'GPS chưa đạt'
+                                            : 'Chưa đủ gần')),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: isEligible
                                   ? Colors.green.shade900
-                                  : (_hasActiveGpsFix ? Colors.orange.shade900 : Colors.red.shade900),
+                                  : (_hasActiveGpsFix
+                                        ? Colors.orange.shade900
+                                        : Colors.red.shade900),
                             ),
                           ),
                         ),
                         if (_isSimulated) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.blue.shade50,
                               borderRadius: BorderRadius.circular(6),
@@ -544,7 +628,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                         _metricBox(
                           icon: Icons.straighten,
                           title: 'Khoảng cách',
-                          value: distanceMeters != null ? '${distanceMeters.toStringAsFixed(0)} m' : '--',
+                          value: distanceMeters != null
+                              ? '${distanceMeters.toStringAsFixed(0)} m'
+                              : '--',
                           subtext: 'Mục tiêu ≤ 30m',
                           isPassed: _isDistanceEligible,
                         ),
@@ -552,7 +638,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                         _metricBox(
                           icon: Icons.gps_fixed,
                           title: 'Sai số GPS',
-                          value: accuracy != null ? '±${accuracy.toStringAsFixed(0)} m' : '--',
+                          value: accuracy != null
+                              ? '±${accuracy.toStringAsFixed(0)} m'
+                              : '--',
                           subtext: 'Chỉ tham khảo',
                           isPassed: accuracy != null,
                         ),
@@ -560,7 +648,9 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                         _metricBox(
                           icon: Icons.access_time,
                           title: 'Độ mới GPS',
-                          value: ageSeconds != null ? '${ageSeconds}s trước' : '--',
+                          value: ageSeconds != null
+                              ? '${ageSeconds}s trước'
+                              : '--',
                           subtext: 'Mục tiêu ≤ 30s',
                           isPassed: _isGpsFresh,
                         ),
@@ -569,7 +659,10 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                     if (!isEligible && reason != null) ...[
                       const SizedBox(height: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.amber.shade50,
                           borderRadius: BorderRadius.circular(8),
@@ -581,7 +674,11 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(Icons.info_outline, size: 16, color: Colors.amber.shade900),
+                                Icon(
+                                  Icons.info_outline,
+                                  size: 16,
+                                  color: Colors.amber.shade900,
+                                ),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
@@ -600,19 +697,30 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                               alignment: Alignment.centerRight,
                               child: TextButton.icon(
                                 style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
                                   minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
                                 ),
-                                onPressed: _isRefreshingGps ? null : _refreshGpsLocation,
+                                onPressed: _isRefreshingGps
+                                    ? null
+                                    : _refreshGpsLocation,
                                 icon: _isRefreshingGps
                                     ? const SizedBox(
                                         width: 12,
                                         height: 12,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
                                       )
                                     : const Icon(Icons.refresh, size: 14),
-                                label: const Text('Lấy lại vị trí', style: TextStyle(fontSize: 11)),
+                                label: const Text(
+                                  'Lấy lại vị trí',
+                                  style: TextStyle(fontSize: 11),
+                                ),
                               ),
                             ),
                           ],
@@ -632,19 +740,23 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
               MechanicInfo(
                 icon: Icons.person_outline,
                 title: 'Khách hàng',
-                value: '${order?.customerName ?? "Hoàng Văn Khách"} • ${order?.customerPhone ?? ""}',
+                value:
+                    '${order?.customerName ?? "Hoàng Văn Khách"} • ${order?.customerPhone ?? ""}',
               ),
               const Divider(),
               MechanicInfo(
                 icon: Icons.two_wheeler_outlined,
                 title: 'Xe cần chở',
-                value: '${order?.vehiclePlate ?? "59-B1 892.44"} · ${order?.vehicleModel ?? "Honda SH"}',
+                value:
+                    '${order?.vehiclePlate ?? "59-B1 892.44"} · ${order?.vehicleModel ?? "Honda SH"}',
               ),
               const Divider(),
               MechanicInfo(
                 icon: Icons.location_on_outlined,
                 title: 'Điểm đón (nơi xe kẹt ngập)',
-                value: order?.pickupAddress ?? '85 Huỳnh Tấn Phát, P. Tân Thuận Đông, Quận 7',
+                value:
+                    order?.pickupAddress ??
+                    '85 Huỳnh Tấn Phát, P. Tân Thuận Đông, Quận 7',
               ),
               const Divider(),
               MechanicInfo(

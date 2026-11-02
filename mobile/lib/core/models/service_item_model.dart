@@ -3,6 +3,8 @@ class ServiceItemModel {
   final String serviceName;
   final String? category;
   final String? serviceType;
+  final String? itemCategoryType;
+  final String? applicableVehicleType;
   final double standardPrice;
   final double? minPrice;
   final double? maxPrice;
@@ -10,6 +12,8 @@ class ServiceItemModel {
   final int estimatedTimeMin;
   final String? description;
   final bool active;
+  final bool isDeleted;
+  final double? adminCeilingSnapshot;
   final int warrantyDays;
 
   ServiceItemModel({
@@ -17,6 +21,8 @@ class ServiceItemModel {
     required this.serviceName,
     this.category,
     this.serviceType,
+    this.itemCategoryType,
+    this.applicableVehicleType,
     required this.standardPrice,
     this.minPrice,
     this.maxPrice,
@@ -24,6 +30,8 @@ class ServiceItemModel {
     this.estimatedTimeMin = 15,
     this.description,
     this.active = true,
+    this.isDeleted = false,
+    this.adminCeilingSnapshot,
     this.warrantyDays = 3,
   });
 
@@ -33,6 +41,8 @@ class ServiceItemModel {
       serviceName: json['serviceName'] ?? '',
       category: json['category'],
       serviceType: json['serviceType'],
+      itemCategoryType: json['itemCategoryType'],
+      applicableVehicleType: json['applicableVehicleType'],
       standardPrice: (json['standardPrice'] as num?)?.toDouble() ?? 0.0,
       minPrice: (json['minPrice'] as num?)?.toDouble(),
       maxPrice: (json['maxPrice'] as num?)?.toDouble(),
@@ -40,6 +50,8 @@ class ServiceItemModel {
       estimatedTimeMin: json['estimatedTimeMin'] is int ? json['estimatedTimeMin'] : 15,
       description: json['description'],
       active: json['active'] ?? true,
+      isDeleted: json['deleted'] ?? json['isDeleted'] ?? false,
+      adminCeilingSnapshot: (json['adminCeilingSnapshot'] as num?)?.toDouble(),
       warrantyDays: json['warrantyDays'] is int ? json['warrantyDays'] : 3,
     );
   }
@@ -50,6 +62,8 @@ class ServiceItemModel {
       'serviceName': serviceName,
       'category': category,
       'serviceType': serviceType,
+      'itemCategoryType': itemCategoryType,
+      'applicableVehicleType': applicableVehicleType,
       'standardPrice': standardPrice,
       'minPrice': minPrice,
       'maxPrice': maxPrice,
@@ -57,6 +71,8 @@ class ServiceItemModel {
       'estimatedTimeMin': estimatedTimeMin,
       'description': description,
       'active': active,
+      'isDeleted': isDeleted,
+      'adminCeilingSnapshot': adminCeilingSnapshot,
       'warrantyDays': warrantyDays,
     };
   }

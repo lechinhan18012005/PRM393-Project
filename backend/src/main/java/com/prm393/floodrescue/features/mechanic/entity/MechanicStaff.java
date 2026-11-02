@@ -58,6 +58,16 @@ public class MechanicStaff {
     @Builder.Default
     private boolean hasCrossingCapability = false;
 
+    @Column(name = "is_manual_override", nullable = false)
+    @Builder.Default
+    private boolean isManualOverride = false;
+
+    @Column(name = "paused_at")
+    private LocalDateTime pausedAt;
+
+    @Column(name = "pause_reason", length = 100)
+    private String pauseReason;
+
     @Column(name = "last_heartbeat_at")
     private LocalDateTime lastHeartbeatAt;
 

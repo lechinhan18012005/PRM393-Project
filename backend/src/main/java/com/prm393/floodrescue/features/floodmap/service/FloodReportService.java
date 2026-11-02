@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -26,22 +27,38 @@ public class FloodReportService {
     @Transactional
     public FloodReportResponse createReport(User reporter, CreateFloodReportRequest request) {
         // Spatial Clustering logic (SRS FEAT-10 & Main Workflow 4):
-        // Scan active/recent reports within 100 meters (0.1km) in the last 60 minutes
+        // Scan active/recent reports within 150 meters in the last 60 minutes
         LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
         List<FloodReportPoint> recentReports = floodReportRepository.findAll();
 
-        int nearbyCount = 0;
+        List<FloodReportPoint> nearbyClusterPoints = new ArrayList<>();
         for (FloodReportPoint p : recentReports) {
-            if (p.getCreatedAt().isAfter(oneHourAgo)) {
+            boolean isRecent = p.getCreatedAt() == null || p.getCreatedAt().isAfter(oneHourAgo);
+            boolean isValidCandidate = p.getModerationStatus() != FloodStatus.REJECTED
+                    && p.getModerationStatus() != FloodStatus.EXPIRED;
+            if (isRecent && isValidCandidate) {
                 double distanceMeters = calculateDistance(request.getLatitude(), request.getLongitude(), p.getLatitude(), p.getLongitude());
                 if (distanceMeters <= 150) {
-                    nearbyCount++;
+                    nearbyClusterPoints.add(p);
                 }
             }
         }
 
+        int nearbyCount = nearbyClusterPoints.size();
         int clusterCount = nearbyCount + 1;
         int confidenceScore = Math.min(5, clusterCount >= 3 ? 5 : clusterCount * 2);
+
+        if (clusterCount >= 3) {
+            for (FloodReportPoint existing : nearbyClusterPoints) {
+                existing.setClusterCount(clusterCount);
+                existing.setConfidenceScore(confidenceScore);
+                if (existing.getModerationStatus() == FloodStatus.PENDING) {
+                    existing.setModerationStatus(FloodStatus.APPROVED);
+                    existing.setModeratorNote("Tự động xác thực cụm ngập GIS (" + clusterCount + " tin báo trong bán kính 150m)");
+                }
+                floodReportRepository.save(existing);
+            }
+        }
 
         String stationsText = "Có 2 trạm thợ cứu hộ cơ động trong bán kính 2km";
 
@@ -56,6 +73,9 @@ public class FloodReportService {
                 .confidenceScore(confidenceScore)
                 .clusterCount(clusterCount)
                 .moderationStatus(clusterCount >= 3 ? FloodStatus.APPROVED : FloodStatus.PENDING)
+                .moderatorNote(clusterCount >= 3
+                        ? "Tự động xác thực cụm ngập GIS (" + clusterCount + " tin báo trong bán kính 150m)"
+                        : null)
                 .nearbyStations(stationsText)
                 .build();
 
@@ -67,6 +87,13 @@ public class FloodReportService {
     @Transactional(readOnly = true)
     public List<FloodReportResponse> getActiveFloodPoints() {
         return floodReportRepository.findByModerationStatusOrderByCreatedAtDesc(FloodStatus.APPROVED).stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<FloodReportResponse> getMyReports(User reporter) {
+        return floodReportRepository.findByReportedByIdOrderByCreatedAtDesc(reporter.getId()).stream()
                 .map(this::mapToResponse)
                 .toList();
     }

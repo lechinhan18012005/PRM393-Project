@@ -41,10 +41,6 @@ public class PaymentAttemptService {
             throw new AccessDeniedException("Chỉ khách hàng sở hữu đơn cứu hộ mới có quyền khởi tạo thanh toán!");
         }
 
-        if (order.getOrderType() != OrderType.SINGLE_CROSSING) {
-            throw new BadRequestException("Chỉ hỗ trợ thanh toán cho đơn cứu hộ chở xe đơn lẻ (SINGLE_CROSSING)!");
-        }
-
         // Nếu đơn đã COMPLETED, trả về giao dịch thành công hiện có
         if (order.getStatus() == RescueOrderStatus.COMPLETED) {
             PaymentTransaction existingSuccess = paymentTransactionRepository
@@ -106,7 +102,9 @@ public class PaymentAttemptService {
 
         // Tích hợp Giai đoạn 1 (UC-24): Lấy tỷ lệ hoa hồng hiện hành từ cấu hình của Admin
         var cfg = financeAdminService.getActiveCommissionConfig();
-        BigDecimal commissionRate = cfg.getSingleCrossingRate() != null ? cfg.getSingleCrossingRate() : cfg.getGlobalRate();
+        BigDecimal commissionRate = order.getOrderType() == OrderType.SINGLE_CROSSING
+                ? (cfg.getSingleCrossingRate() != null ? cfg.getSingleCrossingRate() : cfg.getGlobalRate())
+                : (cfg.getWaterloggedRepairRate() != null ? cfg.getWaterloggedRepairRate() : cfg.getGlobalRate());
         BigDecimal platformFee = amount.multiply(commissionRate)
                 .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
         BigDecimal netGarageAmount = amount.subtract(platformFee);

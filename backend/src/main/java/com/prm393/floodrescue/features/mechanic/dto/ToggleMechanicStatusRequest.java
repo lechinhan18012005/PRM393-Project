@@ -18,4 +18,5 @@ public class ToggleMechanicStatusRequest {
 
     private Double latitude;
     private Double longitude;
+    private String pauseReason;
 }

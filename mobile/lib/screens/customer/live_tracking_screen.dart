@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -6,6 +7,7 @@ import '../../core/models/rescue_order_model.dart';
 import '../../core/services/rescue_service.dart';
 import '../../core/widgets/rescue_ui.dart';
 import '../../core/widgets/rescue_map_painter.dart';
+import '../../features/quotation/quotation_status_banner.dart';
 import 'vietqr_payment_screen.dart';
 
 class LiveTrackingScreen extends StatefulWidget {
@@ -101,7 +103,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 RescueIntro(
                   eyebrow: 'ĐƠN CỨU HỘ #${order.orderCode}',
                   title: _getTitleByStatus(order),
-                  description: 'Chở xe vượt ngập đơn lẻ đến điểm khô ráo đã chọn.',
+                  description: order.orderType == 'ONSITE_REPAIR'
+                      ? 'Thợ cứu hộ đang kiểm tra và sửa xe ngập nước.'
+                      : order.orderType == 'TOWING'
+                      ? 'Xe đang được tiếp nhận và kéo về garage.'
+                      : order.orderType == 'BATCH_CROSSING'
+                      ? 'Xe đang được phục vụ trong chuyến gom vượt ngập.'
+                      : 'Chở xe vượt ngập đơn lẻ đến điểm khô ráo đã chọn.',
                   trailing: RescueLabel(
                     _getStatusBadge(order),
                     color: _getStatusBadgeColor(order),
@@ -132,7 +140,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.satellite_alt, color: Colors.amber.shade900, size: 22),
+                      Icon(
+                        Icons.satellite_alt,
+                        color: Colors.amber.shade900,
+                        size: 22,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -162,7 +174,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         top: 12,
                         left: 12,
                         child: RescueLabel(
-                          order != null ? 'LỘ TRÌNH ĐANG THEO DÕI' : 'SƠ ĐỒ MINH HỌA',
+                          order != null
+                              ? 'LỘ TRÌNH ĐANG THEO DÕI'
+                              : 'SƠ ĐỒ MINH HỌA',
                           color: AppColors.secondary,
                         ),
                       ),
@@ -231,12 +245,16 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     RescueInfo(
                       icon: Icons.location_on_outlined,
                       title: 'Điểm đón khách',
-                      value: order?.pickupAddress ?? '85 Huỳnh Tấn Phát, P. Tân Thuận Đông, Quận 7',
+                      value:
+                          order?.pickupAddress ??
+                          '85 Huỳnh Tấn Phát, P. Tân Thuận Đông, Quận 7',
                     ),
                     RescueInfo(
                       icon: Icons.wb_sunny_outlined,
                       title: 'Điểm trả khô ráo',
-                      value: order?.dropoffAddress ?? 'Cầu Phú Mỹ (Vùng gò cao khô ráo), Quận 7',
+                      value:
+                          order?.dropoffAddress ??
+                          'Cầu Phú Mỹ (Vùng gò cao khô ráo), Quận 7',
                     ),
                     if (snapshot != null) ...[
                       RescueInfo(
@@ -256,15 +274,16 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     ],
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
-                      onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            order?.mechanicPhone != null
-                                ? 'Gọi hotline thợ: ${order!.mechanicPhone}'
-                                : 'Liên hệ nhân viên hiện là thao tác mô phỏng.',
+                      onPressed: () =>
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                order?.mechanicPhone != null
+                                    ? 'Gọi hotline thợ: ${order!.mechanicPhone}'
+                                    : 'Liên hệ nhân viên hiện là thao tác mô phỏng.',
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
                       icon: const Icon(Icons.call_outlined, size: 18),
                       label: Text(
                         order?.mechanicPhone != null
@@ -276,6 +295,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 ),
               ),
 
+              if (order != null) QuotationStatusBanner(orderId: order.id),
+
               // Banner thanh toán nếu PAYMENT_PENDING
               if (order != null && order.status == 'PAYMENT_PENDING') ...[
                 const SizedBox(height: 16),
@@ -284,13 +305,20 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   decoration: BoxDecoration(
                     color: Colors.green.shade50,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.green.shade300, width: 1.5),
+                    border: Border.all(
+                      color: Colors.green.shade300,
+                      width: 1.5,
+                    ),
                   ),
                   child: Column(
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.check_circle, color: Colors.green.shade700, size: 28),
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green.shade700,
+                            size: 28,
+                          ),
                           const SizedBox(width: 10),
                           const Expanded(
                             child: Column(
@@ -298,12 +326,18 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                               children: [
                                 Text(
                                   'Ca cứu hộ đã hoàn thành bàn giao!',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
                                 ),
                                 SizedBox(height: 2),
                                 Text(
                                   'Xe máy đã được chở qua điểm ngập an toàn. Vui lòng thanh toán cước phí niêm yết.',
-                                  style: TextStyle(fontSize: 12, color: Colors.black87),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black87,
+                                  ),
                                 ),
                               ],
                             ),
@@ -314,7 +348,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.primaryOrange,
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 20,
+                          ),
                         ),
                         onPressed: () {
                           Navigator.of(context).push(
@@ -353,7 +390,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       case 'DISPATCHED':
         return 'Thợ đang di chuyển đến';
       case 'IN_PROGRESS':
-        return 'Đang chở xe qua ngập';
+        return order.orderType == 'ONSITE_REPAIR'
+            ? 'Đang sửa xe ngập nước'
+            : order.orderType == 'TOWING'
+            ? 'Đang kéo xe về garage'
+            : order.orderType == 'BATCH_CROSSING'
+            ? 'Đang trong chuyến gom vượt ngập'
+            : 'Đang chở xe qua ngập';
       case 'PAYMENT_PENDING':
         return 'Đã bàn giao xe an toàn';
       case 'COMPLETED':
@@ -370,7 +413,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       case 'DISPATCHED':
         return 'Đang đến điểm đón';
       case 'IN_PROGRESS':
-        return 'Đang chở xe (${order.transportStage})';
+        return order.orderType == 'ONSITE_REPAIR'
+            ? 'Đang sửa chữa'
+            : order.orderType == 'TOWING'
+            ? 'Đang kéo xe (${order.transportStage})'
+            : order.orderType == 'BATCH_CROSSING'
+            ? 'Chuyến gom (${order.transportStage})'
+            : 'Đang chở xe (${order.transportStage})';
       case 'PAYMENT_PENDING':
         return 'Chờ thanh toán';
       case 'COMPLETED':

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/models/payment_transaction_model.dart';
 import '../../core/models/rescue_order_model.dart';
+import '../../core/services/dispute_service.dart';
 import '../../core/widgets/rescue_ui.dart';
 import 'stitch_hydro_rescue_screen.dart';
 
@@ -29,6 +30,212 @@ class ElectronicInvoiceScreen extends StatelessWidget {
       buffer.write(str[i]);
     }
     return '${buffer.toString()} đ';
+  }
+
+  void _showDisputeBottomSheet(
+    BuildContext context, {
+    required int rescueOrderId,
+    int? paymentTransactionId,
+    required String rescueCode,
+    required double paidAmount,
+  }) {
+    final amountController = TextEditingController(
+      text: paidAmount.round().toString(),
+    );
+    final reasonController = TextEditingController();
+    String selectedType = 'OVERCHARGE';
+    bool isSubmitting = false;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Gửi khiếu nại & Yêu cầu hoàn tiền',
+                            style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(sheetCtx).pop(),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'Đơn cứu hộ: $rescueCode • Đã thanh toán: ${_formatVnd(paidAmount)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.secondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedType,
+                      decoration: const InputDecoration(
+                        labelText: 'Nhóm lý do khiếu nại',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'OVERCHARGE',
+                          child: Text('Thu vượt báo giá / phụ phí ngoài luồng'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'POOR_QUALITY',
+                          child: Text('Chất lượng cứu hộ / sửa chữa không đạt'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'DAMAGE',
+                          child: Text('Hư hỏng phương tiện trong lúc cứu hộ'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'FAKE_RESCUE',
+                          child: Text('Báo hoàn tất khống / hủy sau khi thu tiền'),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setModalState(() => selectedType = val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Số tiền yêu cầu hoàn trả (VNĐ)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reasonController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Mô tả chi tiết sự việc & bằng chứng',
+                        hintText:
+                            'Nhập lý do khiếu nại để bộ phận CSKH (Staff) đối chiếu và đề xuất Admin hoàn tiền...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              final amount =
+                                  double.tryParse(amountController.text.trim()) ??
+                                  0;
+                              final reason = reasonController.text.trim();
+                              if (amount <= 0 || amount > paidAmount) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Số tiền yêu cầu hoàn phải từ 1đ đến ${_formatVnd(paidAmount)}',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              if (reason.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Vui lòng nhập mô tả chi tiết lý do khiếu nại',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              setModalState(() => isSubmitting = true);
+                              try {
+                                final created =
+                                    await DisputeService().createDispute(
+                                  rescueOrderId: rescueOrderId,
+                                  paymentTransactionId: paymentTransactionId,
+                                  disputeType: selectedType,
+                                  requestedRefundAmount: amount,
+                                  customerReason: reason,
+                                );
+                                if (sheetCtx.mounted) {
+                                  Navigator.of(sheetCtx).pop();
+                                }
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      backgroundColor: Colors.green.shade700,
+                                      content: Text(
+                                        'Đã gửi hồ sơ khiếu nại ${created.disputeCode}! Bộ phận CSKH sẽ xác minh sớm nhất.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (sheetCtx.mounted) {
+                                  Navigator.of(sheetCtx).pop();
+                                }
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      backgroundColor:
+                                          _isReal ? Colors.red.shade700 : Colors.green.shade700,
+                                      content: Text(
+                                        _isReal
+                                            ? 'Đã ghi nhận yêu cầu khiếu nại ($e)'
+                                            : 'Đã gửi hồ sơ khiếu nại mẫu thành công! Bộ phận CSKH đang tiếp nhận xử lý.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      icon: const Icon(Icons.report_problem_outlined),
+                      label: Text(
+                        isSubmitting
+                            ? 'Đang gửi hồ sơ...'
+                            : 'Gửi Khiếu Nại & Yêu Cầu Hoàn Tiền',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -59,6 +266,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
         ? '#${transaction!.payosOrderCode}'
         : (order?.paymentOrderCode != null ? '#${order!.paymentOrderCode}' : 'RESCUE-$code');
     final paidAtStr = transaction?.paidAt ?? order?.paidAt ?? 'Đã hoàn tất';
+    final rescueOrderId = transaction?.rescueOrderId ?? order?.id ?? 8924;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -225,7 +433,31 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            OutlinedButton.icon(
+              onPressed: () => _showDisputeBottomSheet(
+                context,
+                rescueOrderId: rescueOrderId,
+                paymentTransactionId: transaction?.id,
+                rescueCode: code,
+                paidAmount: total,
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red.shade700,
+                side: BorderSide(color: Colors.red.shade300),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.gavel_outlined, size: 18),
+              label: const Text(
+                'Khiếu nại dịch vụ / Yêu cầu hoàn tiền',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(height: 12),
 
             ElevatedButton(
               onPressed: () {

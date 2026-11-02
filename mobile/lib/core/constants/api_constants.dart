@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 class ApiConstants {
@@ -36,26 +37,38 @@ class ApiConstants {
   // Flood Map Endpoints (Luồng 8)
   static String get floodReportsUrl => '$baseUrl/flood-reports';
   static String get activeFloodReportsUrl => '$baseUrl/flood-reports/active';
+  static String get myFloodReportsUrl => '$baseUrl/flood-reports/my';
 
   // Media Upload (Cloudinary)
   static String get uploadImageUrl => '$baseUrl/upload/image';
 
   // Luồng 3: Cứu hộ chở xe vượt ngập đơn lẻ
   static String get crossingOptionsUrl => '$baseUrl/rescue/crossing/options';
+  static String get rescueOptionsUrl => '$baseUrl/rescue/options';
   static String get rescueOrdersUrl => '$baseUrl/rescue/orders';
   static String get activeRescueOrderUrl => '$baseUrl/rescue/orders/active';
   static String get rescueOrderHistoryUrl => '$baseUrl/rescue/orders/history';
-  static String rescueOrderUrl(int orderId) => '$baseUrl/rescue/orders/$orderId';
-  static String cancelRescueOrderUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/cancel';
+  static String rescueOrderUrl(int orderId) =>
+      '$baseUrl/rescue/orders/$orderId';
+  static String cancelRescueOrderUrl(int orderId) =>
+      '$baseUrl/rescue/orders/$orderId/cancel';
   static String get pendingRescueOffersUrl => '$baseUrl/rescue/offers/pending';
-  static String acceptRescueOfferUrl(int offerId) => '$baseUrl/rescue/offers/$offerId/accept';
-  static String rejectRescueOfferUrl(int offerId) => '$baseUrl/rescue/offers/$offerId/reject';
-  static String updateOrderLocationUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/location';
-  static String orderTrackingUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/tracking';
-  static String confirmOrderArrivalUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/arrived';
-  static String updateTransitStageUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/transit-stage';
-  static String completeRescueOrderUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/complete';
-  static String rescueOrderEvidenceUrl(int orderId) => '$baseUrl/rescue/orders/$orderId/evidence';
+  static String acceptRescueOfferUrl(int offerId) =>
+      '$baseUrl/rescue/offers/$offerId/accept';
+  static String rejectRescueOfferUrl(int offerId) =>
+      '$baseUrl/rescue/offers/$offerId/reject';
+  static String updateOrderLocationUrl(int orderId) =>
+      '$baseUrl/rescue/orders/$orderId/location';
+  static String orderTrackingUrl(int orderId) =>
+      '$baseUrl/rescue/orders/$orderId/tracking';
+  static String confirmOrderArrivalUrl(int orderId) =>
+      '$baseUrl/rescue/orders/$orderId/arrived';
+  static String updateTransitStageUrl(int orderId) =>
+      '$baseUrl/rescue/orders/$orderId/transit-stage';
+  static String completeRescueOrderUrl(int orderId) =>
+      '$baseUrl/rescue/orders/$orderId/complete';
+  static String rescueOrderEvidenceUrl(int orderId) =>
+      '$baseUrl/rescue/orders/$orderId/evidence';
 
   // Finance & Garage Wallet Endpoints (Luồng 5 - UC-26)
   static String get garageWalletUrl => '$baseUrl/garages/wallet';
@@ -71,4 +84,18 @@ class ApiConstants {
       '$baseUrl/payments/$orderCode/simulate-webhook';
   static String confirmCashPaymentUrl(int orderCode) =>
       '$baseUrl/payments/$orderCode/confirm-cash';
+
+  // Service Disputes & Refunds Endpoints (Luồng 6 - UC-23 & UC-27)
+  static String get disputesUrl => '$baseUrl/disputes';
+  static String get myDisputesUrl => '$baseUrl/disputes/my';
+  static String disputesByOrderUrl(int rescueOrderId) =>
+      '$baseUrl/disputes/order/$rescueOrderId';
+
+  // Service Ratings & Reviews Endpoints (Luồng 9 - UC-19)
+  static String get ratingsUrl => '$baseUrl/ratings';
+  static String get myRatingsUrl => '$baseUrl/ratings/my';
+  static String ratingByOrderUrl(int rescueOrderId) =>
+      '$baseUrl/ratings/order/$rescueOrderId';
+  static String ratingsByGarageUrl(int garageId) =>
+      '$baseUrl/ratings/garage/$garageId';
 }

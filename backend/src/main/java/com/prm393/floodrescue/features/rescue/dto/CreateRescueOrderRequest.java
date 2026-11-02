@@ -10,12 +10,16 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import com.prm393.floodrescue.features.rescue.entity.OrderType;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateRescueOrderRequest {
+
+    // Bỏ trống để tương thích client Luồng 3 cũ.
+    private OrderType orderType;
 
     @NotNull(message = "Vui lòng chọn gara cứu hộ")
     private Long garageId;
