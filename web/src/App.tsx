@@ -1,6 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { ModuleType, ScreenId } from './types';
+import {
+  ModuleType,
+  ScreenId,
+  PayOSTransaction,
+  GarageApplicant,
+  DisputeCase,
+  PayoutItem
+} from './types';
 import { Role } from './types/auth';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -13,6 +20,8 @@ import { InvitationActivationView } from './components/views/InvitationActivatio
 import { GarageOperationsView } from './components/views/GarageOperationsView';
 import { LoginView } from './components/views/LoginView';
 import { RegisterView } from './components/views/RegisterView';
+import { rescueApi } from './services/rescueApi';
+import { INITIAL_DISPUTES } from './data/mockData';
 
 // Module A Views
 import { OverviewGMVView } from './components/views/OverviewGMVView';
@@ -28,26 +37,25 @@ import GarageVerificationView from './components/views/GarageVerificationView';
 import { GISFloodMapView } from './components/views/GISFloodMapView';
 import { DisputeFraudView } from './components/views/DisputeFraudView';
 import { SLAMonitoringView } from './components/views/SLAMonitoringView';
-import { BatchTripMonitoringView } from './components/views/BatchTripMonitoringView';
 
 // Module C Views
 import { GarageOwnerDashboardView } from './components/views/GarageOwnerDashboardView';
 import { GarageServicesPricingView } from './components/views/GarageServicesPricingView';
-
-// Mock Data
-import {
-  INITIAL_PAYOS_TRANSACTIONS,
-  INITIAL_GARAGE_APPLICANTS,
-  INITIAL_FLOOD_POINTS,
-  INITIAL_DISPUTES,
-  INITIAL_PAYOUTS
-} from './data/mockData';
 
 interface ToastItem {
   id: string;
   title: string;
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
+}
+
+export interface SystemAlert {
+  id: string;
+  title: string;
+  desc: string;
+  time: string;
+  level: 'CRITICAL' | 'WARNING' | 'INFO';
+  isRead?: boolean;
 }
 
 const getDefaultPath = (role: Role): string => {
@@ -71,13 +79,72 @@ function MainDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
+  const [alerts, setAlerts] = useState<SystemAlert[]>([]);
 
-  // Core Datasets
-  const [transactions] = useState(INITIAL_PAYOS_TRANSACTIONS);
-  const [applicants] = useState(INITIAL_GARAGE_APPLICANTS);
-  const [floodPoints] = useState(INITIAL_FLOOD_POINTS);
-  const [disputes] = useState(INITIAL_DISPUTES);
-  const [payouts] = useState(INITIAL_PAYOUTS);
+  // Core Datasets (Empty initial state; real data is fetched from APIs by respective views)
+  const [transactions, setTransactions] = useState<PayOSTransaction[]>([]);
+  const [applicants, setApplicants] = useState<GarageApplicant[]>([]);
+  const [disputes, setDisputes] = useState<DisputeCase[]>(INITIAL_DISPUTES);
+  const [payouts, setPayouts] = useState<PayoutItem[]>([]);
+
+  // Sync real-time alerts from backend orders API
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    let isMounted = true;
+
+    const loadLiveAlerts = async () => {
+      try {
+        if (user.role === 'STAFF' || user.role === 'ADMIN') {
+          const orders = await rescueApi.getStaffOrders().catch(() => []);
+          if (!isMounted) return;
+          const pending = orders.filter(
+            (o) => o.status === 'REQUESTED' || o.status === 'SEARCHING_MECHANIC'
+          );
+          if (pending.length > 0) {
+            const liveAlert: SystemAlert = {
+              id: `LIVE-ORD-${pending[0].id}`,
+              title: `Có ${pending.length} đơn cứu hộ mới cần điều phối`,
+              desc: `Đơn gần nhất #${pending[0].orderCode} tại ${pending[0].pickupAddress || 'chưa rõ vị trí'}.`,
+              time: 'Vừa xong',
+              level: 'CRITICAL',
+              isRead: false
+            };
+            setAlerts((prev) => {
+              if (prev.some((a) => a.id === liveAlert.id)) return prev;
+              return [liveAlert, ...prev];
+            });
+          }
+        } else if (user.role === 'GARAGE_OWNER') {
+          const orders = await rescueApi.getGarageOrders().catch(() => []);
+          if (!isMounted) return;
+          const pending = orders.filter((o) => o.status === 'ASSIGNED' || o.status === 'ACCEPTED');
+          if (pending.length > 0) {
+            const liveAlert: SystemAlert = {
+              id: `LIVE-GARAGE-${pending[0].id}`,
+              title: `Gara có ${pending.length} đơn cứu hộ đang xử lý`,
+              desc: `Đơn #${pending[0].orderCode} đang chờ thợ cơ động tiếp nhận và xử lý.`,
+              time: 'Vừa xong',
+              level: 'WARNING',
+              isRead: false
+            };
+            setAlerts((prev) => {
+              if (prev.some((a) => a.id === liveAlert.id)) return prev;
+              return [liveAlert, ...prev];
+            });
+          }
+        }
+      } catch {
+        // Ignored when offline
+      }
+    };
+
+    loadLiveAlerts();
+    const timer = setInterval(loadLiveAlerts, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [isAuthenticated, user]);
 
   const showToast = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'success') => {
     if (DEMO_MODE) {
@@ -176,29 +243,7 @@ function MainDashboard() {
     return <Navigate to={getDefaultPath(user.role)} replace />;
   }
 
-  const urgentAlerts = [
-    {
-      id: 'ALT-01',
-      title: 'Triều Cường Đạt Đỉnh 1.72m',
-      desc: 'Bán đảo Mễ Cốc (Q.8) và đường Trần Xuân Soạn (Q.7) ngập sâu trên 45cm.',
-      time: '10 phút trước',
-      level: 'CRITICAL'
-    },
-    {
-      id: 'ALT-02',
-      title: 'Cần Duyệt Chi Khẩn Cấp PayOS',
-      desc: '6 lệnh rút tiền của đối tác gara đang chờ xác thực OTP để nạp tiền cho thợ cơ động.',
-      time: '25 phút trước',
-      level: 'WARNING'
-    },
-    {
-      id: 'ALT-03',
-      title: 'Phát Hiện Vi Phạm Báo Giá Phụ Thu',
-      desc: 'Hồ sơ #DISP-8921 bị khách hàng khiếu nại thu chênh lệch 350.000đ.',
-      time: '42 phút trước',
-      level: 'INFO'
-    }
-  ];
+  const unreadAlertsCount = alerts.filter((a) => !a.isRead).length;
 
   const dashboard = (
     <div className="min-h-screen bg-surface font-body-md text-on-surface flex flex-col antialiased selection:bg-primary-container selection:text-on-primary-container">
@@ -210,7 +255,7 @@ function MainDashboard() {
         onSelectScreen={handleSelectScreen}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        unreadAlertsCount={urgentAlerts.length}
+        unreadAlertsCount={unreadAlertsCount}
         onOpenAlerts={() => setShowAlertsModal(true)}
         user={user}
         onLogout={logout}
@@ -270,7 +315,7 @@ function MainDashboard() {
             />
             <Route
               path="/staff/moderation"
-              element={<GISFloodMapView floodPoints={floodPoints} onShowToast={showToast} />}
+              element={<GISFloodMapView onShowToast={showToast} />}
             />
             <Route
               path="/staff/disputes"
@@ -280,7 +325,6 @@ function MainDashboard() {
               path="/staff/monitoring"
               element={<SLAMonitoringView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
             />
-            <Route path="/staff/batch-trips" element={<BatchTripMonitoringView />} />
 
             {/* Module C (Garage Owner) Views */}
             <Route
@@ -330,12 +374,13 @@ function MainDashboard() {
           <div className="bg-surface-container-lowest rounded-2xl border border-surface-container max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between p-space-lg border-b border-surface-container bg-surface-container-low">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-red-600">notifications_active</span>
+                <span className="material-symbols-outlined text-primary">notifications_active</span>
                 <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-                  Thông Báo & Cảnh Báo Khẩn ({urgentAlerts.length})
+                  Thông Báo & Cảnh Báo ({alerts.length})
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setShowAlertsModal(false)}
                 className="p-1 rounded-full text-secondary hover:text-on-surface hover:bg-surface-container"
               >
@@ -344,39 +389,66 @@ function MainDashboard() {
             </div>
 
             <div className="p-space-lg space-y-space-md max-h-[70vh] overflow-y-auto divide-y divide-surface-container">
-              {urgentAlerts.map((alt) => (
-                <div key={alt.id} className="pt-space-md first:pt-0 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-body-md text-on-surface">{alt.title}</span>
-                    <span
-                      className={`px-2 py-0.5 rounded text-label-xs font-bold ${
-                        alt.level === 'CRITICAL'
-                          ? 'bg-red-100 text-red-800'
-                          : alt.level === 'WARNING'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-blue-100 text-blue-800'
-                      }`}
-                    >
-                      {alt.level}
-                    </span>
-                  </div>
-                  <p className="text-body-sm text-secondary">{alt.desc}</p>
-                  <div className="text-label-xs text-secondary font-data-mono pt-1">{alt.time}</div>
+              {alerts.length === 0 ? (
+                <div className="py-8 text-center text-secondary text-body-sm">
+                  <span className="material-symbols-outlined text-[36px] text-secondary/40 block mb-2">notifications_none</span>
+                  <p>Hiện không có thông báo hoặc cảnh báo khẩn cấp nào.</p>
                 </div>
-              ))}
+              ) : (
+                alerts.map((alt) => (
+                  <div
+                    key={alt.id}
+                    onClick={() => {
+                      setAlerts((prev) =>
+                        prev.map((a) => (a.id === alt.id ? { ...a, isRead: true } : a))
+                      );
+                    }}
+                    className={`pt-space-md first:pt-0 space-y-1 cursor-pointer transition-opacity ${
+                      alt.isRead ? 'opacity-60' : 'opacity-100 font-medium'
+                    }`}
+                    title="Nhấn để đánh dấu đã đọc"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-body-md text-on-surface flex items-center gap-2">
+                        {!alt.isRead && (
+                          <span className="w-2 h-2 rounded-full bg-primary inline-block flex-shrink-0" />
+                        )}
+                        {alt.title}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-label-xs font-bold ${
+                          alt.level === 'CRITICAL'
+                            ? 'bg-red-100 text-red-800'
+                            : alt.level === 'WARNING'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
+                        {alt.level}
+                      </span>
+                    </div>
+                    <p className="text-body-sm text-secondary">{alt.desc}</p>
+                    <div className="text-label-xs text-secondary font-data-mono pt-1">{alt.time}</div>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="p-space-md bg-surface-container-low border-t border-surface-container flex items-center justify-between">
               <button
+                type="button"
                 onClick={() => {
+                  setAlerts((prev) => prev.map((a) => ({ ...a, isRead: true })));
                   showToast('Đã đánh dấu', 'Đã đọc toàn bộ thông báo khẩn', 'info');
                   setShowAlertsModal(false);
                 }}
-                className="px-space-md py-1.5 rounded font-label-md text-label-md text-secondary hover:text-on-surface"
+                disabled={alerts.length === 0 || unreadAlertsCount === 0}
+                className="px-space-md py-1.5 rounded font-label-md text-label-md text-secondary hover:text-on-surface disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Đánh dấu đã đọc tất cả
               </button>
               <button
+                type="button"
                 onClick={() => setShowAlertsModal(false)}
                 className="px-space-md py-1.5 rounded bg-primary-container text-on-primary-container font-label-md text-label-md font-bold"
               >

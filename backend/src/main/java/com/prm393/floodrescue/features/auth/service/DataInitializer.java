@@ -18,6 +18,12 @@ import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffReposito
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import com.prm393.floodrescue.features.finance.entity.DisputeStatus;
+import com.prm393.floodrescue.features.finance.entity.DisputeType;
+import com.prm393.floodrescue.features.finance.entity.RefundSource;
+import com.prm393.floodrescue.features.finance.entity.ServiceDispute;
+import com.prm393.floodrescue.features.finance.repository.ServiceDisputeRepository;
+import java.time.LocalDateTime;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -38,6 +44,7 @@ public class DataInitializer implements CommandLineRunner {
     private final GarageBranchRepository branchRepository;
     private final MechanicStaffRepository mechanicRepository;
     private final ServiceItemRepository serviceItemRepository;
+    private final ServiceDisputeRepository serviceDisputeRepository;
 
     @Override
     @Transactional
@@ -130,6 +137,76 @@ public class DataInitializer implements CommandLineRunner {
             seedServiceItemIfNotExists(garage, "Chở xe qua ngập (Chuyến riêng)", ServiceType.CROSSING, new BigDecimal("120000"), "Chở riêng 1 xe máy và khách qua đoạn đường ngập sâu bằng phương tiện chuyên dụng đến nơi khô ráo");
             seedServiceItemIfNotExists(garage, "Sấy bugi & Xả nước buồng đốt", ServiceType.REPAIR_ONSITE, new BigDecimal("80000"), "Khắc phục xe chết máy do ngập nước tại chỗ");
             seedServiceItemIfNotExists(garage, "Kéo xe ngập nước về gara", ServiceType.TOWING, new BigDecimal("150000"), "Kéo xe không thể sửa tại chỗ về gara để kiểm tra và khắc phục");
+
+            // 6. Seed demo disputes for Staff investigation & Admin refund
+            if (serviceDisputeRepository.count() == 0 && customer != null) {
+                ServiceDispute dispute1 = ServiceDispute.builder()
+                        .disputeCode("REF-8924")
+                        .rescueOrderId(8924L)
+                        .rescueCode("#PRM-8924")
+                        .customer(customer)
+                        .garage(garage)
+                        .disputeType(DisputeType.OVERCHARGE)
+                        .originalAmount(new BigDecimal("150000"))
+                        .requestedRefundAmount(new BigDecimal("50000"))
+                        .proposedRefundAmount(new BigDecimal("50000"))
+                        .customerReason("Gara thu vượt giá: tài xế tự ý phụ thu thêm 50.000đ tiền sấy bugi ngoài bảng giá sàn đã niêm yết trên ứng dụng.")
+                        .evidenceImageUrls("https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&auto=format&fit=crop&q=80,https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80")
+                        .status(DisputeStatus.STAFF_REVIEW)
+                        .refundSource(RefundSource.GARAGE_WALLET)
+                        .payosOrderCode(892401L)
+                        .build();
+                serviceDisputeRepository.save(dispute1);
+
+                ServiceDispute dispute2 = ServiceDispute.builder()
+                        .disputeCode("REF-8201")
+                        .rescueOrderId(8201L)
+                        .rescueCode("#PRM-8201")
+                        .customer(customer)
+                        .garage(garage)
+                        .disputeType(DisputeType.DAMAGE)
+                        .originalAmount(new BigDecimal("240000"))
+                        .requestedRefundAmount(new BigDecimal("120000"))
+                        .proposedRefundAmount(new BigDecimal("120000"))
+                        .customerReason("Hư hỏng xe: Trong quá trình chằng buộc kéo xe qua điểm ngập, dây xích làm móp yếm phải xe máy SH.")
+                        .evidenceImageUrls("https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=600&auto=format&fit=crop&q=80")
+                        .status(DisputeStatus.ADMIN_APPROVAL)
+                        .staffReviewer(staff)
+                        .staffFindingNote("Đã kiểm tra ảnh chụp hiện trường trầy xước yếm xe và đối chất với thợ cứu hộ. Gara thừa nhận lỗi chằng dây, đề xuất hoàn 120.000đ từ ví Gara.")
+                        .staffReviewedAt(LocalDateTime.now().minusHours(2))
+                        .refundSource(RefundSource.GARAGE_WALLET)
+                        .payosOrderCode(820102L)
+                        .build();
+                serviceDisputeRepository.save(dispute2);
+
+                ServiceDispute dispute3 = ServiceDispute.builder()
+                        .disputeCode("REF-7819")
+                        .rescueOrderId(7819L)
+                        .rescueCode("#PRM-7819")
+                        .customer(customer)
+                        .garage(garage)
+                        .disputeType(DisputeType.POOR_QUALITY)
+                        .originalAmount(new BigDecimal("450000"))
+                        .requestedRefundAmount(new BigDecimal("450000"))
+                        .proposedRefundAmount(new BigDecimal("450000"))
+                        .approvedRefundAmount(new BigDecimal("450000"))
+                        .customerReason("Dịch vụ kém chất lượng: Kéo xe về gara nhưng không sấy khô bộ điện làm xe chết máy lại ngay sau khi bàn giao.")
+                        .evidenceImageUrls("https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&auto=format&fit=crop&q=80")
+                        .status(DisputeStatus.REFUNDED)
+                        .staffReviewer(staff)
+                        .staffFindingNote("Khách hàng khiếu nại đúng thực tế, gara đồng ý hoàn lại 100% chi phí cứu hộ.")
+                        .staffReviewedAt(LocalDateTime.now().minusDays(1))
+                        .adminApprover(admin)
+                        .adminResolutionNote("Admin đã duyệt bồi hoàn 100% từ ví Gara qua cổng PayOS VietQR.")
+                        .refundSource(RefundSource.GARAGE_WALLET)
+                        .refundReferenceCode("PAYOS-REV-781903")
+                        .payosOrderCode(781903L)
+                        .resolvedAt(LocalDateTime.now().minusHours(5))
+                        .build();
+                serviceDisputeRepository.save(dispute3);
+
+                log.info("Seeded 3 demo ServiceDisputes (#PRM-8924 STAFF_REVIEW, #PRM-8201 ADMIN_APPROVAL, #PRM-7819 REFUNDED)");
+            }
         }
     }
 

@@ -14,7 +14,6 @@ export type ScreenId =
   | 'moderation'
   | 'disputes'
   | 'monitoring'
-  | 'batch-trips'
   // Module C
   | 'owner-dashboard'
   | 'services'
@@ -23,20 +22,6 @@ export type ScreenId =
   | 'garage-transport'
   | 'staff-accounts';
 
-export interface BatchTrip {
-  id: number;
-  mechanicId: number;
-  branchId: number;
-  capacity: number;
-  currentVehicleCount: number;
-  availableSlots: number;
-  pickupPlace: string;
-  discountedPricePerVehicle: number;
-  status: 'GATHERING' | 'READY' | 'PICKING_UP' | 'MOVING' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
-  departureTime: string;
-  createdAt: string;
-  completedAt?: string;
-}
 
 export interface PayOSTransaction {
   id: string;
@@ -152,7 +137,7 @@ export interface DisputeCase {
   requestedRefund: number;
   inspectorNote: string;
   evidenceReceiptUrl: string;
-  evidenceAppScreenUrl: string;
+  evidenceAppScreenUrl?: string;
   audioDuration: string;
   diffItems: Array<{
     name: string;
@@ -162,7 +147,18 @@ export interface DisputeCase {
     diff: number;
     violationCode?: string;
   }>;
-  status: 'STAFF_REVIEW' | 'ADMIN_APPROVAL' | 'RESOLVED';
+  inspectorName?: string;
+  inspectorId?: string;
+  severity?: string;
+  evidenceTariffUrl?: string;
+  evidenceUrls?: string[];
+  refundReferenceCode?: string;
+  customerReason?: string;
+  garageWalletBalance?: number;
+  adminResolutionNote?: string;
+  staffReviewedAt?: string;
+  resolvedAt?: string;
+  status: 'STAFF_REVIEW' | 'ADMIN_APPROVAL' | 'REFUNDED' | 'REJECTED' | 'RESOLVED';
 }
 
 export interface PayoutItem {
@@ -182,3 +178,6 @@ export interface PayoutItem {
   ekycVerified: boolean;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
 }
+
+
+

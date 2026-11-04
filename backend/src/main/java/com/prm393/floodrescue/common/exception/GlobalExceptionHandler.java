@@ -22,6 +22,20 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ErrorResponse> handleTooManyRequests(
+            TooManyRequestsException ex, HttpServletRequest request) {
+        ErrorResponse err =
+                ErrorResponse.builder()
+                        .status(HttpStatus.TOO_MANY_REQUESTS.value())
+                        .error(HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase())
+                        .message(ex.getMessage())
+                        .path(request.getRequestURI())
+                        .timestamp(LocalDateTime.now())
+                        .build();
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(err);
+    }
+
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErrorResponse> handleBadRequest(
             BadRequestException ex, HttpServletRequest request) {

@@ -1,3 +1,4 @@
+import logoImg from '../assets/logo.png';
 import React from 'react';
 import { ModuleType, ScreenId } from '../types';
 import {
@@ -33,7 +34,6 @@ const navigation = {
     { id: 'verification', label: 'Duyệt gara', icon: BadgeCheck },
     { id: 'moderation', label: 'Bản đồ ngập', icon: Map },
     { id: 'disputes', label: 'Tranh chấp', icon: Scale },
-    { id: 'batch-trips', label: 'Chuyến gom', icon: Truck },
     { id: 'monitoring', label: 'Chất lượng dịch vụ', icon: Activity }
   ],
   owner: [
@@ -69,9 +69,9 @@ export const Sidebar: React.FC<{
       </nav>
     </div>
     <div className="sidebar-footer">
-      <LifeBuoy size={18} />
+      <img src={logoImg} alt="HydroRescue" style={{ width: 22, height: 22, borderRadius: 4, objectFit: 'contain' }} />
       <span>
-        RescueOps<small>Nền tảng quản lý cứu hộ</small>
+        HydroRescue<small>Nền tảng quản lý cứu hộ</small>
       </span>
     </div>
   </aside>

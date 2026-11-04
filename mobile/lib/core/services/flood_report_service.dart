@@ -103,9 +103,9 @@ class FloodReportService {
       if (response.statusCode == 200 && data['success'] == true) {
         return data['data']['url'] as String;
       }
-      return 'https://res.cloudinary.com/demo/image/upload/floodrescue/$folder/simulated_$fileName';
+      throw Exception(data['message'] ?? 'Upload ảnh thất bại');
     } catch (e) {
-      return 'https://res.cloudinary.com/demo/image/upload/floodrescue/$folder/simulated_$fileName';
+      rethrow;
     }
   }
 }

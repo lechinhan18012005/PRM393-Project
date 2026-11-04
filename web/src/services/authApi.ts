@@ -14,6 +14,40 @@ const TOKEN_KEY = 'floodrescue_access_token';
 const REFRESH_TOKEN_KEY = 'floodrescue_refresh_token';
 const USER_KEY = 'floodrescue_user';
 
+export const BACKEND_CONNECTION_ERROR_MESSAGE =
+  'Không thể kết nối đến máy chủ backend. Vui lòng kiểm tra lại kết nối mạng hoặc đảm bảo backend đang hoạt động.';
+
+export function isConnectionError(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof TypeError) return true;
+  const msg = String((error as any)?.message || error).toLowerCase();
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network error') ||
+    msg.includes('load failed') ||
+    msg.includes('fetch failed') ||
+    msg.includes('network request failed') ||
+    msg.includes('err_connection') ||
+    msg.includes('aborterror')
+  );
+}
+
+export function formatAuthErrorMessage(error: unknown, fallbackMessage = 'Đã có lỗi xảy ra. Vui lòng thử lại.'): string {
+  if (isConnectionError(error)) {
+    return BACKEND_CONNECTION_ERROR_MESSAGE;
+  }
+  const rawMsg = (error as any)?.message;
+  if (typeof rawMsg === 'string' && rawMsg.trim()) {
+    const trimmed = rawMsg.trim();
+    if (trimmed.toLowerCase() === 'bad credentials') {
+      return 'Tài khoản hoặc mật khẩu không chính xác.';
+    }
+    return trimmed;
+  }
+  return fallbackMessage;
+}
+
 export const authStorage = {
   getToken: () => localStorage.getItem(TOKEN_KEY),
   setToken: (token: string) => localStorage.setItem(TOKEN_KEY, token),
@@ -39,17 +73,48 @@ export const authStorage = {
 
 export const authApi = {
   login: async (payload: LoginPayload): Promise<AuthResponse> => {
-    const response = await fetch(`${API_BASE_URL}/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ ...payload, platform: 'WEB' })
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ...payload, platform: 'WEB' })
+      });
+    } catch {
+      throw new Error(BACKEND_CONNECTION_ERROR_MESSAGE);
+    }
 
-    const data: ApiResponse<AuthResponse> = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || 'Đăng nhập không thành công');
+    let data: any = null;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+    }
+
+    if (!response.ok || (data && data.success === false)) {
+      if (response.status >= 502 && response.status <= 504) {
+        throw new Error(`Máy chủ backend tạm thời không phản hồi (Mã lỗi ${response.status}). Vui lòng thử lại sau.`);
+      }
+      if (response.status === 401) {
+        const msg = data?.message;
+        if (!msg || msg.toLowerCase() === 'bad credentials') {
+          throw new Error('Tài khoản hoặc mật khẩu không chính xác.');
+        }
+        throw new Error(msg);
+      }
+      if (response.status >= 500) {
+        throw new Error(data?.message || `Máy chủ backend đang gặp sự cố (Mã lỗi ${response.status}). Vui lòng thử lại sau.`);
+      }
+      throw new Error(data?.message || 'Đăng nhập không thành công. Vui lòng kiểm tra lại thông tin.');
+    }
+
+    if (!data || !data.data || !data.data.user) {
+      throw new Error('Phản hồi từ máy chủ không hợp lệ.');
     }
 
     if (!['ADMIN', 'STAFF', 'GARAGE_OWNER'].includes(data.data.user.role)) {
@@ -63,20 +128,44 @@ export const authApi = {
   },
 
   register: async (payload: RegisterPayload): Promise<AuthResponse> => {
-    const response = await fetch(`${API_BASE_URL.replace(/\/auth$/, '')}/onboarding/garage`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        account: { ...payload, application: undefined },
-        application: payload.application
-      })
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL.replace(/\/auth$/, '')}/onboarding/garage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          account: { ...payload, application: undefined },
+          application: payload.application
+        })
+      });
+    } catch {
+      throw new Error(BACKEND_CONNECTION_ERROR_MESSAGE);
+    }
 
-    const data: ApiResponse<AuthResponse> = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || 'Đăng ký không thành công');
+    let data: any = null;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+    }
+
+    if (!response.ok || (data && data.success === false)) {
+      if (response.status >= 502 && response.status <= 504) {
+        throw new Error(`Máy chủ backend tạm thời không phản hồi (Mã lỗi ${response.status}). Vui lòng thử lại sau.`);
+      }
+      if (response.status >= 500) {
+        throw new Error(data?.message || `Máy chủ backend đang gặp sự cố (Mã lỗi ${response.status}). Vui lòng thử lại sau.`);
+      }
+      throw new Error(data?.message || 'Đăng ký không thành công. Vui lòng thử lại.');
+    }
+
+    if (!data || !data.data || !data.data.user) {
+      throw new Error('Phản hồi từ máy chủ không hợp lệ.');
     }
 
     if (!['ADMIN', 'STAFF', 'GARAGE_OWNER'].includes(data.data.user.role)) {
@@ -93,16 +182,34 @@ export const authApi = {
     const token = authStorage.getToken();
     if (!token) throw new Error('Chưa đăng nhập');
 
-    const response = await fetch(`${API_BASE_URL}/me`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/me`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+    } catch {
+      throw new Error(BACKEND_CONNECTION_ERROR_MESSAGE);
+    }
 
-    const data: ApiResponse<User> = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || 'Không thể lấy thông tin tài khoản');
+    let data: any = null;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+    }
+
+    if (!response.ok || (data && data.success === false)) {
+      throw new Error(data?.message || 'Không thể lấy thông tin tài khoản');
+    }
+
+    if (!data || !data.data) {
+      throw new Error('Phản hồi từ máy chủ không hợp lệ.');
     }
 
     if (!['ADMIN', 'STAFF', 'GARAGE_OWNER'].includes(data.data.role)) {
