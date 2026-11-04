@@ -763,6 +763,126 @@ public class RescueDispatchService {
         return orders.stream().map(this::mapToResponse).toList();
     }
 
+    @Transactional
+    public RescueOrderResponse staffAssignMechanic(User staffUser, Long orderId, Long mechanicStaffId) {
+        if (staffUser.getRole() != Role.STAFF && staffUser.getRole() != Role.ADMIN) {
+            throw new org.springframework.security.access.AccessDeniedException("Chỉ STAFF hoặc ADMIN mới có quyền điều phối!");
+        }
+
+        RescueOrder order = rescueOrderRepository.findByIdWithLock(orderId)
+                .or(() -> rescueOrderRepository.findById(orderId))
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn cứu hộ không tồn tại: " + orderId));
+
+        if (order.getStatus() == RescueOrderStatus.COMPLETED || order.getStatus() == RescueOrderStatus.CANCELLED) {
+            throw new BadRequestException("Không thể điều phối ca cứu hộ đã hoàn thành hoặc đã bị hủy!");
+        }
+
+        MechanicStaff staff = mechanicRepository.findById(mechanicStaffId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin kỹ thuật viên: " + mechanicStaffId));
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // Hủy các offer PENDING cũ của đơn nếu có
+        List<RescueOffer> otherOffers = rescueOfferRepository.findByRescueOrderIdOrderByCreatedAtAsc(order.getId());
+        for (RescueOffer o : otherOffers) {
+            if (o.getStatus() == RescueOfferStatus.PENDING) {
+                o.setStatus(RescueOfferStatus.CANCELLED);
+                rescueOfferRepository.save(o);
+            }
+        }
+
+        RescueOrderStatus oldStatus = order.getStatus();
+        order.setStatus(RescueOrderStatus.DISPATCHED);
+        order.setMechanicStaff(staff);
+        order.setBranch(staff.getBranch());
+        order.setAcceptedAt(now);
+        order = rescueOrderRepository.save(order);
+
+        staff.setWorkingStatus(MechanicStatus.BUSY);
+        staff.setLastHeartbeatAt(now);
+        mechanicRepository.save(staff);
+
+        String mechName = staff.getUser() != null ? staff.getUser().getFullName() : "KTV-" + staff.getId();
+        String mechPhone = staff.getUser() != null ? staff.getUser().getPhone() : "";
+        recordAudit(order.getId(), oldStatus, RescueOrderStatus.DISPATCHED, staffUser.getId(), staffUser.getUsername(),
+                "Staff điều phối thủ công KTV: " + mechName + " (" + mechPhone + ")");
+
+        broadcastOrderUpdate(order);
+        log.info("Staff {} manually assigned mechanic {} to order {}", staffUser.getUsername(), mechName, order.getOrderCode());
+        return mapToResponse(order);
+    }
+
+    @Transactional
+    public RescueOrderResponse staffRetryDispatch(User staffUser, Long orderId) {
+        if (staffUser.getRole() != Role.STAFF && staffUser.getRole() != Role.ADMIN) {
+            throw new org.springframework.security.access.AccessDeniedException("Chỉ STAFF hoặc ADMIN mới có quyền điều phối!");
+        }
+
+        RescueOrder order = rescueOrderRepository.findByIdWithLock(orderId)
+                .or(() -> rescueOrderRepository.findById(orderId))
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn cứu hộ không tồn tại: " + orderId));
+
+        RescueOrderStatus oldStatus = order.getStatus();
+        if (order.getStatus() == RescueOrderStatus.DISPATCH_FAILED) {
+            order.setStatus(RescueOrderStatus.REQUESTED);
+            order = rescueOrderRepository.save(order);
+        }
+
+        dispatchNextCandidate(order);
+
+        recordAudit(order.getId(), oldStatus, order.getStatus(), staffUser.getId(), staffUser.getUsername(),
+                "Staff kích hoạt tìm kiếm lại KTV");
+
+        broadcastOrderUpdate(order);
+        return mapToResponse(order);
+    }
+
+    @Transactional
+    public RescueOrderResponse staffCancelOrder(User staffUser, Long orderId, CancelOrderRequest request) {
+        if (staffUser.getRole() != Role.STAFF && staffUser.getRole() != Role.ADMIN) {
+            throw new org.springframework.security.access.AccessDeniedException("Chỉ STAFF hoặc ADMIN mới có quyền hủy đơn!");
+        }
+
+        RescueOrder order = rescueOrderRepository.findByIdWithLock(orderId)
+                .or(() -> rescueOrderRepository.findById(orderId))
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn cứu hộ không tồn tại: " + orderId));
+
+        if (order.getStatus() == RescueOrderStatus.COMPLETED || order.getStatus() == RescueOrderStatus.CANCELLED) {
+            throw new BadRequestException("Đơn cứu hộ đã ở trạng thái kết thúc, không thể hủy!");
+        }
+
+        RescueOrderStatus oldStatus = order.getStatus();
+        LocalDateTime now = LocalDateTime.now();
+        order.setStatus(RescueOrderStatus.CANCELLED);
+        order.setCancelledAt(now);
+        String reason = request != null && request.getReason() != null ? request.getReason() : "Staff hủy khẩn cấp";
+        order.setCancelReason(reason);
+
+        // Hủy offer pending
+        List<RescueOffer> otherOffers = rescueOfferRepository.findByRescueOrderIdOrderByCreatedAtAsc(order.getId());
+        for (RescueOffer o : otherOffers) {
+            if (o.getStatus() == RescueOfferStatus.PENDING) {
+                o.setStatus(RescueOfferStatus.CANCELLED);
+                rescueOfferRepository.save(o);
+            }
+        }
+
+        // Giải phóng thợ nếu có
+        if (order.getMechanicStaff() != null) {
+            MechanicStaff staff = order.getMechanicStaff();
+            staff.setWorkingStatus(MechanicStatus.AVAILABLE);
+            mechanicRepository.save(staff);
+        }
+
+        order = rescueOrderRepository.save(order);
+
+        recordAudit(order.getId(), oldStatus, RescueOrderStatus.CANCELLED, staffUser.getId(), staffUser.getUsername(),
+                "Staff hủy đơn: " + reason);
+
+        broadcastOrderUpdate(order);
+        return mapToResponse(order);
+    }
+
     public void recordAudit(Long orderId, RescueOrderStatus from, RescueOrderStatus to, Long userId, String username, String note) {
         RescueOrderAudit audit = RescueOrderAudit.builder()
                 .orderId(orderId)

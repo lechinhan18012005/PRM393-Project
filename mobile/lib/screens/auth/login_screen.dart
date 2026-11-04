@@ -103,60 +103,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: Column(
                   children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 88,
-                          height: 88,
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryContainer.withValues(
-                              alpha: 0.4,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        Container(
-                          width: 72,
-                          height: 72,
-                          decoration: const BoxDecoration(
-                            color: AppColors.primaryOrange,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 8,
-                                offset: Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.two_wheeler,
-                            size: 40,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Positioned(
-                          right: 4,
-                          bottom: 4,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: AppColors.secondary,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.emergency,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Image.asset(
+                      'assets/logo.png',
+                      width: 84,
+                      height: 84,
+                      fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      'HydroRescue Vietnam',
+                      'HydroRescue',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -217,8 +172,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: InputDecoration(
                         labelText: 'Số điện thoại hoặc Email',
                         hintText: _selectedRole == 'CUSTOMER'
-                            ? 'customer@floodrescue.vn hoặc 0900000005'
-                            : 'mechanic@floodrescue.vn hoặc 0900000004',
+                            ? 'customer@hydrorescue.vn hoặc 0900000005'
+                            : 'mechanic@hydrorescue.vn hoặc 0900000004',
                         prefixIcon: const Icon(Icons.account_circle_outlined),
                         filled: true,
                         fillColor: AppColors.surfaceContainerLowest,

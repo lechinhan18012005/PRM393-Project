@@ -15,6 +15,7 @@ class FloodReportModel {
   final String moderationStatus; // PENDING, APPROVED, EXPIRED, REJECTED
   final String? moderatorNote;
   final String? nearbyStations;
+  final int? recededConfirmCount;
   final String? createdAt;
 
   FloodReportModel({
@@ -32,6 +33,7 @@ class FloodReportModel {
     required this.moderationStatus,
     this.moderatorNote,
     this.nearbyStations,
+    this.recededConfirmCount,
     this.createdAt,
   });
 
@@ -86,7 +88,10 @@ class FloodReportModel {
       clusterCount: json['clusterCount'] is int ? json['clusterCount'] : 1,
       moderationStatus: json['moderationStatus'] ?? 'PENDING',
       moderatorNote: json['moderatorNote'],
-      nearbyStations: json['nearbyStations'] ?? '2 Đội thợ cơ động đang túc trực',
+      nearbyStations: json['nearbyStations']?.toString(),
+      recededConfirmCount: json['recededConfirmCount'] is int
+          ? json['recededConfirmCount']
+          : int.tryParse(json['recededConfirmCount']?.toString() ?? ''),
       createdAt: json['createdAt']?.toString(),
     );
   }
@@ -107,6 +112,7 @@ class FloodReportModel {
       'moderationStatus': moderationStatus,
       'moderatorNote': moderatorNote,
       'nearbyStations': nearbyStations,
+      'recededConfirmCount': recededConfirmCount,
       'createdAt': createdAt,
     };
   }

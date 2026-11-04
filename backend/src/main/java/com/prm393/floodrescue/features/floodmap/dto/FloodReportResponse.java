@@ -30,5 +30,6 @@ public class FloodReportResponse {
     private String moderatedByName;
     private String moderatorNote;
     private String nearbyStations;
+    private Integer recededConfirmCount;
     private LocalDateTime createdAt;
 }

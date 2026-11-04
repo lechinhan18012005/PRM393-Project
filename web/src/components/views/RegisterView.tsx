@@ -1,6 +1,8 @@
+import logoImg from '../../assets/logo.png';
 import React, { useState } from 'react';
 import { DocumentUpload } from '../DocumentUpload';
 import { useAuth } from '../../context/AuthContext';
+import { formatAuthErrorMessage } from '../../services/authApi';
 import { Shield, AlertCircle, ArrowLeft, Loader2, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 interface RegisterViewProps {
@@ -256,7 +258,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
       });
       setSuccess('Đăng ký tài khoản thành công! Đang chuyển hướng...');
     } catch (err: any) {
-      setGeneralError(err.message || 'Đăng ký thất bại. Vui lòng kiểm tra lại thông tin.');
+      setGeneralError(formatAuthErrorMessage(err, 'Đăng ký thất bại. Vui lòng kiểm tra lại thông tin.'));
     } finally {
       setSubmitting(false);
     }
@@ -274,7 +276,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
         <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-600 flex items-center justify-center shrink-0">
-              <Shield className="w-4 h-4" />
+              <img src={logoImg} alt="HydroRescue" className="w-5 h-5 object-contain" />
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
@@ -413,7 +415,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onSwitchToLogin }) =
                   value={email}
                   onChange={(e) => handleChange('email', e.target.value)}
                   onBlur={() => handleBlur('email')}
-                  placeholder="VD: partner@floodrescue.vn"
+                  placeholder="VD: partner@hydrorescue.vn"
                   className={`w-full px-3 py-1.5 bg-slate-50 border rounded-lg text-slate-900 placeholder-slate-400 text-xs focus:outline-none focus:ring-1 ${
                     touched.email && errors.email
                       ? 'border-red-500 focus:ring-red-500/30'

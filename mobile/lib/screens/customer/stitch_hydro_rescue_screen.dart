@@ -8,7 +8,12 @@ import '../../core/widgets/logout_dialog.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/services/rescue_service.dart';
 import '../../core/widgets/rescue_ui.dart';
-import '../../core/widgets/rescue_map_painter.dart';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import '../../providers/flood_report_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/vehicle_provider.dart';
 import 'service_selection_screen.dart';
@@ -18,7 +23,6 @@ import 'flood_map_screen.dart';
 import 'rescue_history_screen.dart';
 import 'vehicle_profile_screen.dart';
 import 'account_screen.dart';
-import 'customer_demo_data.dart';
 import 'radar_dispatch_screen.dart';
 import 'live_tracking_screen.dart';
 import 'vietqr_payment_screen.dart';
@@ -40,9 +44,17 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
   // Read through defaults instead of relying on field initializers being rerun.
   int? _tab;
   int get _currentTab => _tab ?? 0;
-  int _vehicle = 0;
   Set<int>? _visited;
   Set<int> get _visitedTabs => _visited ??= <int>{0};
+
+  bool get _isTestEnvironment {
+    if (kIsWeb) return false;
+    try {
+      return Platform.environment.containsKey('FLUTTER_TEST');
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   void initState() {
@@ -148,26 +160,48 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                     },
                   ),
                 ),
-              ] else ...[
-                const RescueDemoNote(
-                  'Xe minh họa · Lựa chọn chỉ lưu trong phiên này',
+              ] else if (vehicleProvider?.isLoading == true) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
                 ),
-                ...customerDemoVehicles.indexed.map(
-                  (entry) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const CircleAvatar(
-                      backgroundColor: AppColors.primaryContainer,
-                      child: Icon(Icons.two_wheeler, color: AppColors.primary),
-                    ),
-                    title: Text(entry.$2.name),
-                    subtitle: Text(entry.$2.plate),
-                    trailing: _vehicle == entry.$1
-                        ? const Icon(Icons.check_circle, color: AppColors.primary)
-                        : null,
-                    onTap: () {
-                      setState(() => _vehicle = entry.$1);
-                      Navigator.pop(sheet);
-                    },
+              ] else ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.two_wheeler_outlined,
+                        size: 48,
+                        color: AppColors.secondary,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Chưa có phương tiện nào',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Vui lòng thêm xe của bạn để hệ thống hỗ trợ cứu hộ chính xác nhất.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.secondary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheet);
+                          _select(3);
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Thêm phương tiện ngay'),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -186,7 +220,7 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'FLOOD RESCUE / KHÁCH HÀNG',
+                  'HYDRORESCUE / KHÁCH HÀNG',
                   style: TextStyle(
                     fontSize: 9,
                     letterSpacing: 1.4,
@@ -236,10 +270,7 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
             ? const RescueHistoryScreen()
             : const SizedBox.shrink(),
         _visitedTabs.contains(3)
-            ? VehicleProfileScreen(
-                selectedVehicle: _vehicle,
-                onSelectVehicle: (i) => setState(() => _vehicle = i),
-              )
+            ? const VehicleProfileScreen()
             : const SizedBox.shrink(),
         _visitedTabs.contains(4)
             ? const AccountScreen()
@@ -283,9 +314,13 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
   );
   Widget _home() {
     final name = context.watch<AuthProvider?>()?.user?.fullName;
-    final realVehicle = context.watch<VehicleProvider?>()?.selectedVehicle;
-    final vehicleName = realVehicle?.displayName ?? customerDemoVehicles[_vehicle].name;
-    final vehiclePlate = realVehicle?.licensePlate ?? customerDemoVehicles[_vehicle].plate;
+    final vehicleProvider = context.watch<VehicleProvider?>();
+    final realVehicle = vehicleProvider?.selectedVehicle;
+    final hasVehicles = (vehicleProvider?.vehicles ?? []).isNotEmpty;
+    final vehicleName = realVehicle?.displayName ??
+        (hasVehicles ? 'Chưa chọn phương tiện' : 'Chưa có phương tiện');
+    final vehiclePlate = realVehicle?.licensePlate ??
+        (hasVehicles ? 'Nhấn để chọn xe' : 'Nhấn để thêm xe');
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
@@ -314,8 +349,8 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const RescueLabel(
-                    'Thông tin vị trí & xe minh họa',
+                  RescueLabel(
+                    hasVehicles ? 'Thông tin xe cứu hộ' : 'Chưa có xe cứu hộ',
                     color: AppColors.secondary,
                   ),
                   const SizedBox(height: 6),
@@ -328,7 +363,13 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                   InkWell(
                     key: const Key('choose-vehicle'),
                     borderRadius: BorderRadius.circular(10),
-                    onTap: _chooseVehicle,
+                    onTap: () {
+                      if (!hasVehicles && !(vehicleProvider?.isLoading ?? false)) {
+                        _select(3);
+                      } else {
+                        _chooseVehicle();
+                      }
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(
@@ -339,8 +380,10 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                               color: AppColors.primaryContainer,
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(
-                              Icons.two_wheeler,
+                            child: Icon(
+                              realVehicle?.vehicleType == 'ELECTRIC'
+                                  ? Icons.electric_moped
+                                  : Icons.two_wheeler,
                               color: AppColors.primary,
                               size: 22,
                             ),
@@ -380,12 +423,26 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     key: const Key('request-rescue'),
-                    onPressed: () => _open(
-                      ServiceSelectionScreen(
-                        vehicleName: vehicleName,
-                        vehiclePlate: vehiclePlate,
-                      ),
-                    ),
+                    onPressed: () {
+                      if (realVehicle == null && !hasVehicles) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Vui lòng thêm phương tiện trước khi yêu cầu cứu hộ'),
+                            action: SnackBarAction(
+                              label: 'Thêm xe',
+                              onPressed: () => _select(3),
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      _open(
+                        ServiceSelectionScreen(
+                          vehicleName: vehicleName,
+                          vehiclePlate: realVehicle?.licensePlate ?? vehiclePlate,
+                        ),
+                      );
+                    },
                     icon: const Icon(Icons.sos_rounded, size: 24),
                     label: const Text('Gọi cứu hộ'),
                   ),
@@ -445,81 +502,203 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
                 child: const Text('Xem bản đồ'),
               ),
             ),
-            RescuePanel(
-              padding: 0,
-              child: InkWell(
-                onTap: () => _select(1),
-                child: SizedBox(
-                  height: 165,
-                  child: Stack(
+            Consumer<FloodReportProvider>(
+              builder: (context, floodProvider, _) {
+                final activePoints = floodProvider.floodPoints;
+                final initialCenter = activePoints.isNotEmpty
+                    ? LatLng(
+                        activePoints.first.latitude,
+                        activePoints.first.longitude,
+                      )
+                    : const LatLng(10.7769, 106.7009);
+
+                return RescuePanel(
+                  padding: 0,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      onTap: () => _select(1),
+                      child: SizedBox(
+                        height: 165,
+                        child: Stack(
+                          children: [
+                            IgnorePointer(
+                              child: FlutterMap(
+                                options: MapOptions(
+                                  initialCenter: initialCenter,
+                                  initialZoom: 13.0,
+                                  interactionOptions:
+                                      const InteractionOptions(
+                                    flags: InteractiveFlag.none,
+                                  ),
+                                ),
+                                children: [
+                                  if (!_isTestEnvironment)
+                                    TileLayer(
+                                      urlTemplate:
+                                          'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+                                      subdomains: const ['0', '1', '2', '3'],
+                                      userAgentPackageName:
+                                          'com.prm393.floodrescue.mobile',
+                                    ),
+                                  MarkerLayer(
+                                    markers: activePoints.isNotEmpty
+                                        ? activePoints.take(5).map((pt) {
+                                            return Marker(
+                                              point: LatLng(
+                                                pt.latitude,
+                                                pt.longitude,
+                                              ),
+                                              width: 32,
+                                              height: 32,
+                                              alignment:
+                                                  Alignment.topCenter,
+                                              child: Container(
+                                                decoration:
+                                                    const BoxDecoration(
+                                                  color: Colors.white,
+                                                  shape: BoxShape.circle,
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black26,
+                                                      blurRadius: 4,
+                                                    ),
+                                                  ],
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.all(4),
+                                                child: Icon(
+                                                  Icons.water_drop,
+                                                  size: 18,
+                                                  color: pt.waterDepthLevel ==
+                                                          'SEAT_60CM_PLUS'
+                                                      ? Colors.red
+                                                      : (pt.waterDepthLevel ==
+                                                              'KNEE_40CM'
+                                                          ? Colors.deepOrange
+                                                          : Colors
+                                                              .amber
+                                                              .shade800),
+                                                ),
+                                              ),
+                                            );
+                                          }).toList()
+                                        : [
+                                            const Marker(
+                                              point: LatLng(
+                                                  10.7769, 106.7009),
+                                              width: 32,
+                                              height: 32,
+                                              alignment:
+                                                  Alignment.topCenter,
+                                              child: Icon(
+                                                Icons.location_on,
+                                                size: 32,
+                                                color: AppColors.primary,
+                                              ),
+                                            ),
+                                          ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Positioned(
+                              top: 10,
+                              left: 10,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Colors.white.withValues(alpha: 0.94),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: activePoints.isNotEmpty
+                                            ? Colors.red
+                                            : Colors.green,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      activePoints.isNotEmpty
+                                          ? 'BẢN ĐỒ GIS (${activePoints.length} ĐIỂM)'
+                                          : 'BẢN ĐỒ SỐ GIS',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.secondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const Positioned(
+                              right: 12,
+                              bottom: 12,
+                              child: CircleAvatar(
+                                radius: 17,
+                                backgroundColor: Colors.white,
+                                child: Icon(
+                                  Icons.open_in_full,
+                                  size: 16,
+                                  color: AppColors.secondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            Consumer<FloodReportProvider>(
+              builder: (context, floodProvider, _) {
+                final count = floodProvider.floodPoints.length;
+                return RescuePanel(
+                  padding: 12,
+                  child: Row(
                     children: [
-                      Positioned.fill(
-                        child: CustomPaint(painter: RescueMapPainter()),
+                      const Icon(
+                        Icons.info_outline,
+                        color: AppColors.tertiary,
+                        size: 20,
                       ),
-                      const Positioned(
-                        top: 12,
-                        left: 12,
-                        child: RescueLabel(
-                          'BẢN ĐỒ MINH HỌA',
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                      const Align(
-                        alignment: Alignment(.5, -.1),
-                        child: Icon(
-                          Icons.location_on,
-                          color: AppColors.primary,
-                          size: 38,
-                        ),
-                      ),
-                      const Align(
-                        alignment: Alignment(-.3, .4),
-                        child: Icon(
-                          Icons.location_on,
-                          color: AppColors.tertiary,
-                          size: 32,
-                        ),
-                      ),
-                      const Positioned(
-                        right: 12,
-                        bottom: 12,
-                        child: CircleAvatar(
-                          radius: 17,
-                          backgroundColor: Colors.white,
-                          child: Icon(
-                            Icons.open_in_full,
-                            size: 16,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          count > 0
+                              ? 'Đang có $count điểm ngập hoạt động trên hệ thống. Chạm để xem chi tiết.'
+                              : 'Mở bản đồ để tải danh sách điểm ngập từ hệ thống.',
+                          style: const TextStyle(
+                            fontSize: 12,
                             color: AppColors.secondary,
                           ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            RescuePanel(
-              padding: 12,
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.info_outline,
-                    color: AppColors.tertiary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Mở bản đồ để tải danh sách điểm ngập từ hệ thống.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.secondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
             const RescueSection('Tiện ích hành trình'),
             _shortcut(
@@ -652,15 +831,29 @@ class _StitchHydroRescueScreenState extends State<StitchHydroRescueScreen> {
   ) => RescuePanel(
     padding: 0,
     child: InkWell(
-      onTap: () => _open(
-        ServiceSelectionScreen(
-          initialService: index,
-          vehicleName: context.read<VehicleProvider?>()?.selectedVehicle?.displayName ??
-              customerDemoVehicles[_vehicle].name,
-          vehiclePlate: context.read<VehicleProvider?>()?.selectedVehicle?.licensePlate ??
-              customerDemoVehicles[_vehicle].plate,
-        ),
-      ),
+      onTap: () {
+        final vehicleProvider = context.read<VehicleProvider?>();
+        final currentVehicle = vehicleProvider?.selectedVehicle;
+        if (currentVehicle == null && (vehicleProvider?.vehicles.isEmpty ?? true)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Vui lòng thêm phương tiện trước khi yêu cầu cứu hộ'),
+              action: SnackBarAction(
+                label: 'Thêm xe',
+                onPressed: () => _select(3),
+              ),
+            ),
+          );
+          return;
+        }
+        _open(
+          ServiceSelectionScreen(
+            initialService: index,
+            vehicleName: currentVehicle?.displayName ?? '',
+            vehiclePlate: currentVehicle?.licensePlate ?? '',
+          ),
+        );
+      },
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

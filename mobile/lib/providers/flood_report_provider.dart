@@ -1,12 +1,17 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/models/flood_report_model.dart';
 import '../core/services/flood_report_service.dart';
 
 class FloodReportProvider with ChangeNotifier {
   final FloodReportService _floodService;
+  static const String _offlineQueueKey = 'flood_offline_reports_queue';
 
   FloodReportProvider({FloodReportService? floodService})
-      : _floodService = floodService ?? FloodReportService();
+      : _floodService = floodService ?? FloodReportService() {
+    loadOfflineQueue().then((_) => syncOfflineReports());
+  }
 
   List<FloodReportModel> _floodPoints = [];
   List<FloodReportModel> _myFloodReports = [];
@@ -19,6 +24,26 @@ class FloodReportProvider with ChangeNotifier {
   List<Map<String, dynamic>> get offlineQueue => _offlineQueue;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  Future<void> loadOfflineQueue() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(_offlineQueueKey);
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(jsonStr);
+        _offlineQueue.clear();
+        _offlineQueue.addAll(decoded.map((e) => Map<String, dynamic>.from(e)));
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveOfflineQueue() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_offlineQueueKey, jsonEncode(_offlineQueue));
+    } catch (_) {}
+  }
 
   Future<void> fetchActiveFloodPoints() async {
     _isLoading = true;
@@ -99,6 +124,7 @@ class FloodReportProvider with ChangeNotifier {
       'imageUrls': imageUrls,
       'queuedAt': DateTime.now().toIso8601String(),
     });
+    _saveOfflineQueue();
     notifyListeners();
   }
 
@@ -132,6 +158,7 @@ class FloodReportProvider with ChangeNotifier {
 
     _offlineQueue.clear();
     _offlineQueue.addAll(remainingQueue);
+    await _saveOfflineQueue();
     notifyListeners();
     return syncedCount;
   }

@@ -16,6 +16,8 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
   const [approvedRefundAmount, setApprovedRefundAmount] = useState<number>(disputes[0]?.requestedRefund || 150000);
   const [adminNote, setAdminNote] = useState<string>('');
   const [isRefunding, setIsRefunding] = useState<boolean>(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [refundRefCode, setRefundRefCode] = useState<string>(disputes[0]?.refundReferenceCode || ('PAYOS-REV-' + (disputes[0]?.id ? disputes[0].id.replace(/[^0-9]/g, '').padStart(6, '0') : '902100')));
 
   const mapBackendToDisputeCase = (
     d: DisputeBackendResponse
@@ -48,11 +50,10 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
       inspectorName: d.staffReviewerName || 'Chuyên viên CSKH (Staff)',
       inspectorId: d.staffReviewerId ? `STAFF-${d.staffReviewerId}` : 'STAFF-01',
       inspectorNote: d.staffFindingNote || d.customerReason,
-      evidenceReceiptUrl:
-        d.evidenceImageUrls?.split(',')[0] ||
-        'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&auto=format&fit=crop&q=80',
-      evidenceTariffUrl:
-        'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
+      evidenceReceiptUrl: (d.evidenceImageUrls ? d.evidenceImageUrls.split(',').map(s => s.trim()).filter(Boolean)[0] : '') || 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&auto=format&fit=crop&q=80',
+      evidenceTariffUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
+      evidenceUrls: d.evidenceImageUrls ? d.evidenceImageUrls.split(',').map(s => s.trim()).filter(Boolean) : ['https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&auto=format&fit=crop&q=80'],
+      refundReferenceCode: d.refundReferenceCode,
       audioDuration: '02:15',
       diffItems: [
         {
@@ -76,6 +77,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
         setCaseList(mapped);
         setSelectedCaseId(mapped[0].id);
         setApprovedRefundAmount(mapped[0].requestedRefund);
+        setRefundRefCode(mapped[0].refundReferenceCode || ('PAYOS-REV-' + (mapped[0].backendId ? String(mapped[0].backendId).padStart(6, '0') : '902100')));
       })
       .catch(() => {
         // Fallback to mock disputes when offline
@@ -90,6 +92,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
   const handleSelectCase = (c: DisputeCase & { backendId?: number; garageWalletBalance?: number }) => {
     setSelectedCaseId(c.id);
     setApprovedRefundAmount(c.requestedRefund);
+    setRefundRefCode(c.refundReferenceCode || ('PAYOS-REV-' + (c.backendId ? String(c.backendId).padStart(6, '0') : c.id.replace(/[^0-9]/g, '').padStart(6, '0'))));
     setAdminNote('');
   };
 
@@ -104,7 +107,8 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
           'REFUNDED',
           approvedRefundAmount,
           apiSource,
-          adminNote || 'Admin phê duyệt hoàn tiền cho khách hàng và khấu trừ ví Gara'
+          adminNote || 'Admin phê duyệt hoàn tiền cho khách hàng và khấu trừ ví Gara',
+          refundRefCode
         );
         const mapped = mapBackendToDisputeCase(updated);
         setCaseList((prev) => prev.map((item) => (item.id === selectedCase.id ? mapped : item)));
@@ -180,6 +184,13 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
       onShowToast('Lỗi Bác Bỏ Khiếu Nại', err?.message || 'Không thể bác bỏ hồ sơ');
     }
   };
+
+  const filteredCases = caseList.filter((c) => {
+    if (activeTab === 'pending') return c.status !== 'REFUNDED' && c.status !== 'REJECTED';
+    if (activeTab === 'completed') return c.status === 'REFUNDED';
+    if (activeTab === 'rejected') return c.status === 'REJECTED';
+    return true;
+  });
 
   const garageBalance = selectedCase?.garageWalletBalance ?? 4820000;
 
@@ -317,7 +328,12 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
             </div>
           </div>
 
-          {caseList.map((caseItem) => (
+          {filteredCases.length === 0 ? (
+            <div className="p-8 text-center text-secondary bg-surface-container-lowest rounded-xl border border-surface-container">
+              Không có hồ sơ nào trong trạng thái này.
+            </div>
+          ) : (
+            filteredCases.map((caseItem) => (
             <div
               key={caseItem.id}
               onClick={() => handleSelectCase(caseItem)}
@@ -390,7 +406,8 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
                 </div>
               </div>
             </div>
-          ))}
+          ))
+        )}
         </div>
 
         {/* RIGHT COLUMN: Arbitration Desk & PayOS Reversal Workspace */}
@@ -418,25 +435,40 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
               <div className="mb-space-lg">
                 <div className="flex items-center justify-between mb-space-xs">
                   <span className="font-label-sm text-label-sm text-secondary uppercase tracking-wider font-bold">
-                    1. Đối Chiếu Bằng Chứng Hiện Trường & Hóa Đơn
+                    1. Đối Chiếu Bằng Chứng Hiện Trường & Hóa Đơn ({(selectedCase.evidenceUrls || [selectedCase.evidenceReceiptUrl]).length} ảnh)
                   </span>
-                  <span className="font-data-mono text-label-sm text-tertiary">Chứng từ đính kèm</span>
+                  <span className="font-data-mono text-label-xs text-secondary italic">Nhấp ảnh để phóng to</span>
                 </div>
-                <div className="grid grid-cols-2 gap-space-sm">
-                  <div className="rounded-lg overflow-hidden bg-surface-container-low shadow-sm">
-                    <div className="relative h-36">
-                      <img
-                        className="w-full h-full object-cover"
-                        alt="Receipt"
-                        src={selectedCase.evidenceReceiptUrl}
-                      />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
+                  <div className="rounded-lg overflow-hidden bg-surface-container-low shadow-sm p-2 border border-surface-container">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {(selectedCase.evidenceUrls || [selectedCase.evidenceReceiptUrl]).map((url, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => setPreviewImage(url)}
+                          className="group relative cursor-pointer overflow-hidden rounded border border-surface-container aspect-video bg-black/5"
+                        >
+                          <img
+                            src={url}
+                            alt={`Evidence ${idx + 1}`}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold gap-0.5">
+                            <span className="material-symbols-outlined text-[14px]">zoom_in</span>
+                            <span>Xem</span>
+                          </div>
+                          <span className="absolute bottom-0.5 left-0.5 px-1 bg-black/60 text-white text-[9px] rounded font-data-mono">
+                            Ảnh {idx + 1}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    <div className="p-2 text-body-sm text-secondary line-clamp-2">
-                      {selectedCase.inspectorNote}
+                    <div className="p-2 text-label-xs text-secondary italic mt-1 border-t border-surface-container/50">
+                      Staff ({selectedCase.inspectorName || 'CSKH'}): "{selectedCase.inspectorNote}"
                     </div>
                   </div>
 
-                  <div className="rounded-lg overflow-hidden bg-surface-container-low shadow-sm p-3 flex flex-col justify-between">
+                  <div className="rounded-lg overflow-hidden bg-surface-container-low shadow-sm p-3 flex flex-col justify-between border border-surface-container space-y-2">
                     <div>
                       <span className="text-label-xs font-bold text-secondary uppercase block">Số tiền duyệt hoàn (VNĐ)</span>
                       <input
@@ -446,7 +478,17 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
                         className="mt-1 w-full px-2.5 py-1.5 rounded border border-surface-container bg-surface font-data-mono font-bold text-primary"
                       />
                     </div>
-                    <div className="mt-2">
+                    <div>
+                      <span className="text-label-xs font-bold text-secondary uppercase block">Mã tham chiếu PayOS / Ngân hàng (Reversal Ref)</span>
+                      <input
+                        type="text"
+                        value={refundRefCode}
+                        onChange={(e) => setRefundRefCode(e.target.value)}
+                        placeholder="PAYOS-REV-XXXXXX"
+                        className="mt-1 w-full px-2.5 py-1.5 rounded border border-surface-container bg-surface font-data-mono font-bold text-on-surface"
+                      />
+                    </div>
+                    <div>
                       <span className="text-label-xs font-bold text-secondary uppercase block">Ghi chú phán quyết của Admin</span>
                       <input
                         type="text"
@@ -575,6 +617,50 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ disputes, onShowToast 
           )}
         </div>
       </div>
+
+      {/* Lightbox Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-surface-container-lowest rounded-xl overflow-hidden shadow-2xl p-2 border border-surface-container"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-2 border-b border-surface-container">
+              <span className="font-label-md font-bold text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[20px] text-primary">zoom_in</span>
+                Chi Tiết Bằng Chứng Ảnh Hiện Trường / Hóa Đơn (Admin Đối Soát)
+              </span>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-1 rounded hover:bg-surface-container text-secondary hover:text-on-surface transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <div className="p-2 flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img
+                src={previewImage}
+                alt="Preview Evidence"
+                className="max-h-[70vh] w-auto object-contain rounded"
+              />
+            </div>
+            <div className="p-2 text-right">
+              <a
+                href={previewImage}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-label-sm text-primary hover:underline font-semibold inline-flex items-center gap-1"
+              >
+                <span>Mở trong tab mới</span>
+                <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

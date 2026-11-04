@@ -90,7 +90,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
           </div>
 
           <button
-            onClick={() => onShowToast('Xuất Báo Cáo', 'Đã tải tệp RescueOps_PnL_Report_2023.xlsx thành công')}
+            onClick={() => onShowToast('Xuất Báo Cáo', 'Đã tải tệp HydroRescue_PnL_Report_2023.xlsx thành công')}
             className="flex items-center gap-1.5 px-space-md py-2 bg-primary text-on-primary rounded font-label-md font-semibold hover:bg-primary/90 transition-all shadow-xs"
           >
             <span className="material-symbols-outlined text-[16px]">download</span>

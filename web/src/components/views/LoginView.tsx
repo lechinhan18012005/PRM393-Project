@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { DEMO_MODE, useAuth } from '../../context/AuthContext';
 import { Role } from '../../types/auth';
-import { Shield, Building2, User, KeyRound, AlertCircle, ArrowRight, Loader2, Sparkles, Eye, EyeOff } from 'lucide-react';
+import { formatAuthErrorMessage } from '../../services/authApi';
+import { Shield, Building2, User, AlertCircle, ArrowRight, Loader2, Sparkles, Eye, EyeOff } from 'lucide-react';
+import logoImg from '../../assets/logo.png';
 
 interface LoginViewProps {
   onSwitchToRegister: () => void;
@@ -28,7 +30,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActi
     try {
       await login({ identifier: identifier.trim(), password });
     } catch (err: any) {
-      setError(err.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.');
+      setError(formatAuthErrorMessage(err, 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'));
     } finally {
       setSubmitting(false);
     }
@@ -40,7 +42,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActi
     try {
       await demoLogin(role);
     } catch (err: any) {
-      setError(err.message || 'Lỗi khi đăng nhập tài khoản mẫu.');
+      setError(formatAuthErrorMessage(err, 'Lỗi khi đăng nhập tài khoản mẫu.'));
     } finally {
       setSubmitting(false);
     }
@@ -55,21 +57,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActi
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-8 relative z-10">
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-orange-500/10 border border-orange-500/20 text-orange-500 mb-4 shadow-inner">
-            <Shield className="w-8 h-8" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-orange-500/10 border border-orange-500/20 mb-4 shadow-inner overflow-hidden">
+            <img src={logoImg} alt="HydroRescue" className="w-12 h-12 object-contain" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">HydroRescue Vietnam</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">HydroRescue</h1>
           <p className="text-sm text-slate-500 mt-1">Nền tảng cứu hộ xe máy ngập lụt đô thị</p>
           <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-500/10 text-orange-600 border border-orange-500/20">
-            <Sparkles className="w-3 h-3" /> Cổng quản lý cứu hộ
+            <Sparkles className="w-3 h-3" /> Cổng quản lý HydroRescue
           </div>
         </div>
 
         {/* Error notice */}
         {error && (
-          <div className="mb-6 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-start gap-2.5 animate-in fade-in">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">{error}</div>
+          <div className="mb-6 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-2.5 animate-in fade-in shadow-xs">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-500" />
+            <div className="flex-1 font-medium leading-relaxed">{error}</div>
           </div>
         )}
 
