@@ -1,16 +1,33 @@
+// ============================================================================
+// MÀN HÌNH VẬN HÀNH DOANH THU, VÍ GARA & ĐIỀU PHỐI CHUYẾN CHỞ XE (GARAGE OPERATIONS VIEW)
+// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Tài chính Gara (UC-26) & Vận hành Gara
+// Mục đích:
+// 1. Khi `mode === 'finance'`: Hiển thị giao diện Quản lý Doanh thu & Ví điện tử dành cho Chủ Gara.
+// 2. Khi `mode === 'transport'`: Tự động đồng bộ danh sách các đơn cứu hộ chở xe qua ngập đơn lẻ
+//    (`SINGLE_CROSSING`) theo thời gian thực (polling mỗi 10 giây) từ API `rescueApi.getGarageOrders()`.
+// ============================================================================
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { DEMO_MODE } from '../../context/AuthContext';
 import { Wallet, Truck, Receipt, CheckCircle, Clock } from 'lucide-react';
 import { GarageHeading, GarageStat, GaragePanel, GarageEmpty } from '../garage/GarageUI';
 import { rescueApi, RescueOrderWebResponse } from '../../services/rescueApi';
 
+/**
+ * Hàm định dạng số tiền sang chuẩn tiền tệ Việt Nam Đồng (VNĐ).
+ */
 const money = (value: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
 
 export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }) {
+  // Danh sách các đơn cứu hộ thuộc Gara hiện tại lấy từ REST API Backend
   const [garageOrders, setGarageOrders] = useState<RescueOrderWebResponse[]>([]);
+  // Cờ báo hiệu đang tải danh sách đơn từ máy chủ
   const [loadingOrders, setLoadingOrders] = useState(false);
 
+  /**
+   * Hàm gọi API lấy danh sách đơn cứu hộ của Gara khi đang ở chế độ `transport`.
+   */
   const fetchOrders = useCallback(async () => {
     if (mode !== 'transport') return;
     try {
@@ -18,18 +35,22 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
       const data = await rescueApi.getGarageOrders();
       setGarageOrders(data || []);
     } catch {
-      // Backend not connected or unauthenticated, ignore
+      // Nếu chưa kết nối hoặc chưa có đơn, giữ mảng hiện tại
     } finally {
       setLoadingOrders(false);
     }
   }, [mode]);
 
+  /**
+   * Tự động tải danh sách đơn cứu hộ khi mở màn hình và thiết lập bộ đếm thời gian (polling 10 giây/lần).
+   */
   useEffect(() => {
-    fetchOrders();
+    void fetchOrders();
     const interval = setInterval(fetchOrders, 10000);
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
+  // Nếu không ở chế độ Demo và đang mở tab tài chính của Gara
   if (!DEMO_MODE && mode === 'finance') {
     return (
       <section className="garage-portal">
@@ -39,7 +60,7 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
         />
         <GarageEmpty
           title="Chưa kết nối dữ liệu doanh thu & ví"
-          description="Chức năng doanh thu, đối soát và rút tiền chưa khả dụng trên hệ thống thật (thuộc phạm vi tích hợp tương lai của Luồng 5)."
+          description="Vui lòng chuyển sang mục Đối soát PayOS hoặc Yêu cầu rút tiền để theo dõi doanh thu và ví gara."
         />
       </section>
     );
@@ -131,7 +152,9 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
                 <GarageStat
                   label="Đang thực hiện"
                   value={String(
-                    garageOrders.filter((o) => ['DISPATCHED', 'ARRIVED', 'IN_PROGRESS'].includes(o.status)).length
+                    garageOrders.filter((o) =>
+                      ['DISPATCHED', 'ARRIVED', 'IN_PROGRESS'].includes(o.status)
+                    ).length
                   )}
                   detail="Thợ đang di chuyển hoặc chở xe"
                   icon={<Clock size={18} />}
@@ -151,7 +174,7 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
 
               <GaragePanel
                 title="Danh sách chuyến chở xe đơn lẻ của gara"
-                description="Dữ liệu thời gian thực được đồng bộ từ Backend PRM393 (Luồng 3)"
+                description="Dữ liệu thời gian thực được đồng bộ từ hệ thống điều phối cứu hộ"
               >
                 <div className="garage-table-wrap">
                   <table className="garage-table">
@@ -175,7 +198,9 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
                             <strong>{order.orderCode}</strong>
                             <br />
                             <small className="garage-muted">
-                              {order.requestedAt ? new Date(order.requestedAt).toLocaleTimeString('vi-VN') : ''}
+                              {order.requestedAt
+                                ? new Date(order.requestedAt).toLocaleTimeString('vi-VN')
+                                : ''}
                             </small>
                           </td>
                           <td>
@@ -215,9 +240,13 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
                                 fontSize: 11,
                                 fontWeight: 'bold',
                                 backgroundColor:
-                                  order.transportStage === 'HANDOVER_COMPLETED' ? '#dcfce7' : '#e0f2fe',
+                                  order.transportStage === 'HANDOVER_COMPLETED'
+                                    ? '#dcfce7'
+                                    : '#e0f2fe',
                                 color:
-                                  order.transportStage === 'HANDOVER_COMPLETED' ? '#166534' : '#0369a1'
+                                  order.transportStage === 'HANDOVER_COMPLETED'
+                                    ? '#166534'
+                                    : '#0369a1'
                               }}
                             >
                               {order.transportStage}
@@ -255,7 +284,9 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
                           <td>
                             <strong>{money(Number(order.serviceBasePrice))}</strong>
                             <br />
-                            <small className="garage-muted">+ {money(Number(order.bookingFee))} phí sàn</small>
+                            <small className="garage-muted">
+                              + {money(Number(order.bookingFee))} phí sàn
+                            </small>
                           </td>
                           <td>
                             {order.completionPhotoUrl ? (
@@ -279,70 +310,11 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
               </GaragePanel>
             </>
           ) : (
-            <>
-              <div className="garage-note">
-                {loadingOrders
-                  ? 'Đang kiểm tra chuyến chở xe từ API...'
-                  : 'DỮ LIỆU MẪU · Chưa có đơn chở xe SINGLE_CROSSING nào được tạo cho gara này.'}
-              </div>
-              <div className="garage-stat-grid three">
-                <GarageStat
-                  label="Chuyến hoạt động mẫu"
-                  value="02"
-                  detail="Chuyến minh họa đang thực hiện"
-                  icon={<Truck size={18} />}
-                />
-                <GarageStat
-                  label="Xe được chở mẫu"
-                  value="08"
-                  detail="Tổng số xe trong 2 chuyến mẫu"
-                  icon={<Truck size={18} />}
-                  accent="teal"
-                />
-                <GarageStat
-                  label="Vùng phục vụ mẫu"
-                  value="02"
-                  detail="Quận 7 và Quận 8"
-                  icon={<Receipt size={18} />}
-                  accent="blue"
-                />
-              </div>
-              <GaragePanel title="Chuyến vận chuyển mẫu" description="Theo dõi phương tiện, sức chứa và điểm đón">
-                <div className="garage-branch-grid">
-                  {[
-                    {
-                      id: 'BATCH-TRIP-01',
-                      vehicle: 'Xe tải nhẹ 1.25 tấn · 51D-891.22',
-                      capacity: '4/6 xe',
-                      route: 'Cầu Tân Thuận → Nguyễn Thị Thập',
-                      status: 'Đang gom khách tại điểm chờ',
-                      fare: 40000
-                    },
-                    {
-                      id: 'BATCH-TRIP-02',
-                      vehicle: 'Xe ba gác cứu hộ',
-                      capacity: '4/4 xe',
-                      route: 'Chợ Mễ Cốc → Cầu Số 2 Bến Bình Đông',
-                      status: 'Đang chở xe qua ngập',
-                      fare: 35000
-                    }
-                  ].map((trip) => (
-                    <article className="garage-branch-card" key={trip.id}>
-                      <h3>{trip.id}</h3>
-                      <p>{trip.vehicle}</p>
-                      <p>{trip.route}</p>
-                      <p>{trip.status}</p>
-                      <p>
-                        Sức chứa: <strong>{trip.capacity}</strong> · {money(trip.fare)} / xe
-                      </p>
-                      <button className="garage-button" disabled>
-                        Điều phối — chưa khả dụng
-                      </button>
-                    </article>
-                  ))}
-                </div>
-              </GaragePanel>
-            </>
+            <div className="garage-note">
+              {loadingOrders
+                ? 'Đang kiểm tra chuyến chở xe từ API...'
+                : 'Chưa có đơn chở xe SINGLE_CROSSING nào được tạo cho gara này.'}
+            </div>
           )}
         </>
       )}

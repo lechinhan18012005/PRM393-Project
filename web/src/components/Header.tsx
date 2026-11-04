@@ -1,3 +1,16 @@
+// ============================================================================
+// TẬP TIN: Header.tsx
+// TÁC GIẢ / PHỤ TRÁCH: Nguyễn Hoàng Long - Quản trị Tài chính & Hệ thống Admin
+// PHÂN HỆ: Thanh điều hướng cấp cao (Top Application Header)
+// MÔ TẢ NGHIỆP VỤ & KỸ THUẬT:
+//   - Cung cấp thanh Header toàn cục gắn trên đỉnh màn hình của toàn bộ 3 phân hệ.
+//   - Tích hợp Logo thương hiệu RescueOps, Trạng thái kết nối trực tuyến (Healthcheck ping).
+//   - Điều hướng nhanh giữa các phân hệ được cấp quyền (Admin / Staff / Gara) theo vai trò (RBAC).
+//   - Ô tìm kiếm nhanh toàn hệ thống (mã đơn cứu hộ, tên gara, thợ).
+//   - Nút Chuông thông báo hiển thị số lượng cảnh báo khẩn cấp chưa đọc.
+//   - Menu hồ sơ cá nhân (Profile Dropdown) hiển thị thông tin tài khoản, vai trò và nút Đăng xuất.
+// ============================================================================
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Bell, ChevronDown, LogOut, Search, X } from 'lucide-react';
 import { ModuleType, ScreenId } from '../types';
@@ -7,6 +20,9 @@ import { DEMO_MODE } from '../context/AuthContext';
 import { API_BASE_URL } from '../services/apiConfig';
 import logoImg from '../assets/logo.png';
 
+/**
+ * Định nghĩa các thuộc tính đầu vào (Props) cho thành phần Header.
+ */
 export interface HeaderProps {
   currentModule: ModuleType;
   currentScreen?: ScreenId;
@@ -20,12 +36,18 @@ export interface HeaderProps {
   onLogout?: () => void;
 }
 
+/**
+ * Bảng ánh xạ nhãn hiển thị cho 3 phân hệ chính.
+ */
 export const MODULE_LABELS: Record<ModuleType, string> = {
   admin: 'Tài chính',
   staff: 'Điều phối',
   owner: 'Gara'
 };
 
+/**
+ * Bảng ánh xạ nhãn hiển thị cho các vai trò người dùng (Roles).
+ */
 export const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Quản trị viên',
   SUPER_ADMIN: 'Quản trị cấp cao',
@@ -42,6 +64,9 @@ const DEFAULT_SCREENS: Record<ModuleType, ScreenId> = {
   owner: 'owner-dashboard'
 };
 
+/**
+ * Thành phần Header ứng dụng Web Portal.
+ */
 export const Header: React.FC<HeaderProps> = ({
   currentModule,
   currentScreen,
@@ -54,128 +79,136 @@ export const Header: React.FC<HeaderProps> = ({
   user,
   onLogout
 }) => {
+  // Trạng thái đóng/mở menu thả xuống của tài khoản (Account Dropdown)
   const [open, setOpen] = useState(false);
+  // Trạng thái lỗi tải ảnh avatar
   const [avatarError, setAvatarError] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'checking'>(() => {
-    return typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'online';
-  });
+  // Trạng thái kết nối máy chủ: 'online' | 'checking' | 'offline'
+  const [connectionStatus, setConnectionStatus] = useState<'online' | 'checking' | 'offline'>('online');
 
+  // Tham chiếu (Ref) tới phần tử DOM của profile menu để phát hiện click bên ngoài
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Network and backend health monitoring
-  const checkBackendHealth = useCallback(async () => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setConnectionStatus('offline');
-      return;
-    }
+  /**
+   * Kiểm tra kết nối mạng và máy chủ backend định kỳ
+   */
+  const checkHealth = useCallback(async () => {
     try {
+      if (!navigator.onLine) {
+        setConnectionStatus('offline');
+        return;
+      }
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(`${API_BASE_URL}/flood-reports/active`, {
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`${API_BASE_URL}/health`, {
         method: 'GET',
         signal: controller.signal
       }).catch(() => null);
-      clearTimeout(timer);
+      clearTimeout(timeoutId);
 
       if (res && res.ok) {
         setConnectionStatus('online');
       } else {
-        setConnectionStatus(navigator.onLine ? 'online' : 'offline');
+        setConnectionStatus(DEMO_MODE ? 'online' : 'offline');
       }
     } catch {
-      setConnectionStatus(navigator.onLine ? 'online' : 'offline');
+      setConnectionStatus(DEMO_MODE ? 'online' : 'offline');
     }
   }, []);
 
   useEffect(() => {
+    checkHealth();
+    const interval = setInterval(checkHealth, 45000);
     const handleOnline = () => {
-      setConnectionStatus('online');
-      checkBackendHealth();
+      setConnectionStatus('checking');
+      checkHealth();
     };
     const handleOffline = () => setConnectionStatus('offline');
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    checkBackendHealth();
 
-    const interval = setInterval(checkBackendHealth, 45000);
     return () => {
+      clearInterval(interval);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      clearInterval(interval);
     };
-  }, [checkBackendHealth]);
+  }, [checkHealth]);
 
-  // Click outside to close user menu
+  /**
+   * Đăng ký sự kiện lắng nghe click chuột và nhấn phím Escape để tự động đóng dropdown.
+   */
   useEffect(() => {
-    const close = (event: MouseEvent) => {
+    const handleOutsideClick = (event: MouseEvent) => {
       if (!menuRef.current?.contains(event.target as Node)) {
         setOpen(false);
       }
     };
-    const escape = (event: KeyboardEvent) => {
+
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setOpen(false);
       }
     };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', escape);
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+
     return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', escape);
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
-  const handleBrandClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (onSelectScreen) {
-      onSelectScreen(DEFAULT_SCREENS[currentModule] || 'overview');
-    } else {
-      onSelectModule(currentModule);
-    }
-  };
+  // Chữ cái viết tắt cho avatar đại diện
+  const userInitials =
+    user?.fullName
+      ?.split(' ')
+      .filter(Boolean)
+      .slice(-1)[0]
+      ?.charAt(0)
+      .toUpperCase() || 'U';
 
-  const userInitials = user?.fullName
-    ? user.fullName.trim().split(/\s+/).slice(-1)[0]?.charAt(0)?.toUpperCase() || 'U'
-    : 'U';
-
-  const roleText = (user?.role && ROLE_LABELS[user.role]) || user?.role || 'Người dùng';
+  const roleText = (user && ROLE_LABELS[user.role]) || user?.role || 'Khách';
 
   return (
     <header className="app-header">
-      {/* Brand logo */}
+      {/* Logo thương hiệu RescueOps & Nhận diện ứng dụng */}
       <a
         className="app-brand"
         href="#"
-        onClick={handleBrandClick}
-        aria-label="HydroRescue — Về màn hình chính"
-        title="Trang chủ HydroRescue"
+        onClick={(e) => {
+          e.preventDefault();
+          onSelectModule(currentModule);
+        }}
+        aria-label="RescueOps — Về bảng điều khiển chính"
       >
         <span className="brand-mark">
-          <img src={logoImg} alt="HydroRescue" style={{ width: 28, height: 28, borderRadius: 6 }} />
+          <img src={logoImg} alt="RescueOps Logo" className="w-8 h-8 rounded-lg object-contain" />
         </span>
-        <span>
-          Hydro<span className="text-primary">Rescue</span>
-          <small>CỨU HỘ XE MÁY</small>
+        <span className="brand-text">
+          rescue<span className="text-primary font-bold">ops</span>
+          <small>ĐIỀU HÀNH CỨU HỘ</small>
         </span>
       </a>
 
-      {/* Module Navigation */}
+      {/* Menu chuyển đổi nhanh giữa các phân hệ được cấp quyền (RBAC) */}
       <nav className="module-nav" aria-label="Khu vực quản lý">
         {user &&
           roleModules[user.role]?.map((mod) => (
             <button
               key={mod}
               type="button"
+              className={currentModule === mod ? 'active' : ''}
               aria-current={currentModule === mod ? 'page' : undefined}
               onClick={() => onSelectModule(mod)}
             >
-              {MODULE_LABELS[mod] || mod}
+              {MODULE_LABELS[mod]}
             </button>
           ))}
       </nav>
 
-      {/* Global Search Input */}
+      {/* Ô tìm kiếm nhanh toàn hệ thống */}
       {onSearchChange && (
         <div className="header-search" role="search">
           <Search size={15} className="header-search-icon" aria-hidden="true" />
@@ -200,15 +233,18 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      {/* Header Utilities */}
+      {/* Khu vực tiện ích hệ thống bên phải (Status, Thông báo, Hồ sơ người dùng) */}
       <div className="header-utilities">
         {DEMO_MODE && (
-          <span className="demo-label" title="Dữ liệu mẫu phục vụ kiểm thử; kết nối backend theo môi trường">
+          <span
+            className="demo-label"
+            title="Dữ liệu mẫu phục vụ kiểm thử; kết nối backend theo môi trường"
+          >
             Bản demo
           </span>
         )}
 
-        {/* Dynamic connection indicator */}
+        {/* Trạng thái kết nối máy chủ */}
         <span
           className={`system-status ${connectionStatus}`}
           title={
@@ -227,7 +263,7 @@ export const Header: React.FC<HeaderProps> = ({
               : 'Ngoại tuyến'}
         </span>
 
-        {/* Alerts / Notifications button */}
+        {/* Nút Chuông thông báo hiển thị số lượng cảnh báo khẩn */}
         <button
           type="button"
           className="icon-button notification-button"
@@ -243,7 +279,7 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </button>
 
-        {/* Profile menu */}
+        {/* Menu tài khoản người dùng và Đăng xuất */}
         <div className="profile-menu" ref={menuRef}>
           <button
             type="button"
@@ -268,6 +304,7 @@ export const Header: React.FC<HeaderProps> = ({
             <ChevronDown size={14} />
           </button>
 
+          {/* Menu thả xuống thông tin tài khoản */}
           {open && (
             <div id="account-menu" className="account-dropdown" role="menu">
               <div className="account-info">

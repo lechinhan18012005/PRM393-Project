@@ -1,3 +1,15 @@
+// ============================================================================
+// MÀN HÌNH GIÁM SÁT CHẤT LƯỢNG DỊCH VỤ SLA & ĐÁNH GIÁ SAU CỨU HỘ (SLA MONITORING VIEW)
+// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Đánh giá Chất lượng Dịch vụ & CSAT
+// Mục đích:
+// 1. Đồng bộ trực tiếp danh sách Đánh giá sao (1 - 5 sao), Nhãn khen ngợi (Tags) và Nhận xét
+//    chi tiết (Comment) của khách hàng sau khi hoàn thành ca cứu hộ thông qua API `financeApi.getAllRatings()`.
+// 2. Tính toán động Điểm hài lòng trung bình toàn sàn (CSAT Average Stars) và thống kê phân bố
+//    chất lượng phục vụ của từng Gara đối tác dựa trên đánh giá thực tế của khách hàng.
+// 3. Giám sát các chỉ số phản hồi SLA, tỷ lệ nhận ca, tỷ lệ hủy ca và số biên bản vi phạm từ các đơn cứu hộ.
+// 4. Cung cấp chức năng gửi cảnh cáo hoặc đình chỉ/khôi phục hoạt động của Gara đối tác vi phạm SLA.
+// ============================================================================
+
 import { ViewGuide } from '../ViewGuide';
 import React, { useEffect, useState } from 'react';
 import { ScreenId } from '../../types';
@@ -6,8 +18,8 @@ import { garageApi } from '../../services/garageApi';
 import { rescueApi, RescueOrderWebResponse } from '../../services/rescueApi';
 
 interface SLAMonitoringViewProps {
-  onSelectScreen: (screen: ScreenId) => void;
-  onShowToast: (title: string, msg: string) => void;
+  onSelectScreen?: (screen: ScreenId) => void;
+  onShowToast: (title: string, msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 interface GarageSLA {
@@ -80,6 +92,14 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
     setRatingPage(1);
   }, [ratingStarFilter]);
 
+  /**
+   * Tải và đồng bộ đồng thời dữ liệu từ 4 nguồn API Backend:
+   * - Đánh giá dịch vụ khách hàng (financeApi.getAllRatings)
+   * - Danh sách Gara đối tác (garageApi.getAllGarages)
+   * - Đơn cứu hộ vận hành (rescueApi.getStaffOrders)
+   * - Hồ sơ khiếu nại (financeApi.getStaffDisputes)
+   * Từ đó tính toán ma trận chỉ số SLA và CSAT thực tế cho từng Gara.
+   */
   const loadAllData = async () => {
     setIsLoading(true);
     try {
@@ -193,6 +213,9 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
     onShowToast('Cảnh Cáo SLA', `Đã ghi nhận & gửi thông báo cảnh cáo vi phạm chất lượng phục vụ tới ${garage.name} (${garage.owner} - ${garage.phone})`);
   };
 
+  /**
+   * Kích hoạt hoặc đình chỉ tạm thời Gara đối tác vi phạm cam kết SLA hoặc có nhiều khiếu nại.
+   */
   const handleToggleSuspend = async (garage: GarageSLA) => {
     const isNowSuspended = garage.status !== 'SUSPENDED';
     setIsActionLoading(true);
@@ -347,9 +370,9 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md border-b border-surface-container pb-space-md">
         <div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">Chất lượng dịch vụ &amp; Đánh giá sau cứu hộ (UC-19)</h1>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold mt-1">Chất Lượng Dịch Vụ &amp; Đánh Giá Sau Cứu Hộ</h1>
           <ViewGuide><p className="font-body-md text-body-md text-secondary">
-            Kiểm soát thời gian phản hồi ca ngập, đồng bộ đánh giá sao &amp; nhận xét khách hàng (UC-19), và duy trì chỉ số CSAT &gt; 4.8 sao toàn hệ thống.
+            Kiểm soát thời gian phản hồi ca ngập, đồng bộ đánh giá sao &amp; nhận xét khách hàng, và duy trì chỉ số CSAT &gt; 4.8 sao toàn hệ thống.
           </p></ViewGuide>
         </div>
 
@@ -363,7 +386,7 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
             <span>{isLoading ? 'Đang đồng bộ...' : 'Đồng bộ SLA & Đánh giá'}</span>
           </button>
           <button
-            onClick={() => onSelectScreen('verification')}
+            onClick={() => onSelectScreen?.('verification')}
             className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all"
           >
             <span className="material-symbols-outlined text-[18px]">verified</span>
@@ -678,7 +701,7 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
       <div className="bg-surface-container-lowest rounded-xl border border-surface-container p-space-lg shadow-xs space-y-space-md">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-sm pb-space-sm border-b border-surface-container">
           <div>
-            <span className="text-label-xs font-bold uppercase text-primary tracking-wider">Luồng 9 • UC-19</span>
+            <span className="text-label-xs font-bold uppercase text-primary tracking-wider">Nhật Ký Đánh Giá Dịch Vụ Khách Hàng</span>
             <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
               Nhật Ký Đánh Giá &amp; Nhận Xét Sau Dịch Vụ Mới Nhất
             </h3>

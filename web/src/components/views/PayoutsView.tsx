@@ -1,688 +1,619 @@
-import { ViewGuide } from '../ViewGuide';
-import React, { useEffect, useState } from 'react';
-import { PayoutItem } from '../../types';
+// ============================================================================
+// MÀN HÌNH QUẢN LÝ & PHÊ DUYỆT YÊU CẦU RÚT TIỀN VÍ GARA (PAYOUTS VIEW - UC-26)
+// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Quản trị Tài chính & Hệ thống Admin
+// Mục đích (Yêu cầu #6):
+// 1. Làm đơn giản hóa và chuẩn hóa quy trình Admin phê duyệt rút tiền (giải ngân) cho Gara:
+//    - Xóa bỏ hoàn toàn dữ liệu mẫu `INITIAL_PAYOUTS`, thanh hạn mức giả Napas 247 (`2.5 Tỷ / 5.0 Tỷ`),
+//      ô nhập mã PIN/OTP giả (`••••••`), các nút giả `"Duyệt hàng loạt"` & `"Xuất file UNC"`,
+//      và địa chỉ/mã số GPKD gắn cứng (`456 Lê Văn Việt...`, `GPKD: 0314598231`).
+// 2. Truy xuất 100% danh sách yêu cầu rút tiền thực tế từ Database qua `financeApi.getPayouts()`.
+// 3. Các tab lọc trạng thái (`ALL`, `PENDING`, `PROCESSING`, `COMPLETED`, `REJECTED`) và ô tìm kiếm
+//    hoạt động thực tế trên dữ liệu Database thông qua hook `useMemo`.
+// 4. Tự động tính toán 3 thẻ KPI trực tiếp từ các bản ghi trong Database:
+//    - KPI 1: Yêu cầu chờ duyệt (`PENDING` + `PROCESSING` - số lượng & tổng số tiền).
+//    - KPI 2: Đã giải ngân thành công (`COMPLETED` / `TRANSFERRED` - số lượng & tổng số tiền).
+//    - KPI 3: Đã từ chối & hoàn ví (`REJECTED` - số lượng & tổng số tiền).
+// 5. Khung Thẩm định & Phê duyệt bên phải (Admin Action Panel):
+//    - Hiển thị Tên Gara (`garageName`), Mã lệnh rút (`#PO-...`), Số tiền yêu cầu rút (`amount`),
+//      Ngân hàng thụ hưởng (`bankName`), Số tài khoản (`bankAccount`), Chủ tài khoản (`accountHolderName`),
+//      Thời gian tạo (`createdAt`) và Thời gian xử lý (`processedAt`).
+//    - Khi trạng thái đang là `PENDING` hoặc `PROCESSING`: Admin nhập Ghi chú thẩm định (`adminNotes`)
+//      và Mã tham chiếu giao dịch ngân hàng (`transactionReference`), sau đó nhấn:
+//      + "Xác nhận đã chuyển khoản (Duyệt)" (`approve: true`)
+//      + hoặc "Từ chối & Hoàn tiền lại ví Gara" (`approve: false`)
+//      gọi trực tiếp `financeApi.processPayout(id, { approve, adminNotes, transactionReference })`.
+// ============================================================================
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { financeApi, PayoutRequestBackend } from '../../services/financeApi';
 
+/**
+ * Giao diện Props truyền vào PayoutsView.
+ */
 interface PayoutsViewProps {
-  payouts: PayoutItem[];
-  onShowToast: (title: string, msg: string) => void;
+  onShowToast: (title: string, msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
-const mapBackendPayoutToItem = (b: PayoutRequestBackend): PayoutItem => ({
-  id: b.requestCode || `PO-${b.id}`,
-  garageName: b.garageName,
-  repName: b.garageOwnerName || 'Chủ Gara',
-  time: b.createdAt ? new Date(b.createdAt).toLocaleString('vi-VN') : 'Vừa xong',
-  bankCode: b.bankCode,
-  bankName: b.bankName || b.bankCode,
-  bankAccount: b.accountNumber,
-  accountHolder: b.accountHolderName,
-  requestedAmount: Number(b.requestedAmount),
-  walletBalance: Number(b.walletBalance),
-  holdbackAmount: 0,
-  availableBalance: Number(b.availableBalance),
-  riskStatus: 'SAFE',
-  ekycVerified: true,
-  status: b.status === 'TRANSFERRED' || b.status === 'APPROVED' ? 'APPROVED' : b.status === 'REJECTED' ? 'REJECTED' : 'PENDING'
-});
+/**
+ * Kiểu dữ liệu các Tab lọc trạng thái yêu cầu rút tiền.
+ */
+type PayoutTabFilter = 'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
 
-export const PayoutsView: React.FC<PayoutsViewProps> = ({ payouts, onShowToast }) => {
-  const [backendMap, setBackendMap] = useState<Record<string, number>>({});
-  const [payoutList, setPayoutList] = useState<PayoutItem[]>(payouts);
-  const [selectedPayoutId, setSelectedPayoutId] = useState<string>(payouts[0]?.id || 'PO-2024-8891');
-  const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'rejected' | 'all'>('pending');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [bankFilter, setBankFilter] = useState<string>('');
-  const [amountFilter, setAmountFilter] = useState<string>('high');
-  const [otpCode, setOtpCode] = useState<string>('••••••');
-  const [isDisbursing, setIsDisbursing] = useState<boolean>(false);
+/**
+ * Chuẩn hóa trạng thái của yêu cầu rút tiền từ Backend:
+ * - 'PENDING': Chờ duyệt
+ * - 'PROCESSING': Đang xử lý (tương ứng PROCESSING hoặc APPROVED)
+ * - 'COMPLETED': Đã giải ngân hoàn tất (tương ứng COMPLETED hoặc TRANSFERRED)
+ * - 'REJECTED': Đã từ chối & hoàn lại ví Gara
+ */
+function normalizePayoutStatus(
+  status?: string
+): 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED' {
+  const raw = String(status || 'PENDING').toUpperCase();
+  if (raw === 'COMPLETED' || raw === 'TRANSFERRED') return 'COMPLETED';
+  if (raw === 'PROCESSING' || raw === 'APPROVED') return 'PROCESSING';
+  if (raw === 'REJECTED') return 'REJECTED';
+  return 'PENDING';
+}
 
-  const loadBackendPayouts = async () => {
-    try {
-      const data = await financeApi.getAllPayouts();
-      if (data && data.length > 0) {
-        const mapped = data.map(mapBackendPayoutToItem);
-        const idMap: Record<string, number> = {};
-        data.forEach((b) => {
-          idMap[b.requestCode || `PO-${b.id}`] = b.id;
-        });
-        setBackendMap(idMap);
-        setPayoutList([...mapped, ...payouts]);
-        setSelectedPayoutId(mapped[0].id);
-      }
-    } catch {
-      // Fallback to demo payouts when backend is offline
-    }
+/**
+ * Trích xuất các trường dữ liệu chuẩn hóa từ đối tượng `PayoutRequestBackend`.
+ */
+function extractPayoutFields(p: PayoutRequestBackend) {
+  const code = p.requestCode || `PO-${p.id}`;
+  const amount = Number(p.amount ?? p.requestedAmount ?? 0);
+  const bankAccount = p.bankAccount || p.accountNumber || '—';
+  const bankName = p.bankName || p.bankCode || 'Ngân hàng nội địa';
+  const accountHolderName = p.accountHolderName || '—';
+  const normalizedStatus = normalizePayoutStatus(p.status);
+  const adminNotes = p.adminNotes ?? p.adminNote ?? '';
+
+  return {
+    code,
+    amount,
+    bankAccount,
+    bankName,
+    accountHolderName,
+    normalizedStatus,
+    adminNotes
   };
+}
 
-  useEffect(() => {
-    loadBackendPayouts();
+export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
+  // ==========================================================================
+  // KHAI BÁO CÁC BIẾN TRẠNG THÁI (REACT STATE)
+  // ==========================================================================
+
+  // Danh sách toàn bộ yêu cầu rút tiền lấy từ Database
+  const [payoutList, setPayoutList] = useState<PayoutRequestBackend[]>([]);
+
+  // ID của bản ghi yêu cầu rút tiền đang được chọn để xử lý ở khung bên phải
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // State quản lý Tab lọc trạng thái và Từ khóa tìm kiếm
+  const [statusFilter, setStatusFilter] = useState<PayoutTabFilter>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // State cho biểu mẫu xử lý của Admin trên khung bên phải
+  const [adminNotesInput, setAdminNotesInput] = useState<string>('');
+  const [txReferenceInput, setTxReferenceInput] = useState<string>('');
+
+  // Trạng thái đang tải dữ liệu và đang gửi quyết định phê duyệt/từ chối
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string>('');
+
+  // ==========================================================================
+  // HÀM TẢI DỮ LIỆU YÊU CẦU RÚT TIỀN TỪ DATABASE
+  // ==========================================================================
+
+  /**
+   * Hàm bất đồng bộ gọi `financeApi.getPayouts()` để lấy toàn bộ yêu cầu rút tiền từ Database.
+   */
+  const loadPayoutsFromDb = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const data = await financeApi.getPayouts();
+      const list = Array.isArray(data) ? data : [];
+      setPayoutList(list);
+
+      if (list.length > 0) {
+        setSelectedId((prev) => (prev && list.some((item) => item.id === prev) ? prev : list[0].id));
+      } else {
+        setSelectedId(null);
+      }
+    } catch (err) {
+      setErrorMsg((err as Error).message || 'Không thể tải danh sách yêu cầu rút tiền từ Database.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const selectedPayout = payoutList.find((p) => p.id === selectedPayoutId) || payoutList[0];
+  /**
+   * Tự động tải danh sách yêu cầu rút tiền khi mở màn hình.
+   */
+  useEffect(() => {
+    void loadPayoutsFromDb();
+  }, [loadPayoutsFromDb]);
 
-  const filteredPayouts = payoutList.filter((p) => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase().replace(/^#/, '');
-      const match =
-        p.id.toLowerCase().includes(q) ||
-        p.garageName.toLowerCase().includes(q) ||
-        p.repName.toLowerCase().includes(q) ||
-        p.bankAccount.includes(q);
-      if (!match) return false;
-    }
-    if (bankFilter && p.bankCode !== bankFilter) return false;
-    return true;
-  });
+  // ==========================================================================
+  // TÍNH TOÁN 3 THẺ CHỈ SỐ KPI VÀ LỌC DANH SÁCH BẰNG HOOK useMemo
+  // ==========================================================================
 
-  const handleDisburse = async () => {
-    if (!selectedPayout) return;
-    setIsDisbursing(true);
-    const backendId = backendMap[selectedPayout.id];
-    if (backendId) {
-      try {
-        const res = await financeApi.processPayout(
-          backendId,
-          'TRANSFERRED',
-          'Đã duyệt và giải ngân qua cổng Napas247'
-        );
-        await loadBackendPayouts();
-        setIsDisbursing(false);
-        onShowToast(
-          'Giải Ngân PayOS Thành Công!',
-          `Đã trừ ví gara và chuyển khoản ${selectedPayout.requestedAmount.toLocaleString('vi-VN')} ₫ tới ${selectedPayout.accountHolder}. Mã UNC: ${res.transactionReference || 'TXN-NAPAS-247'}.`
-        );
-        return;
-      } catch (err) {
-        setIsDisbursing(false);
-        onShowToast('Lỗi Xử Lý', err instanceof Error ? err.message : 'Không thể xử lý giải ngân');
-        return;
+  /**
+   * Tính toán 3 thẻ KPI trực tiếp từ danh sách `payoutList` trong Database:
+   * 1. Yêu cầu chờ duyệt (`PENDING` + `PROCESSING`): số lượng & tổng tiền.
+   * 2. Đã giải ngân thành công (`COMPLETED`): số lượng & tổng tiền.
+   * 3. Đã từ chối hoàn ví (`REJECTED`): số lượng & tổng tiền.
+   */
+  const kpiSummary = useMemo(() => {
+    let pendingCount = 0;
+    let pendingAmount = 0;
+    let completedCount = 0;
+    let completedAmount = 0;
+    let rejectedCount = 0;
+    let rejectedAmount = 0;
+
+    payoutList.forEach((p) => {
+      const f = extractPayoutFields(p);
+      if (f.normalizedStatus === 'PENDING' || f.normalizedStatus === 'PROCESSING') {
+        pendingCount += 1;
+        pendingAmount += f.amount;
+      } else if (f.normalizedStatus === 'COMPLETED') {
+        completedCount += 1;
+        completedAmount += f.amount;
+      } else if (f.normalizedStatus === 'REJECTED') {
+        rejectedCount += 1;
+        rejectedAmount += f.amount;
       }
-    }
+    });
 
-    setTimeout(() => {
-      setIsDisbursing(false);
-      onShowToast(
-        'Giải Ngân PayOS Thành Công!',
-        `Lệnh chuyển khoản Napas247 trị giá ${selectedPayout.requestedAmount.toLocaleString('vi-VN')} ₫ đã gửi tới ${selectedPayout.accountHolder} (${selectedPayout.bankName}). Mã UNC: TXN-NAPAS-8819209.`
+    return {
+      pendingCount,
+      pendingAmount,
+      completedCount,
+      completedAmount,
+      rejectedCount,
+      rejectedAmount
+    };
+  }, [payoutList]);
+
+  /**
+   * Lọc danh sách yêu cầu rút tiền theo Tab trạng thái (`statusFilter`) và ô tìm kiếm (`searchQuery`).
+   */
+  const filteredPayouts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+
+    return payoutList.filter((p) => {
+      const f = extractPayoutFields(p);
+
+      // Lọc theo Tab trạng thái
+      if (statusFilter !== 'ALL' && f.normalizedStatus !== statusFilter) {
+        return false;
+      }
+
+      // Lọc theo từ khóa tìm kiếm (Mã lệnh, Tên Gara, Số tài khoản, Chủ tài khoản)
+      if (!q) return true;
+
+      return (
+        f.code.toLowerCase().includes(q) ||
+        String(p.id).includes(q) ||
+        (p.garageName || '').toLowerCase().includes(q) ||
+        f.bankAccount.toLowerCase().includes(q) ||
+        f.accountHolderName.toLowerCase().includes(q) ||
+        f.bankName.toLowerCase().includes(q)
       );
-    }, 1200);
-  };
+    });
+  }, [payoutList, statusFilter, searchQuery]);
 
-  const handleReject = async () => {
-    if (!selectedPayout) return;
-    const backendId = backendMap[selectedPayout.id];
-    if (backendId) {
-      try {
-        await financeApi.processPayout(backendId, 'REJECTED', 'Từ chối yêu cầu rút tiền do cần đối soát bổ sung');
-        await loadBackendPayouts();
-      } catch {
-        // Fallback toast
-      }
-    }
-    onShowToast('Đã Từ Chối Lệnh', `Đã từ chối lệnh rút tiền ${selectedPayout.id}. Số dư bảo lưu tại ví gara.`);
-  };
-
-  const handleBatchApprove = () => {
-    onShowToast(
-      'Phê Duyệt Hàng Loạt Thành Công!',
-      'Đã duyệt tự động 5 lệnh rút tiền hợp lệ (tổng cộng 34.100.000 ₫) qua cổng PayOS Napas247.'
+  // Bản ghi yêu cầu rút tiền đang được chọn để hiển thị ở khung bên phải
+  const selectedPayout = useMemo(() => {
+    return (
+      filteredPayouts.find((p) => p.id === selectedId) ||
+      payoutList.find((p) => p.id === selectedId) ||
+      filteredPayouts[0] ||
+      null
     );
+  }, [filteredPayouts, payoutList, selectedId]);
+
+  /**
+   * Khi Admin chuyển sang chọn một yêu cầu rút tiền khác, đồng bộ lại ô ghi chú và mã tham chiếu.
+   */
+  useEffect(() => {
+    if (selectedPayout) {
+      const f = extractPayoutFields(selectedPayout);
+      setAdminNotesInput(f.adminNotes || '');
+      setTxReferenceInput(selectedPayout.transactionReference || '');
+    } else {
+      setAdminNotesInput('');
+      setTxReferenceInput('');
+    }
+  }, [selectedPayout]);
+
+  // ==========================================================================
+  // XỬ LÝ PHÊ DUYỆT ĐÃ CHUYỂN KHOẢN HOẶC TỪ CHỐI & HOÀN TIỀN LẠI VÍ GARA
+  // ==========================================================================
+
+  /**
+   * Hàm gửi quyết định xử lý yêu cầu rút tiền của Admin xuống Database:
+   * - `approve === true`: Xác nhận đã chuyển khoản giải ngân cho Gara.
+   * - `approve === false`: Từ chối yêu cầu rút tiền và hoàn trả lại số dư vào ví Gara.
+   */
+  const handleProcessPayout = async (approve: boolean) => {
+    if (!selectedPayout) return;
+    const f = extractPayoutFields(selectedPayout);
+
+    setIsSubmitting(true);
+    try {
+      const defaultNote = approve
+        ? `Admin xác nhận đã chuyển khoản giải ngân ${f.amount.toLocaleString('vi-VN')} ₫ cho ${selectedPayout.garageName}`
+        : `Admin từ chối yêu cầu rút tiền và hoàn trả ${f.amount.toLocaleString('vi-VN')} ₫ về lại ví Gara`;
+
+      const updated = await financeApi.processPayout(selectedPayout.id, {
+        approve,
+        adminNotes: adminNotesInput.trim() || defaultNote,
+        transactionReference: txReferenceInput.trim() || undefined
+      });
+
+      // Cập nhật trực tiếp bản ghi trong state `payoutList`
+      setPayoutList((prev) =>
+        prev.map((item) => (item.id === selectedPayout.id ? { ...item, ...updated } : item))
+      );
+
+      onShowToast(
+        approve ? 'Đã duyệt giải ngân thành công' : 'Đã từ chối & hoàn ví Gara',
+        approve
+          ? `Đã xác nhận chuyển khoản ${f.amount.toLocaleString('vi-VN')} ₫ tới ${f.accountHolderName} (${f.bankName}).`
+          : `Đã từ chối lệnh rút #${f.code} và hoàn tiền về ví cho ${selectedPayout.garageName}.`,
+        approve ? 'success' : 'info'
+      );
+    } catch (err) {
+      onShowToast(
+        'Lỗi xử lý yêu cầu rút tiền',
+        (err as Error).message || 'Không thể cập nhật trạng thái yêu cầu rút tiền.',
+        'error'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  // ==========================================================================
+  // HIỂN THỊ GIAO DIỆN NGƯỜI DÙNG (JSX RENDERING)
+  // ==========================================================================
 
   return (
-    <div className="flex flex-col w-full space-y-space-md">
-      {/* Top Tactical Notification Banner */}
-      <div className="flex items-center justify-between px-space-md py-space-xs bg-surface-container-high rounded text-on-surface border border-surface-container">
-        <div className="flex items-center gap-space-sm font-label-md text-label-md">
-          <span className="inline-flex h-2 w-2 rounded-full bg-primary animate-ping"></span>
-          <span className="font-data-mono text-data-mono uppercase text-primary font-bold">
-            PAYOS NAPAS 24/7 GATEWAY: READY
-          </span>
-          <span className="text-secondary">• Cổng đối soát tự động đồng bộ lần cuối lúc 14:42:08</span>
+    <div className="flex flex-col w-full space-y-6">
+      {/* Header màn hình Rút tiền */}
+      <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-on-surface">
+            Quản Lý Yêu Cầu Rút Tiền Ví Gara
+          </h1>
+          <p className="text-sm text-secondary mt-1">
+            Kiểm tra thông tin tài khoản ngân hàng thụ hưởng của Gara đối tác, xác nhận đã chuyển khoản giải ngân hoặc từ chối để hoàn tiền lại vào ví Gara.
+          </p>
         </div>
-        <div className="flex items-center gap-space-md text-secondary font-label-sm text-label-sm">
-          <span>Độ trễ giải ngân: <strong className="text-on-surface font-data-mono text-data-mono">1.2s</strong></span>
-          <span>Hạn mức ca trực: <strong className="text-tertiary font-data-mono text-data-mono">500.000.000 ₫</strong></span>
+
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={() => void loadPayoutsFromDb()}
+          className="self-start lg:self-auto px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-sm font-semibold text-on-surface transition-colors cursor-pointer"
+        >
+          {isLoading ? 'Đang tải...' : 'Làm mới từ Database'}
+        </button>
+      </div>
+
+      {errorMsg && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+          {errorMsg}
+        </div>
+      )}
+
+      {/* 3 Thẻ chỉ số KPI tính trực tiếp từ các bản ghi trong Database */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* KPI 1: Yêu cầu chờ duyệt */}
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
+          <div className="text-xs font-bold uppercase text-secondary">
+            1. Yêu cầu chờ duyệt (PENDING / PROCESSING)
+          </div>
+          <div className="text-2xl font-bold font-mono text-amber-600 mt-1.5">
+            {kpiSummary.pendingCount} lệnh ({kpiSummary.pendingAmount.toLocaleString('vi-VN')} ₫)
+          </div>
+          <div className="text-xs text-secondary mt-1">
+            Đang chờ Admin chuyển khoản giải ngân
+          </div>
+        </div>
+
+        {/* KPI 2: Đã giải ngân thành công */}
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
+          <div className="text-xs font-bold uppercase text-secondary">
+            2. Đã giải ngân thành công (COMPLETED)
+          </div>
+          <div className="text-2xl font-bold font-mono text-emerald-700 mt-1.5">
+            {kpiSummary.completedCount} lệnh ({kpiSummary.completedAmount.toLocaleString('vi-VN')} ₫)
+          </div>
+          <div className="text-xs text-secondary mt-1">
+            Đã hoàn tất chuyển khoản về ngân hàng Gara
+          </div>
+        </div>
+
+        {/* KPI 3: Đã từ chối hoàn ví */}
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
+          <div className="text-xs font-bold uppercase text-secondary">
+            3. Đã từ chối &amp; hoàn ví (REJECTED)
+          </div>
+          <div className="text-2xl font-bold font-mono text-red-600 mt-1.5">
+            {kpiSummary.rejectedCount} lệnh ({kpiSummary.rejectedAmount.toLocaleString('vi-VN')} ₫)
+          </div>
+          <div className="text-xs text-secondary mt-1">
+            Đã hoàn trả tiền về lại số dư ví Gara
+          </div>
         </div>
       </div>
 
-      {/* Header Section */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-space-lg bg-surface-container-lowest p-space-lg rounded shadow-sm border border-surface-container">
-        <div className="flex flex-col gap-space-xs">
-          <nav className="flex items-center gap-space-xs font-label-sm text-label-sm text-secondary uppercase font-semibold">
-            <span>TÀI CHÍNH & KẾ TOÁN</span>
-            <span>/</span>
-            <span className="text-primary font-bold">QUẢN LÝ GIẢI NGÂN</span>
-          </nav>
-          <div className="flex items-center gap-space-md flex-wrap">
-            <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">Yêu cầu rút tiền</h1>
-            <span className="px-space-sm py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-bold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse"></span>
-              7 LỆNH CHỜ DUYỆT
-            </span>
-          </div>
-          <ViewGuide><p className="font-body-md text-body-md text-secondary">
-            Thẩm định đối chiếu số dư ký quỹ bảo hành, hồ sơ pháp lý eKYC và kích hoạt lệnh chuyển khoản tự động Napas247.
-          </p></ViewGuide>
-        </div>
-
-        {/* Quick Metric Cards & Fast Actions */}
-        <div className="flex flex-wrap items-center gap-space-md">
-          <div className="flex items-center gap-space-md bg-surface-container-low px-space-md py-space-sm rounded">
-            <div className="p-space-sm rounded bg-primary-container text-on-primary-container flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">hourglass_top</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="font-label-sm text-label-sm text-secondary uppercase font-semibold">Đang chờ xử lý</span>
-              <div className="flex items-baseline gap-1">
-                <span className="font-headline-md text-headline-md text-primary font-bold">7</span>
-                <span className="font-label-sm text-label-sm text-secondary">lệnh</span>
-                <span className="font-data-mono text-data-mono font-bold text-on-surface ml-1">(42.800.000 ₫)</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-space-md bg-surface-container-low px-space-md py-space-sm rounded min-w-[240px]">
-            <div className="p-space-sm rounded bg-tertiary text-on-tertiary flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
-            </div>
-            <div className="flex flex-col w-full">
-              <div className="flex justify-between items-center mb-0.5">
-                <span className="font-label-sm text-label-sm text-secondary uppercase font-semibold">Hạn mức PayOS/Napas</span>
-                <span className="font-label-sm text-label-sm text-tertiary font-bold">50%</span>
-              </div>
-              <div className="font-data-mono text-data-mono text-on-surface font-semibold text-[11px] mb-1">
-                2.500.000.000 ₫ / 5.000.000.000 ₫
-              </div>
-              <div className="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
-                <div className="h-full bg-tertiary rounded-full" style={{ width: '50%' }}></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-space-xs">
+      {/* Thanh công cụ: Các Tab lọc trạng thái & Ô tìm kiếm */}
+      <div className="bg-surface-container-lowest p-4 rounded-xl border border-surface-container shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5 bg-surface-container-low p-1 rounded-lg border border-surface-container">
+          {(
+            [
+              { id: 'ALL', label: `Tất cả (${payoutList.length})` },
+              { id: 'PENDING', label: 'Chờ duyệt (PENDING)' },
+              { id: 'PROCESSING', label: 'Đang xử lý (PROCESSING)' },
+              { id: 'COMPLETED', label: 'Đã giải ngân (COMPLETED)' },
+              { id: 'REJECTED', label: 'Đã từ chối (REJECTED)' }
+            ] as { id: PayoutTabFilter; label: string }[]
+          ).map((tab) => (
             <button
-              onClick={() => onShowToast('Xuất File UNC', 'Đã tải xuống file đối soát kế toán Payouts_Napas_UNC.xlsx')}
-              className="flex items-center gap-space-xs px-space-md py-2.5 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md transition-colors cursor-pointer"
+              key={tab.id}
+              type="button"
+              onClick={() => setStatusFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                statusFilter === tab.id
+                  ? 'bg-primary text-on-primary shadow-xs'
+                  : 'text-secondary hover:text-on-surface'
+              }`}
             >
-              <span className="material-symbols-outlined text-[18px]">table_chart</span>
-              <span>Xuất File UNC Excel</span>
+              {tab.label}
             </button>
-            <button
-              onClick={handleBatchApprove}
-              className="flex items-center gap-space-xs px-space-md py-2.5 rounded bg-primary text-on-primary font-headline-sm text-headline-sm hover:bg-primary-container shadow-sm transition-all cursor-pointer font-bold"
-            >
-              <span className="material-symbols-outlined text-[18px]">bolt</span>
-              <span>Phê Duyệt Hàng Loạt (5 Hợp Lệ)</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Status Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-space-md">
-        <div className="flex items-center gap-space-xs bg-surface-container-low p-1 rounded">
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`flex items-center gap-space-xs px-space-md py-2 rounded font-headline-sm text-headline-sm transition-colors cursor-pointer ${
-              activeTab === 'pending'
-                ? 'bg-surface-container-lowest text-primary shadow-sm font-bold'
-                : 'text-secondary hover:text-on-surface'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[16px]">pending_actions</span>
-            <span>Chờ Phê Duyệt</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-primary text-on-primary font-data-mono text-data-mono text-[10px]">7</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('completed')}
-            className={`flex items-center gap-space-xs px-space-md py-2 rounded text-secondary hover:text-on-surface font-label-md text-label-md transition-colors cursor-pointer ${
-              activeTab === 'completed' ? 'bg-surface-container-lowest text-primary shadow-sm font-bold' : ''
-            }`}
-          >
-            <span className="material-symbols-outlined text-[16px]">check_circle</span>
-            <span>Đã Giải Ngân Chuyển Khoản</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-surface-container-high text-on-surface-variant font-data-mono text-data-mono text-[10px]">1.248</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('rejected')}
-            className={`flex items-center gap-space-xs px-space-md py-2 rounded text-secondary hover:text-on-surface font-label-md text-label-md transition-colors cursor-pointer ${
-              activeTab === 'rejected' ? 'bg-surface-container-lowest text-primary shadow-sm font-bold' : ''
-            }`}
-          >
-            <span className="material-symbols-outlined text-[16px]">cancel</span>
-            <span>Từ Chối / Cần Bổ Sung</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-surface-container-high text-on-surface-variant font-data-mono text-data-mono text-[10px]">14</span>
-          </button>
+          ))}
         </div>
 
-        <div className="flex items-center gap-space-md text-secondary font-label-sm text-label-sm">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-tertiary"></span> Ngân hàng kết nối: 48/48 Napas</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary"></span> Tự động khóa rủi ro khi số dư khả dụng âm</span>
-        </div>
-      </div>
-
-      {/* Filter & Search Toolbar */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-space-md p-space-md bg-surface-container-lowest rounded shadow-sm items-center border border-surface-container">
-        <div className="md:col-span-4 relative">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary text-[18px]">search</span>
+        <div className="w-full lg:w-80">
           <input
-            className="w-full h-9 pl-9 pr-3 rounded bg-surface-container-low text-body-md font-body-md text-on-surface placeholder-secondary focus:outline-none focus:ring-1 focus:ring-primary border-0"
-            placeholder="Tìm tên gara, STK, chủ tài khoản, mã #PO-..."
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Tìm theo Tên Gara, Số TK, Chủ TK, Mã #PO..."
+            className="w-full h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
           />
-        </div>
-
-        <div className="md:col-span-3">
-          <select
-            value={bankFilter}
-            onChange={(e) => setBankFilter(e.target.value)}
-            className="w-full h-9 px-3 rounded bg-surface-container-low text-body-md font-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer border-0"
-          >
-            <option value="">Tất cả ngân hàng nhận (MB, VCB, TCB...)</option>
-            <option value="MB">MB Bank (Ngân hàng Quân Đội)</option>
-            <option value="VCB">Vietcombank</option>
-            <option value="TCB">Techcombank</option>
-            <option value="ACB">ACB - Á Châu</option>
-            <option value="BIDV">BIDV</option>
-          </select>
-        </div>
-
-        <div className="md:col-span-3">
-          <select
-            value={amountFilter}
-            onChange={(e) => setAmountFilter(e.target.value)}
-            className="w-full h-9 px-3 rounded bg-surface-container-low text-body-md font-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer border-0"
-          >
-            <option value="all">Khoảng tiền rút: Tất cả</option>
-            <option value="high">Khoản lớn (&gt; 5.000.000 ₫)</option>
-            <option value="mid">1.000.000 ₫ - 5.000.000 ₫</option>
-            <option value="low">&lt; 1.000.000 ₫</option>
-          </select>
-        </div>
-
-        <div className="md:col-span-2 flex items-center justify-end gap-space-xs">
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setBankFilter('');
-            }}
-            className="h-9 px-space-md rounded bg-surface-container-low hover:bg-surface-container text-secondary hover:text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-            <span>Đặt lại</span>
-          </button>
         </div>
       </div>
 
-      {/* Main Split Layout: Table (7 cols) + Right Audit Panel (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
-        {/* Left Master Table */}
-        <div className="lg:col-span-7 flex flex-col gap-space-md">
-          <div className="bg-surface-container-lowest rounded shadow-sm overflow-hidden border border-surface-container">
-            <div className="px-space-md py-space-sm bg-surface-container-low flex items-center justify-between border-b border-surface-container">
-              <div className="flex items-center gap-space-sm">
-                <span className="font-headline-sm text-headline-sm text-on-surface uppercase font-bold">HÀNG CHỜ DUYỆT GIẢI NGÂN</span>
-                <span className="font-data-mono text-data-mono text-label-sm text-secondary">
-                  (HIỂN THỊ {filteredPayouts.length}/7 YÊU CẦU)
-                </span>
-              </div>
-              <div className="flex items-center gap-space-xs text-secondary font-label-sm text-label-sm">
-                <span className="material-symbols-outlined text-[16px]">sync</span>
-                <span>Tự động cập nhật sau 25s</span>
-              </div>
-            </div>
+      {/* Bố cục 2 cột: Bảng danh sách yêu cầu rút tiền (7 cột) + Khung phê duyệt của Admin (5 cột) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Cột trái (7 cột): Bảng danh sách yêu cầu rút tiền */}
+        <div className="lg:col-span-7 bg-surface-container-lowest rounded-xl border border-surface-container shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-surface-container-low border-b border-surface-container text-xs font-bold text-secondary uppercase tracking-wider">
+                  <th className="py-3 px-4">Mã lệnh / Ngày tạo</th>
+                  <th className="py-3 px-4">Gara yêu cầu</th>
+                  <th className="py-3 px-4">Ngân hàng thụ hưởng</th>
+                  <th className="py-3 px-4 text-right">Số tiền rút</th>
+                  <th className="py-3 px-4 text-center">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-container text-sm">
+                {filteredPayouts.map((p) => {
+                  const f = extractPayoutFields(p);
+                  const isSelected = selectedPayout?.id === p.id;
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-surface-container font-label-md text-label-md text-secondary uppercase tracking-wider">
-                    <th className="p-space-sm w-8 text-center">
-                      <input className="rounded text-primary focus:ring-0" type="checkbox" defaultChecked />
-                    </th>
-                    <th className="p-space-sm">MÃ LỆNH / THỜI GIAN</th>
-                    <th className="p-space-sm">GARA & ĐẠI DIỆN</th>
-                    <th className="p-space-sm">NGÂN HÀNG & EKYC</th>
-                    <th className="p-space-sm text-right">RÚT / SỐ DƯ VÍ</th>
-                    <th className="p-space-sm text-center">RỦI RO</th>
-                    <th className="p-space-sm text-center">HÀNH ĐỘNG</th>
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => setSelectedId(p.id)}
+                      className={`cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'bg-primary/10 font-medium'
+                          : 'hover:bg-surface-container-low/50'
+                      }`}
+                    >
+                      <td className="py-3 px-4 font-mono text-xs">
+                        <div className="font-bold text-primary">#{f.code}</div>
+                        <div className="text-secondary">
+                          {p.createdAt ? new Date(p.createdAt).toLocaleString('vi-VN') : '—'}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-on-surface">{p.garageName}</div>
+                        <div className="text-xs text-secondary">Garage ID: #{p.garageId}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-on-surface">{f.bankName}</div>
+                        <div className="font-mono text-xs text-secondary">
+                          {f.bankAccount} • {f.accountHolderName}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-primary whitespace-nowrap">
+                        {f.amount.toLocaleString('vi-VN')} ₫
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            f.normalizedStatus === 'COMPLETED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : f.normalizedStatus === 'REJECTED'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {f.normalizedStatus}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredPayouts.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-sm text-secondary">
+                      {isLoading
+                        ? 'Đang tải danh sách yêu cầu rút tiền từ Database...'
+                        : 'Không có yêu cầu rút tiền nào khớp với điều kiện lọc.'}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="font-body-sm text-body-sm text-on-surface divide-y divide-surface-container-low">
-                  {filteredPayouts.map((p) => {
-                    const isSelected = p.id === selectedPayoutId;
-                    const isBlocked = p.riskStatus === 'DISPUTED';
-
-                    return (
-                      <tr
-                        key={p.id}
-                        onClick={() => setSelectedPayoutId(p.id)}
-                        className={`transition-colors cursor-pointer ${
-                          isBlocked ? 'bg-error-container/20' : isSelected ? 'bg-surface-container-low' : 'hover:bg-surface-container-low/60'
-                        }`}
-                      >
-                        <td className="p-space-sm text-center" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            className="rounded text-primary focus:ring-0"
-                            type="checkbox"
-                            disabled={isBlocked}
-                            defaultChecked={!isBlocked}
-                          />
-                        </td>
-                        <td className="p-space-sm">
-                          <div className="flex flex-col">
-                            <span className={`font-data-mono text-data-mono font-bold ${isBlocked ? 'text-error' : 'text-primary'}`}>
-                              #{p.id}
-                            </span>
-                            <span className="text-secondary font-data-mono text-[11px]">{p.time}</span>
-                          </div>
-                        </td>
-                        <td className="p-space-sm">
-                          <div className="flex flex-col">
-                            <span className="font-headline-sm text-headline-sm text-on-surface leading-snug font-semibold">{p.garageName}</span>
-                            <span className="text-secondary text-[11px]">ĐD: {p.repName}</span>
-                          </div>
-                        </td>
-                        <td className="p-space-sm">
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-1 font-headline-sm text-headline-sm">
-                              <span className="px-1 py-0.5 rounded bg-surface-container font-label-sm text-label-sm font-bold text-on-surface">
-                                {p.bankCode}
-                              </span>
-                              <span className="font-data-mono text-data-mono font-bold">{p.bankAccount}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-secondary text-[10px] uppercase font-bold">{p.accountHolder}</span>
-                              {p.ekycVerified ? (
-                                <span className="px-1 py-0.2 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold text-[9px] flex items-center">
-                                  <span className="material-symbols-outlined text-[11px] mr-0.5">verified</span> Khớp 100%
-                                </span>
-                              ) : (
-                                <span className="px-1 py-0.2 rounded bg-error-container text-on-error-container font-label-sm text-label-sm font-bold text-[9px] flex items-center">
-                                  <span className="material-symbols-outlined text-[11px] mr-0.5">warning</span> Lệch Tên Chủ
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-space-sm text-right">
-                          <div className="flex flex-col items-end">
-                            <span className="font-data-mono text-data-mono font-bold text-primary text-[14px]">
-                              {p.requestedAmount.toLocaleString('vi-VN')} ₫
-                            </span>
-                            <span className="text-secondary font-data-mono text-[11px]">
-                              Dư: {p.walletBalance.toLocaleString('vi-VN')} ₫
-                            </span>
-                            <span className="text-[10px] text-tertiary font-medium">Phí Napas: 0 ₫</span>
-                          </div>
-                        </td>
-                        <td className="p-space-sm text-center">
-                          {isBlocked ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-error-container text-on-error-container font-label-sm text-label-sm font-bold">
-                              <span className="w-1.5 h-1.5 rounded-full bg-error mr-1"></span>
-                              1 Tranh Chấp
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container-high text-tertiary font-label-sm text-label-sm font-semibold">
-                              <span className="w-1.5 h-1.5 rounded-full bg-tertiary mr-1"></span>
-                              An Toàn
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-space-sm text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-1">
-                            {!isBlocked ? (
-                              <button
-                                onClick={handleDisburse}
-                                className="p-1 rounded bg-primary text-on-primary hover:bg-primary-container transition-colors cursor-pointer"
-                                title="Duyệt tức thì Napas247"
-                              >
-                                <span className="material-symbols-outlined text-[16px]">send_money</span>
-                              </button>
-                            ) : (
-                              <button
-                                className="p-1 rounded bg-secondary-fixed text-on-secondary-fixed opacity-50 cursor-not-allowed"
-                                title="Bị chặn do tranh chấp"
-                              >
-                                <span className="material-symbols-outlined text-[16px]">lock</span>
-                              </button>
-                            )}
-                            <button
-                              onClick={handleReject}
-                              className="p-1 rounded bg-error-container text-on-error-container hover:bg-error hover:text-on-error transition-colors cursor-pointer"
-                              title="Từ chối yêu cầu"
-                            >
-                              <span className="material-symbols-outlined text-[16px]">close</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="p-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-sm border-t border-surface-container">
-              <div className="flex items-center gap-space-sm font-body-sm text-body-sm text-secondary">
-                <span>Đã chọn <strong className="text-primary font-bold">1</strong> trong số <strong>7</strong> lệnh</span>
-                <span>• Tổng tiền chọn: <strong className="font-data-mono text-data-mono text-on-surface font-bold">15.000.000 ₫</strong></span>
-              </div>
-              <div className="flex items-center gap-space-xs font-label-md text-label-md text-secondary">
-                <button className="px-2 py-1 rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors disabled:opacity-50" disabled>
-                  Trước
-                </button>
-                <span className="px-2 py-1 rounded bg-primary text-on-primary font-data-mono text-data-mono">1</span>
-                <button className="px-2 py-1 rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors disabled:opacity-50" disabled>
-                  Sau
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Compliance Notice */}
-          <div className="p-space-md rounded bg-surface-container-low text-on-surface flex items-start gap-space-md shadow-sm border border-surface-container">
-            <div className="p-space-xs rounded bg-tertiary text-on-tertiary mt-0.5">
-              <span className="material-symbols-outlined text-[18px]">verified_user</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <h4 className="font-headline-sm text-headline-sm font-semibold">Quy chuẩn Bảo lãnh & Trừ Quỹ Ký Quỹ</h4>
-              <p className="font-body-sm text-body-sm text-secondary">
-                Hệ thống tự động phong tỏa tối thiểu <strong>5.000.000 ₫</strong> với mọi gara đang mở tuyến cứu hộ trong mùa mưa lũ để đảm bảo chế độ bảo hành 48 giờ đối với xe máy ngập nước sau khi bàn giao khách hàng. Lệnh rút tiền vượt quá số dư khả dụng sẽ bị hệ thống tự động khóa.
-              </p>
-            </div>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        {/* Right Detail Audit Panel */}
-        {selectedPayout && (
-          <div className="lg:col-span-5 flex flex-col gap-space-md sticky top-20">
-            <div className="bg-surface-container-lowest rounded shadow-md overflow-hidden border border-surface-container">
-              {/* Header */}
-              <div className="bg-surface-container-high p-space-md flex items-center justify-between border-b border-surface-container">
-                <div className="flex items-center gap-space-sm">
-                  <div className="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center font-bold">
-                    <span className="material-symbols-outlined text-[20px]">assignment_turned_in</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-label-sm text-label-sm text-secondary uppercase font-bold tracking-wider">HỒ SƠ THẨM ĐỊNH RÚT TIỀN</span>
-                    <span className="font-data-mono text-data-mono text-headline-sm text-primary font-bold">#{selectedPayout.id}</span>
-                  </div>
-                </div>
-                <span className="px-space-sm py-1 rounded bg-surface-container-lowest text-primary font-label-sm text-label-sm font-bold flex items-center gap-1 shadow-sm">
-                  <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                  CHỜ PHÊ DUYỆT
-                </span>
-              </div>
-
-              {/* Garage Identity */}
-              <div className="p-space-md bg-surface-container-low flex flex-col gap-space-sm border-b border-surface-container">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-headline-md text-headline-md text-on-surface font-semibold">{selectedPayout.garageName}</h3>
-                    <p className="text-secondary text-body-sm font-body-sm">Số 42 Ung Văn Khiêm, P.25, Q.Bình Thạnh, TP.HCM</p>
-                  </div>
-                  <span className="px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold">
-                    Đối tác Cấp 1
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-space-xs font-label-sm text-label-sm mt-1">
-                  <div className="p-space-xs rounded bg-surface-container-lowest flex items-center gap-1.5 text-on-surface">
-                    <span className="material-symbols-outlined text-tertiary text-[16px]">fingerprint</span>
-                    <span>eKYC: Đã duyệt CCCD chip</span>
-                  </div>
-                  <div className="p-space-xs rounded bg-surface-container-lowest flex items-center gap-1.5 text-on-surface">
-                    <span className="material-symbols-outlined text-tertiary text-[16px]">domain_verification</span>
-                    <span>GPKD: 0314892819-001</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Balance Breakdown */}
-              <div className="p-space-md flex flex-col gap-space-sm border-b border-surface-container">
-                <div className="flex items-center justify-between">
-                  <span className="font-label-sm text-label-sm text-secondary uppercase font-bold">PHÂN TÍCH SỐ DƯ TÀI CHÍNH</span>
-                  <span className="font-data-mono text-data-mono text-[11px] text-tertiary">Mã ví: W-KD-8821</span>
-                </div>
-                <div className="p-space-md rounded bg-surface-container-low flex flex-col gap-space-xs">
-                  <div className="flex justify-between items-center text-body-sm font-body-sm">
-                    <span className="text-secondary">Tổng thu nhập cuốc tích lũy:</span>
-                    <span className="font-data-mono text-data-mono text-on-surface font-semibold">
-                      {selectedPayout.walletBalance.toLocaleString('vi-VN')} ₫
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-body-sm font-body-sm">
-                    <span className="text-secondary flex items-center gap-1">
-                      Ký quỹ bảo hành cứu hộ xe ngập:
-                      <span className="material-symbols-outlined text-secondary text-[14px]">help</span>
-                    </span>
-                    <span className="font-data-mono text-data-mono text-error font-semibold">
-                      -{selectedPayout.holdbackAmount.toLocaleString('vi-VN')} ₫
-                    </span>
-                  </div>
-                  <div className="h-0.5 bg-surface-container-highest my-1"></div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">Số dư khả dụng hợp lệ:</span>
-                    <span className="font-data-mono text-data-mono font-headline-md text-headline-md text-tertiary font-bold">
-                      {selectedPayout.availableBalance.toLocaleString('vi-VN')} ₫
-                    </span>
-                  </div>
-                  <div className="p-space-sm rounded bg-primary-fixed/30 flex items-center justify-between mt-space-xs">
-                    <span className="font-headline-sm text-headline-sm text-primary font-bold">SỐ TIỀN ĐỀ NGHỊ RÚT:</span>
-                    <span className="font-data-mono text-data-mono font-headline-xl text-headline-xl text-primary font-bold">
-                      {selectedPayout.requestedAmount.toLocaleString('vi-VN')} ₫
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center font-label-sm text-label-sm text-secondary pt-1">
-                    <span>Số dư còn lại sau khi rút:</span>
-                    <span className="font-data-mono text-data-mono text-on-surface font-bold">
-                      {(selectedPayout.availableBalance - selectedPayout.requestedAmount).toLocaleString('vi-VN')} ₫ (Đảm bảo an toàn)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Beneficiary Specs */}
-              <div className="px-space-md py-space-sm flex flex-col gap-space-sm border-b border-surface-container">
-                <span className="font-label-sm text-label-sm text-secondary uppercase font-bold">TÀI KHOẢN NGÂN HÀNG THỤ HƯỞNG (NAPAS 24/7)</span>
-                <div className="p-space-md rounded bg-surface-container-lowest shadow-sm flex flex-col gap-space-xs border border-surface-container">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-space-sm">
-                      <div className="w-10 h-10 rounded bg-tertiary text-on-tertiary flex items-center justify-center font-bold font-data-mono">
-                        {selectedPayout.bankCode}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">{selectedPayout.bankName}</span>
-                        <span className="text-secondary font-label-sm text-label-sm">Chi nhánh Gia Định, TP. Hồ Chí Minh</span>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[14px]">lock</span> Napas247 Fast
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-space-md mt-space-sm pt-space-sm bg-surface-container-low p-space-sm rounded">
-                    <div className="flex flex-col">
-                      <span className="font-label-sm text-label-sm text-secondary uppercase font-semibold">Số tài khoản</span>
-                      <span className="font-data-mono text-data-mono font-headline-md text-headline-md text-on-surface font-bold">
-                        {selectedPayout.bankAccount}
-                      </span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-label-sm text-label-sm text-secondary uppercase font-semibold">Tên chủ tài khoản</span>
-                      <span className="font-headline-sm text-headline-sm text-primary font-bold uppercase">
-                        {selectedPayout.accountHolder}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-body-sm font-body-sm pt-space-xs text-secondary">
-                    <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-tertiary text-[16px]">verified</span>
-                      Khớp thông tin người đại diện GPKD
-                    </span>
-                    <span className="text-tertiary font-semibold">Phí giao dịch: 0 ₫</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Authorization Controls */}
-              <div className="p-space-md bg-surface-container flex flex-col gap-space-md">
-                <div className="flex items-start gap-space-sm p-space-sm rounded bg-surface-container-lowest border border-surface-container">
-                  <span className="material-symbols-outlined text-primary text-[20px] mt-0.5">security</span>
-                  <div className="flex flex-col">
-                    <span className="font-label-md text-label-md text-on-surface font-bold">Xác Thực Chuẩn Ngân Hàng PayOS API</span>
-                    <p className="font-body-sm text-body-sm text-secondary">
-                      Lệnh giải ngân sau khi duyệt sẽ thực hiện lệnh UNC tự động đến cổng chuyển mạch Napas247. Tiền về tài khoản gara trong 30 giây.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-space-sm">
-                  <div className="flex items-center gap-space-sm">
-                    <div className="relative flex-1">
-                      <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-secondary text-[16px]">pin</span>
-                      <input
-                        className="w-full h-9 pl-8 pr-3 rounded bg-surface-container-lowest text-body-sm font-body-sm text-on-surface placeholder-secondary focus:outline-none focus:ring-1 focus:ring-primary border border-surface-container"
-                        placeholder="Nhập mã PIN duyệt tài chính hoặc OTP"
-                        type="password"
-                        value={otpCode}
-                        onChange={(e) => setOtpCode(e.target.value)}
-                      />
-                    </div>
-                    <button
-                      onClick={() => onShowToast('Mã OTP Mới', 'Đã gửi mã OTP SMS 6 số về số điện thoại Admin.')}
-                      className="h-9 px-space-md rounded bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-label-md text-label-md transition-colors cursor-pointer border border-surface-container"
-                    >
-                      Gửi lại OTP
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-space-sm pt-space-xs">
-                    <button
-                      onClick={handleDisburse}
-                      disabled={isDisbursing}
-                      className="flex-1 py-3 px-space-md rounded bg-primary hover:bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-space-sm shadow-sm transition-all cursor-pointer font-bold disabled:opacity-75"
-                    >
-                      <span className={`material-symbols-outlined text-[20px] ${isDisbursing ? 'animate-spin' : ''}`}>
-                        {isDisbursing ? 'refresh' : 'payments'}
-                      </span>
-                      <span>{isDisbursing ? 'Đang phát lệnh...' : 'Xác Nhận Giải Ngân Tức Thì PayOS'}</span>
-                    </button>
-                    <button
-                      onClick={handleReject}
-                      className="py-3 px-space-md rounded bg-surface-container-lowest hover:bg-error-container text-error hover:text-on-error-container font-headline-sm text-headline-sm flex items-center justify-center transition-colors cursor-pointer border border-surface-container"
-                      title="Từ chối yêu cầu và yêu cầu bổ sung"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">block</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* Cột phải (5 cột): Bảng Thẩm định & Phê duyệt Rút tiền của Admin */}
+        <div className="lg:col-span-5 bg-surface-container-lowest p-6 rounded-xl border border-surface-container shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-surface-container pb-3">
+            <h2 className="text-base font-bold text-on-surface">
+              Chi Tiết &amp; Phê Duyệt Rút Tiền
+            </h2>
+            {selectedPayout && (
+              <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded bg-primary/10 text-primary">
+                #{extractPayoutFields(selectedPayout).code}
+              </span>
+            )}
           </div>
-        )}
+
+          {selectedPayout ? (
+            (() => {
+              const f = extractPayoutFields(selectedPayout);
+              const isActionable =
+                f.normalizedStatus === 'PENDING' || f.normalizedStatus === 'PROCESSING';
+
+              return (
+                <div className="space-y-4 text-sm">
+                  {/* Thông tin Gara & Ngân hàng thụ hưởng */}
+                  <div className="p-4 rounded-lg bg-surface-container-low space-y-2.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-secondary">Tên Gara đối tác:</span>
+                      <strong className="text-on-surface text-sm">{selectedPayout.garageName}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-secondary">Mã yêu cầu rút tiền:</span>
+                      <strong className="font-mono text-primary">#{f.code}</strong>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-secondary">Số tiền đề nghị rút:</span>
+                      <strong className="font-mono text-lg text-primary">
+                        {f.amount.toLocaleString('vi-VN')} ₫
+                      </strong>
+                    </div>
+                    <div className="border-t border-surface-container pt-2 flex justify-between">
+                      <span className="text-secondary">Ngân hàng thụ hưởng:</span>
+                      <strong className="text-on-surface">{f.bankName}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-secondary">Số tài khoản nhận:</span>
+                      <strong className="font-mono text-on-surface">{f.bankAccount}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-secondary">Chủ tài khoản:</span>
+                      <strong className="text-on-surface uppercase">{f.accountHolderName}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-secondary">Thời gian tạo lệnh:</span>
+                      <span className="font-mono text-on-surface">
+                        {selectedPayout.createdAt
+                          ? new Date(selectedPayout.createdAt).toLocaleString('vi-VN')
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-secondary">Thời gian xử lý:</span>
+                      <span className="font-mono text-on-surface">
+                        {selectedPayout.processedAt
+                          ? new Date(selectedPayout.processedAt).toLocaleString('vi-VN')
+                          : 'Chưa xử lý'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Khu vực nhập ghi chú & nút Phê duyệt / Từ chối */}
+                  {isActionable ? (
+                    <div className="space-y-3 pt-1">
+                      <div>
+                        <label className="block text-xs font-bold uppercase text-secondary mb-1">
+                          Mã tham chiếu giao dịch ngân hàng (UNC / FT)
+                        </label>
+                        <input
+                          type="text"
+                          value={txReferenceInput}
+                          onChange={(e) => setTxReferenceInput(e.target.value)}
+                          placeholder="Ví dụ: FT261105882910..."
+                          className="w-full h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low font-mono text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase text-secondary mb-1">
+                          Ghi chú của Admin (Admin Notes)
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={adminNotesInput}
+                          onChange={(e) => setAdminNotesInput(e.target.value)}
+                          placeholder="Nhập ghi chú xác nhận chuyển khoản hoặc lý do từ chối..."
+                          className="w-full p-2.5 rounded-lg border border-surface-container bg-surface-container-low text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-2 pt-2">
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => void handleProcessPayout(true)}
+                          className="w-full py-2.5 px-4 rounded-lg bg-primary text-on-primary font-bold text-sm hover:bg-primary-container transition-colors cursor-pointer disabled:opacity-60"
+                        >
+                          {isSubmitting
+                            ? 'Đang xử lý...'
+                            : 'Xác nhận đã chuyển khoản (Duyệt)'}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => void handleProcessPayout(false)}
+                          className="w-full py-2 px-4 rounded-lg bg-red-50 text-red-700 border border-red-200 font-bold text-xs hover:bg-red-100 transition-colors cursor-pointer disabled:opacity-60"
+                        >
+                          Từ chối &amp; Hoàn tiền lại ví Gara
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 rounded-lg bg-surface-container text-xs space-y-1">
+                      <div className="font-bold text-on-surface">
+                        Trạng thái lệnh: {f.normalizedStatus}
+                      </div>
+                      {selectedPayout.transactionReference && (
+                        <div className="font-mono text-secondary">
+                          Mã tham chiếu NH: {selectedPayout.transactionReference}
+                        </div>
+                      )}
+                      {f.adminNotes && (
+                        <div className="text-secondary">Ghi chú Admin: {f.adminNotes}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          ) : (
+            <div className="py-8 text-center text-sm text-secondary">
+              Chọn một yêu cầu rút tiền ở bảng bên trái để xem chi tiết và phê duyệt.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,10 +1,22 @@
+// ============================================================================
+// MÀN HÌNH TIẾP NHẬN, XÁC MINH KHIẾU NẠI & ĐỀ XUẤT HOÀN TIỀN (DISPUTE FRAUD VIEW)
+// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Xử lý Khiếu nại & Tài chính
+// Mục đích:
+// 1. Dành cho Nhân viên Vận hành & CSKH (STAFF) tiếp nhận các hồ sơ khiếu nại của khách hàng
+//    đối với Gara đối tác (Thu vượt giá, Làm hỏng xe, Gian lận cuốc cứu hộ, Kém chất lượng).
+// 2. Tự động đồng bộ danh sách khiếu nại từ Database qua API inanceApi.getStaffDisputes().
+// 3. Cho phép Staff thẩm tra bằng chứng ảnh hiện trường, so sánh biểu phí, nhập mức bồi hoàn đề xuất
+//    và gửi biên bản lên Admin phê duyệt hoặc bác bỏ nếu chứng từ Gara hợp lệ.
+// 4. Hỗ trợ xem phóng to ảnh bằng chứng (Lightbox Modal) và phân loại theo tab trạng thái.
+// ============================================================================
+
 import { ViewGuide } from '../ViewGuide';
 import React, { useEffect, useState } from 'react';
 import { DisputeCase, ScreenId } from '../../types';
 import { DisputeBackendResponse, financeApi } from '../../services/financeApi';
 
 interface DisputeFraudViewProps {
-  disputes: DisputeCase[];
+  disputes?: DisputeCase[];
   onSelectScreen: (screen: ScreenId) => void;
   onShowToast: (title: string, msg: string) => void;
 }
@@ -12,7 +24,7 @@ interface DisputeFraudViewProps {
 type TabType = 'STAFF_REVIEW' | 'ADMIN_APPROVAL' | 'RESOLVED' | 'ALL';
 
 export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
-  disputes,
+  disputes = [],
   onSelectScreen,
   onShowToast
 }) => {
@@ -25,6 +37,9 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('STAFF_REVIEW');
 
+  /**
+   * Chuyển đổi đối tượng DisputeBackendResponse từ Database thành cấu trúc DisputeCase cho giao diện.
+   */
   const mapBackendToDisputeCase = (d: DisputeBackendResponse): DisputeCase & { backendId: number } => {
     const diff = d.proposedRefundAmount ?? d.requestedRefundAmount ?? 0;
     const orig = d.originalAmount || diff;
@@ -47,8 +62,8 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
 
     return {
       backendId: d.id,
-      id: d.disputeCode,
-      rescueCode: d.rescueCode,
+      id: d.disputeCode || `DISP-${d.id}`,
+      rescueCode: d.rescueCode || 'RESCUE-01',
       payosCode: d.payosOrderCode ? `POS-${d.payosOrderCode}` : 'Chưa có mã PayOS',
       customerName: d.customerName || 'Khách hàng',
       customerPhone: d.customerPhone || 'Chưa cung cấp',
@@ -61,7 +76,7 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
       requestedRefund: diff,
       customerReason: d.customerReason || 'Khách hàng yêu cầu hỗ trợ bồi hoàn dịch vụ cứu hộ.',
       time: d.createdAt ? new Date(d.createdAt).toLocaleString('vi-VN') : 'Vừa xong',
-      status: d.status,
+      status: (d.status as any) || 'STAFF_REVIEW',
       inspectorName: d.staffReviewerName || 'Chưa phân công',
       inspectorId: d.staffReviewerId ? `STAFF-${d.staffReviewerId}` : 'Chưa gán',
       inspectorNote: d.staffFindingNote || '',
@@ -89,6 +104,9 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
     };
   };
 
+  /**
+   * Nạp danh sách hồ sơ khiếu nại thực tế từ Database thông qua API inanceApi.getStaffDisputes().
+   */
   const loadData = () => {
     setIsLoading(true);
     financeApi
@@ -669,7 +687,7 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
                   <div className="flex items-center justify-between">
                     <h3 className="font-label-sm uppercase font-bold text-primary flex items-center gap-1.5">
                       <span className="material-symbols-outlined text-[18px]">verified</span>
-                      Biên Bản Xác Minh & Đề Xuất Hoàn Tiền Của Staff (UC-23)
+                      Biên Bản Xác Minh & Đề Xuất Hoàn Tiền Của Nhân Viên
                     </h3>
                     {selectedCase.inspectorName && selectedCase.inspectorName !== 'Chưa phân công' && (
                       <span className="text-label-xs text-secondary">

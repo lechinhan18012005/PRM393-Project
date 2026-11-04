@@ -1,3 +1,21 @@
+// ============================================================================
+// TỆP ĐIỀU HƯỚNG TRUNG TÂM & QUẢN LÝ BỐ CỤC ỨNG DỤNG WEB PORTAL (APP.TSX)
+// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Quản trị Tài chính & Hệ thống Admin
+// Mục đích:
+// 1. Thiết lập hệ thống định tuyến (React Router v6) cho toàn bộ 3 phân hệ:
+//    - Phân hệ A (Admin): Quản lý tài khoản Staff, Tổng quan GMV, Phí & Chiết khấu Gara,
+//      Đối soát PayOS, Duyệt rút tiền Gara, Hoàn tiền khiếu nại, Báo cáo tài chính P&L.
+//    - Phân hệ B (Staff): Điều phối cứu hộ trực tuyến, Duyệt Gara eKYC, Bản đồ ngập GIS,
+//      Xử lý tranh chấp, Giám sát chất lượng dịch vụ SLA/CSAT.
+//    - Phân hệ C (Garage Owner): Quản lý Gara, Chi nhánh & Đội thợ, Doanh thu & Ví, Dịch vụ.
+// 2. Thực thi kiểm soát phân quyền nghiêm ngặt (RBAC):
+//    - Tài khoản ADMIN chỉ được phép truy cập phân hệ 'admin' (`/admin/*`), tuyệt đối không
+//      truy cập sang phân hệ 'staff'.
+//    - Tài khoản STAFF không được phép truy cập trang quản lý tài khoản Staff (`/admin/staff-accounts`).
+// 3. Đồng bộ cảnh báo trực tiếp từ Backend API (Đơn cứu hộ khẩn cấp, Rút tiền ví Gara, Khiếu nại hoàn tiền)
+//    lên chuông thông báo Header.
+// ============================================================================
+
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -12,7 +30,15 @@ import { Role } from './types/auth';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { AuthProvider, DEMO_MODE, useAuth } from './context/AuthContext';
-import { canAccessModule, canAccessScreen, roleModules, screenModule } from './permissions';
+import {
+  canAccessModule,
+  canAccessScreen,
+  ROLE_DEFAULT_ROUTE,
+  roleModules,
+  screenModule
+} from './permissions';
+import { financeApi } from './services/financeApi';
+import { rescueApi } from './services/rescueApi';
 import { GarageAccessGate } from './components/views/GarageAccessGate';
 import { GarageManagementView } from './components/views/GarageManagementView';
 import { StaffAccountsView } from './components/views/StaffAccountsView';
@@ -20,10 +46,9 @@ import { InvitationActivationView } from './components/views/InvitationActivatio
 import { GarageOperationsView } from './components/views/GarageOperationsView';
 import { LoginView } from './components/views/LoginView';
 import { RegisterView } from './components/views/RegisterView';
-import { rescueApi } from './services/rescueApi';
-import { INITIAL_DISPUTES } from './data/mockData';
+import { INITIAL_DISPUTES, INITIAL_GARAGE_APPLICANTS } from './data/mockData';
 
-// Module A Views
+// Nhập các màn hình thuộc Phân hệ A (Quản trị viên & Tài chính - Module A Views)
 import { OverviewGMVView } from './components/views/OverviewGMVView';
 import { CommissionSettingsView } from './components/views/CommissionSettingsView';
 import { PayOSReconciliationView } from './components/views/PayOSReconciliationView';
@@ -31,14 +56,14 @@ import { PayoutsView } from './components/views/PayoutsView';
 import { RefundsView } from './components/views/RefundsView';
 import { FinancialReportsView } from './components/views/FinancialReportsView';
 
-// Module B Views
+// Nhập các màn hình thuộc Phân hệ B (Nhân viên Vận hành & CSKH - Module B Views)
 import { LiveDispatchDashboardView } from './components/views/LiveDispatchDashboardView';
 import GarageVerificationView from './components/views/GarageVerificationView';
 import { GISFloodMapView } from './components/views/GISFloodMapView';
 import { DisputeFraudView } from './components/views/DisputeFraudView';
 import { SLAMonitoringView } from './components/views/SLAMonitoringView';
 
-// Module C Views
+// Nhập các màn hình thuộc Phân hệ C (Chủ Gara đối tác - Module C Views)
 import { GarageOwnerDashboardView } from './components/views/GarageOwnerDashboardView';
 import { GarageServicesPricingView } from './components/views/GarageServicesPricingView';
 
@@ -56,21 +81,16 @@ export interface SystemAlert {
   time: string;
   level: 'CRITICAL' | 'WARNING' | 'INFO';
   isRead?: boolean;
+  targetScreen?: ScreenId;
 }
 
 const getDefaultPath = (role: Role): string => {
-  switch (role) {
-    case 'ADMIN':
-      return '/admin/payos-reconciliation';
-    case 'STAFF':
-      return '/staff/dashboard';
-    case 'GARAGE_OWNER':
-      return '/owner/owner-dashboard';
-    default:
-      return '/login';
-  }
+  return ROLE_DEFAULT_ROUTE[role] || '/login';
 };
 
+/**
+ * Component chính điều phối bố cục (Header + Sidebar + Main Router) sau khi xác thực người dùng.
+ */
 function MainDashboard() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const location = useLocation();
@@ -81,13 +101,10 @@ function MainDashboard() {
   const [showAlertsModal, setShowAlertsModal] = useState(false);
   const [alerts, setAlerts] = useState<SystemAlert[]>([]);
 
-  // Core Datasets (Empty initial state; real data is fetched from APIs by respective views)
-  const [transactions, setTransactions] = useState<PayOSTransaction[]>([]);
-  const [applicants, setApplicants] = useState<GarageApplicant[]>([]);
-  const [disputes, setDisputes] = useState<DisputeCase[]>(INITIAL_DISPUTES);
-  const [payouts, setPayouts] = useState<PayoutItem[]>([]);
+  // Dữ liệu cho các màn hình duyệt hồ sơ Gara của phân hệ Staff
+  const [applicants] = useState(INITIAL_GARAGE_APPLICANTS);
 
-  // Sync real-time alerts from backend orders API
+  // Đồng bộ cảnh báo thời gian thực từ Backend Orders & Finance APIs
   useEffect(() => {
     if (!isAuthenticated || !user) return;
     let isMounted = true;
@@ -107,12 +124,56 @@ function MainDashboard() {
               desc: `Đơn gần nhất #${pending[0].orderCode} tại ${pending[0].pickupAddress || 'chưa rõ vị trí'}.`,
               time: 'Vừa xong',
               level: 'CRITICAL',
-              isRead: false
+              isRead: false,
+              targetScreen: 'dashboard'
             };
             setAlerts((prev) => {
               if (prev.some((a) => a.id === liveAlert.id)) return prev;
               return [liveAlert, ...prev];
             });
+          }
+
+          // Cảnh báo tài chính cho Admin (Yêu cầu rút tiền chờ duyệt & Khiếu nại chờ hoàn tiền)
+          if (user.role === 'ADMIN') {
+            try {
+              const [payouts, disputes] = await Promise.all([
+                financeApi.getAllPayouts('PENDING').catch(() => []),
+                financeApi.getAllDisputes('ADMIN_APPROVAL').catch(() => [])
+              ]);
+              if (!isMounted) return;
+              if (payouts.length > 0) {
+                const payoutAlert: SystemAlert = {
+                  id: `LIVE-PAYOUT-${payouts[0].id}`,
+                  title: `Có ${payouts.length} yêu cầu rút tiền ví Gara đang chờ duyệt`,
+                  desc: `Gara đề nghị giải ngân gần nhất: ${payouts[0].garageName || 'Đối tác'}.`,
+                  time: 'Vừa xong',
+                  level: 'WARNING',
+                  isRead: false,
+                  targetScreen: 'payouts'
+                };
+                setAlerts((prev) => {
+                  if (prev.some((a) => a.id === payoutAlert.id)) return prev;
+                  return [payoutAlert, ...prev];
+                });
+              }
+              if (disputes.length > 0) {
+                const disputeAlert: SystemAlert = {
+                  id: `LIVE-DISPUTE-${disputes[0].id}`,
+                  title: `Có ${disputes.length} hồ sơ khiếu nại chờ Admin hoàn tiền`,
+                  desc: `Đã có biên bản xác minh từ nhân viên CSKH.`,
+                  time: 'Vừa xong',
+                  level: 'CRITICAL',
+                  isRead: false,
+                  targetScreen: 'refunds'
+                };
+                setAlerts((prev) => {
+                  if (prev.some((a) => a.id === disputeAlert.id)) return prev;
+                  return [disputeAlert, ...prev];
+                });
+              }
+            } catch {
+              // Ignore auxiliary finance alert errors
+            }
           }
         } else if (user.role === 'GARAGE_OWNER') {
           const orders = await rescueApi.getGarageOrders().catch(() => []);
@@ -125,7 +186,8 @@ function MainDashboard() {
               desc: `Đơn #${pending[0].orderCode} đang chờ thợ cơ động tiếp nhận và xử lý.`,
               time: 'Vừa xong',
               level: 'WARNING',
-              isRead: false
+              isRead: false,
+              targetScreen: 'owner-dashboard'
             };
             setAlerts((prev) => {
               if (prev.some((a) => a.id === liveAlert.id)) return prev;
@@ -146,10 +208,16 @@ function MainDashboard() {
     };
   }, [isAuthenticated, user]);
 
-  const showToast = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'success') => {
+  /**
+   * Hàm hiển thị thông báo nổi (Toast) tự động biến mất sau 4.5 giây.
+   */
+  const showToast = (
+    title: string,
+    message: string,
+    type: 'info' | 'success' | 'warning' | 'error' = 'success'
+  ) => {
     if (DEMO_MODE) {
       message = `Bản demo: ${message} Dữ liệu chưa được lưu hoặc gửi tới hệ thống thật.`;
-      type = 'info';
     }
     const id = Date.now().toString();
     setToasts((prev) => [...prev, { id, title, message, type }]);
@@ -158,56 +226,67 @@ function MainDashboard() {
     }, 4500);
   };
 
-  // Derive currentScreen and currentModule from URL pathname
-  const pathSegments = location.pathname.split('/').filter(Boolean);
-  const urlModule = pathSegments[0] as ModuleType | undefined;
-  const urlScreen = pathSegments[1] as ScreenId | undefined;
-
-  let currentScreen: ScreenId = 'payos-reconciliation';
-  if (urlScreen && urlScreen in screenModule) {
-    currentScreen = urlScreen;
-  } else if (urlModule && (urlModule as unknown as ScreenId) in screenModule) {
-    currentScreen = urlModule as unknown as ScreenId;
-  } else if (user?.role === 'STAFF') {
-    currentScreen = 'dashboard';
-  } else if (user?.role === 'GARAGE_OWNER') {
-    currentScreen = 'owner-dashboard';
-  }
-
-  const currentModule: ModuleType =
-    screenModule[currentScreen] ||
-    urlModule ||
-    (user?.role === 'STAFF' ? 'staff' : user?.role === 'GARAGE_OWNER' ? 'owner' : 'admin');
+  /**
+   * Tính toán phân hệ hiện tại (currentModule) và màn hình hiện tại (currentScreen) từ URL pathname.
+   */
+  const { currentModule, currentScreen } = React.useMemo(() => {
+    const path = location.pathname;
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length >= 2) {
+      const mod = parts[0] as ModuleType;
+      const scr = parts[1] as ScreenId;
+      return { currentModule: mod, currentScreen: scr };
+    }
+    return {
+      currentModule: 'admin' as ModuleType,
+      currentScreen: 'overview' as ScreenId
+    };
+  }, [location.pathname]);
 
   const handleSelectModule = (mod: ModuleType) => {
-    if (!user || !canAccessModule(user.role, mod)) return;
-    if (mod === 'admin') {
-      navigate('/admin/overview');
-    } else if (mod === 'staff') {
-      navigate('/staff/dashboard');
-    } else if (mod === 'owner') {
-      navigate('/owner/owner-dashboard');
+    if (!user) return;
+    if (canAccessModule(user.role, mod)) {
+      const defaultScreen = mod === 'admin' ? 'overview' : mod === 'staff' ? 'dashboard' : 'owner-dashboard';
+      navigate(`/${mod}/${defaultScreen}`);
+    } else {
+      showToast('Từ chối truy cập', 'Bạn không có quyền truy cập vào phân hệ này.', 'warning');
     }
   };
 
-  const handleSelectScreen = (screen: ScreenId) => {
-    if (!user || !canAccessScreen(user.role, screen)) return;
-    const targetModule = screenModule[screen];
-    navigate(`/${targetModule}/${screen}`);
+  const handleSelectScreen = (scr: ScreenId) => {
+    if (!user) return;
+    if (canAccessScreen(user.role, scr)) {
+      const mod = screenModule[scr];
+      if (mod) {
+        navigate(`/${mod}/${scr}`);
+      }
+    } else {
+      showToast('Từ chối truy cập', 'Bạn không có quyền truy cập vào chức năng này.', 'warning');
+    }
   };
 
-  // Loading state
   if (isLoading) {
-    return <div className="min-h-screen p-8 bg-slate-950 text-white">Đang kiểm tra phiên đăng nhập...</div>;
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-secondary font-medium">Đang tải hệ thống điều hành...</p>
+        </div>
+      </div>
+    );
   }
 
-  // Unauthenticated routes
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user) {
     return (
       <Routes>
         <Route
           path="/login"
-          element={<LoginView onSwitchToRegister={() => navigate('/register')} onActivate={() => navigate('/activate')} />}
+          element={
+            <LoginView
+              onSwitchToRegister={() => navigate('/register')}
+              onActivate={() => navigate('/activate')}
+            />
+          }
         />
         <Route
           path="/register"
@@ -222,19 +301,6 @@ function MainDashboard() {
     );
   }
 
-  // Check portal permissions & null user
-  if (!user || !roleModules[user.role] || roleModules[user.role].length === 0) {
-    return (
-      <div className="min-h-screen p-8 bg-slate-950 text-white">
-        Tài khoản này chưa có quyền truy cập web portal. Vui lòng dùng ứng dụng mobile hoặc liên hệ quản trị viên.{' '}
-        <button className="underline ml-2" onClick={logout}>
-          Đăng xuất
-        </button>
-      </div>
-    );
-  }
-
-  // Redirect if authenticated user lands on auth pages
   if (['/login', '/register', '/activate'].includes(location.pathname)) {
     return <Navigate to={getDefaultPath(user.role)} replace />;
   }
@@ -247,7 +313,7 @@ function MainDashboard() {
 
   const dashboard = (
     <div className="min-h-screen bg-surface font-body-md text-on-surface flex flex-col antialiased selection:bg-primary-container selection:text-on-primary-container">
-      {/* Top Application Header */}
+      {/* Thanh Header trên cùng của ứng dụng */}
       <Header
         currentModule={currentModule}
         currentScreen={currentScreen}
@@ -261,21 +327,28 @@ function MainDashboard() {
         onLogout={logout}
       />
 
-      {/* Main Layout Container */}
+      {/* Khung bố cục 2 cột: Sidebar bên trái + Nội dung chính bên phải */}
       <div className="app-layout">
-        {/* Left Fixed Navigation Sidebar */}
-        <Sidebar currentScreen={currentScreen} onSelectScreen={handleSelectScreen} allowedModule={currentModule} />
+        <Sidebar
+          currentScreen={currentScreen}
+          onSelectScreen={handleSelectScreen}
+          allowedModule={currentModule}
+        />
 
-        {/* Primary Content View Area */}
         <main className="app-main">
           <Routes>
-            {/* Module A (Admin) Views */}
+            {/* PHÂN HỆ A: QUẢN TRỊ VIÊN & TÀI CHÍNH (MODULE A - ADMIN VIEWS) */}
             {user.role === 'ADMIN' && (
               <Route path="/admin/staff-accounts" element={<StaffAccountsView />} />
             )}
             <Route
               path="/admin/overview"
-              element={<OverviewGMVView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+              element={
+                <OverviewGMVView
+                  onSelectScreen={handleSelectScreen}
+                  onShowToast={showToast}
+                />
+              }
             />
             <Route
               path="/admin/commission-settings"
@@ -285,7 +358,6 @@ function MainDashboard() {
               path="/admin/payos-reconciliation"
               element={
                 <PayOSReconciliationView
-                  transactions={transactions}
                   onSelectScreen={handleSelectScreen}
                   onShowToast={showToast}
                 />
@@ -293,25 +365,40 @@ function MainDashboard() {
             />
             <Route
               path="/admin/payouts"
-              element={<PayoutsView payouts={payouts} onShowToast={showToast} />}
+              element={<PayoutsView onShowToast={showToast} />}
             />
             <Route
               path="/admin/refunds"
-              element={<RefundsView disputes={disputes} onShowToast={showToast} />}
+              element={<RefundsView onShowToast={showToast} />}
             />
             <Route
               path="/admin/reports"
-              element={<FinancialReportsView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+              element={
+                <FinancialReportsView
+                  onSelectScreen={handleSelectScreen}
+                  onShowToast={showToast}
+                />
+              }
             />
 
-            {/* Module B (Staff) Views */}
+            {/* PHÂN HỆ B: VẬN HÀNH & CHĂM SÓC KHÁCH HÀNG (MODULE B - STAFF VIEWS) */}
             <Route
               path="/staff/dashboard"
-              element={<LiveDispatchDashboardView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+              element={
+                <LiveDispatchDashboardView
+                  onSelectScreen={handleSelectScreen}
+                  onShowToast={showToast}
+                />
+              }
             />
             <Route
               path="/staff/verification"
-              element={<GarageVerificationView applicants={applicants} onShowToast={showToast} />}
+              element={
+                <GarageVerificationView
+                  applicants={applicants}
+                  onShowToast={showToast}
+                />
+              }
             />
             <Route
               path="/staff/moderation"
@@ -319,56 +406,52 @@ function MainDashboard() {
             />
             <Route
               path="/staff/disputes"
-              element={<DisputeFraudView disputes={disputes} onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+              element={
+                <DisputeFraudView
+                  onSelectScreen={handleSelectScreen}
+                  onShowToast={showToast}
+                />
+              }
             />
             <Route
               path="/staff/monitoring"
-              element={<SLAMonitoringView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+              element={<SLAMonitoringView onShowToast={showToast} />}
             />
 
-            {/* Module C (Garage Owner) Views */}
+            {/* PHÂN HỆ C: CHỦ GARA ĐỐI TÁC (MODULE C - GARAGE OWNER VIEWS) */}
             <Route
               path="/owner/owner-dashboard"
-              element={<GarageOwnerDashboardView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+              element={
+                <GarageOwnerDashboardView
+                  onSelectScreen={handleSelectScreen}
+                  onShowToast={showToast}
+                />
+              }
             />
-            {user.role === 'GARAGE_OWNER' && (
-              <Route path="/owner/garage-team" element={<GarageManagementView onShowToast={showToast} />} />
-            )}
+            <Route
+              path="/owner/services-pricing"
+              element={<GarageServicesPricingView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+            />
+            <Route
+              path="/owner/garage-management"
+              element={<GarageManagementView onShowToast={showToast} />}
+            />
+            <Route
+              path="/owner/garage-operations"
+              element={<GarageOperationsView mode="transport" />}
+            />
             <Route
               path="/owner/garage-finance"
               element={<GarageOperationsView mode="finance" />}
             />
-            <Route
-              path="/owner/garage-transport"
-              element={<GarageOperationsView mode="transport" />}
-            />
-            <Route
-              path="/owner/services"
-              element={<GarageServicesPricingView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
-            />
 
-            {/* Module Entry Point Redirects */}
-            <Route path="/admin" element={<Navigate to="/admin/payos-reconciliation" replace />} />
-            <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
-            <Route path="/owner" element={<Navigate to="/owner/owner-dashboard" replace />} />
-
-            {/* Screen ID Direct Aliases */}
-            {Object.entries(screenModule).map(([screen, mod]) => (
-              <Route
-                key={screen}
-                path={`/${screen}`}
-                element={<Navigate to={`/${mod}/${screen}`} replace />}
-              />
-            ))}
-
-            {/* Default and Wildcard Fallbacks */}
-            <Route path="/" element={<Navigate to={getDefaultPath(user.role)} replace />} />
+            {/* Điều hướng mặc định nếu URL không khớp */}
             <Route path="*" element={<Navigate to={getDefaultPath(user.role)} replace />} />
           </Routes>
         </main>
       </div>
 
-      {/* Global Alerts / Notifications Modal */}
+      {/* Hộp thoại (Modal) hiển thị danh sách thông báo & cảnh báo */}
       {showAlertsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
           <div className="bg-surface-container-lowest rounded-2xl border border-surface-container max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
@@ -402,11 +485,15 @@ function MainDashboard() {
                       setAlerts((prev) =>
                         prev.map((a) => (a.id === alt.id ? { ...a, isRead: true } : a))
                       );
+                      if (alt.targetScreen) {
+                        handleSelectScreen(alt.targetScreen);
+                        setShowAlertsModal(false);
+                      }
                     }}
                     className={`pt-space-md first:pt-0 space-y-1 cursor-pointer transition-opacity ${
                       alt.isRead ? 'opacity-60' : 'opacity-100 font-medium'
                     }`}
-                    title="Nhấn để đánh dấu đã đọc"
+                    title="Nhấn để xem và đánh dấu đã đọc"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-body-md text-on-surface flex items-center gap-2">

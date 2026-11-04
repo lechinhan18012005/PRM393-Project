@@ -12,10 +12,13 @@ import com.prm393.floodrescue.features.garage.repository.*;
 import com.prm393.floodrescue.features.garage.service.*;
 import com.prm393.floodrescue.features.mechanic.entity.*;
 import com.prm393.floodrescue.features.mechanic.repository.*;
+import com.prm393.floodrescue.features.onboarding.dto.CreateStaffAccountRequest;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +40,9 @@ public class OnboardingService {
     private final InvitationRepository invitations;
     private final RateLimiterService rateLimiterService;
 
+    @Autowired(required = false)
+    private PasswordEncoder passwordEncoder;
+
     @Transactional
     public AuthResponse registerGarage(RegisterRequest account, RegisterGarageRequest application) {
         if (application.getBusinessLicenseUrl() == null
@@ -47,6 +54,137 @@ public class OnboardingService {
         garages.registerGarage(
                 users.findByUsername(response.getUser().getUsername()).orElseThrow(), application);
         return response;
+    }
+
+    /**
+     * Cách A: Admin khởi tạo trực tiếp tài khoản Nhân viên Điều hành (Role.STAFF) trên cổng Web Admin.
+     * Tự động chuẩn hóa email, sinh username duy nhất từ tiền tố email, sinh số điện thoại hợp lệ nếu bỏ trống,
+     * và băm mật khẩu mặc định (Password@123) bằng BCrypt.
+     */
+    @Transactional
+    public UserProfileResponse createStaffAccount(Long adminUserId, CreateStaffAccountRequest request) {
+        User admin = users.findById(adminUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản Quản trị viên"));
+        return createStaffAccount(admin, request);
+    }
+
+    @Transactional
+    public UserProfileResponse createStaffAccount(User admin, CreateStaffAccountRequest request) {
+        if (admin == null || admin.getRole() != Role.ADMIN) {
+            throw new AccessDeniedException("Chỉ Quản trị viên (ADMIN) mới có quyền khởi tạo tài khoản Staff");
+        }
+        if (request == null || request.getEmail() == null || request.getEmail().isBlank()) {
+            throw new BadRequestException("Email nhân viên không được để trống");
+        }
+
+        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        if (users.existsByEmail(normalizedEmail) || users.existsByEmailIgnoreCase(normalizedEmail)) {
+            throw new BadRequestException("Email đã được đăng ký trên hệ thống: " + normalizedEmail);
+        }
+
+        String emailPrefix = normalizedEmail.contains("@")
+                ? normalizedEmail.substring(0, normalizedEmail.indexOf('@'))
+                : normalizedEmail;
+        String sanitizedPrefix = emailPrefix.replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (sanitizedPrefix.isBlank()) {
+            sanitizedPrefix = "operator";
+        }
+
+        String baseUsername;
+        if (request.getUsername() != null && !request.getUsername().isBlank()) {
+            baseUsername = request.getUsername().trim();
+        } else {
+            baseUsername = sanitizedPrefix.toLowerCase(Locale.ROOT).startsWith("staff")
+                    ? sanitizedPrefix.toLowerCase(Locale.ROOT)
+                    : "staff_" + sanitizedPrefix.toLowerCase(Locale.ROOT);
+        }
+        if (baseUsername.length() > 42) {
+            baseUsername = baseUsername.substring(0, 42);
+        }
+
+        String uniqueUsername = baseUsername;
+        int suffix = 1;
+        while (users.existsByUsername(uniqueUsername) || users.existsByUsernameIgnoreCase(uniqueUsername)) {
+            uniqueUsername = baseUsername + "_" + suffix;
+            suffix++;
+        }
+
+        String phone;
+        if (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank()) {
+            phone = request.getPhoneNumber().trim();
+            if (users.existsByPhone(phone)) {
+                throw new BadRequestException("Số điện thoại đã được sử dụng: " + phone);
+            }
+        } else {
+            phone = generateUniquePlaceholderPhone();
+        }
+
+        String fullName;
+        if (request.getFullName() != null && !request.getFullName().isBlank()) {
+            fullName = request.getFullName().trim();
+        } else {
+            String prettyPrefix = Character.toUpperCase(sanitizedPrefix.charAt(0))
+                    + (sanitizedPrefix.length() > 1 ? sanitizedPrefix.substring(1).replace('_', ' ') : "");
+            fullName = "Chuyên Viên Điều Hành (" + prettyPrefix + ")";
+        }
+
+        String rawPassword = (request.getPassword() != null && !request.getPassword().isBlank())
+                ? request.getPassword().trim()
+                : "Password@123";
+
+        String encodedPassword = passwordEncoder != null
+                ? passwordEncoder.encode(rawPassword)
+                : rawPassword;
+
+        User staffUser = User.builder()
+                .username(uniqueUsername)
+                .email(normalizedEmail)
+                .phone(phone)
+                .password(encodedPassword)
+                .fullName(fullName)
+                .role(Role.STAFF)
+                .active(true)
+                .avatarUrl("https://ui-avatars.com/api/?name=" + fullName.replace(" ", "+") + "&background=random")
+                .build();
+
+        User saved = users.save(staffUser);
+        return UserProfileResponse.fromEntity(saved);
+    }
+
+    /**
+     * Lấy danh sách tài khoản Nhân viên Điều hành (Role.STAFF), hỗ trợ tìm kiếm theo từ khóa và lọc trạng thái hoạt động.
+     */
+    @Transactional(readOnly = true)
+    public List<UserProfileResponse> getStaffAccounts() {
+        return getStaffAccounts(null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserProfileResponse> getStaffAccounts(String search, Boolean active) {
+        String keyword = (search != null && !search.isBlank()) ? search.trim().toLowerCase(Locale.ROOT) : null;
+        return users.findByRole(Role.STAFF).stream()
+                .filter(u -> active == null || u.isActive() == active)
+                .filter(u -> {
+                    if (keyword == null) return true;
+                    boolean matchName = u.getFullName() != null && u.getFullName().toLowerCase(Locale.ROOT).contains(keyword);
+                    boolean matchEmail = u.getEmail() != null && u.getEmail().toLowerCase(Locale.ROOT).contains(keyword);
+                    boolean matchUsername = u.getUsername() != null && u.getUsername().toLowerCase(Locale.ROOT).contains(keyword);
+                    boolean matchPhone = u.getPhone() != null && u.getPhone().toLowerCase(Locale.ROOT).contains(keyword);
+                    return matchName || matchEmail || matchUsername || matchPhone;
+                })
+                .map(UserProfileResponse::fromEntity)
+                .toList();
+    }
+
+    private String generateUniquePlaceholderPhone() {
+        for (int attempt = 0; attempt < 50; attempt++) {
+            int rand = ThreadLocalRandom.current().nextInt(10000000, 99999999);
+            String candidate = "09" + rand;
+            if (!users.existsByPhone(candidate)) {
+                return candidate;
+            }
+        }
+        return "09" + (System.currentTimeMillis() % 100000000L);
     }
 
     @Transactional
@@ -177,7 +315,7 @@ public class OnboardingService {
             return HexFormat.of()
                     .formatHex(
                             MessageDigest.getInstance("SHA-256")
-                                     .digest(code.getBytes(StandardCharsets.UTF_8)));
+                                    .digest(code.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException(ex);
         }
