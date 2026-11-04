@@ -50,9 +50,6 @@ export const screenModule: Record<ScreenId, ModuleType> = {
   disputes: 'staff',
   // Màn hình giám sát chất lượng dịch vụ SLA và đánh giá CSAT sau cứu hộ (UC-19) - Thuộc phân hệ Staff
   monitoring: 'staff',
-  // Màn hình giám sát các chuyến xe tải gom đoàn vượt ngập (Batch Trips) - Thuộc phân hệ Staff
-  'batch-trips': 'staff',
-  // Bảng điều khiển tổng quan dành cho Chủ Gara - Thuộc phân hệ Owner
   'owner-dashboard': 'owner',
   // Màn hình cấu hình danh mục dịch vụ và bảng giá niêm yết của Gara - Thuộc phân hệ Owner
   services: 'owner'

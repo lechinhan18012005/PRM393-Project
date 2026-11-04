@@ -7,9 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile/core/models/user_model.dart';
+import 'package:mobile/core/models/vehicle_model.dart';
 import 'package:mobile/core/theme/app_theme.dart';
 import 'package:mobile/providers/auth_provider.dart';
 import 'package:mobile/providers/flood_report_provider.dart';
+import 'package:mobile/providers/vehicle_provider.dart';
 import 'package:mobile/screens/customer/stitch_hydro_rescue_screen.dart';
 import 'package:mobile/screens/customer/service_selection_screen.dart';
 import 'package:mobile/screens/customer/account_screen.dart';
@@ -40,11 +42,59 @@ class _Flood extends FloodReportProvider {
   }
 }
 
+class _Vehicle extends VehicleProvider {
+  _Vehicle() {
+    _vehicles = [
+      const VehicleModel(
+        id: 1,
+        licensePlate: '59-B1 892.44',
+        brand: 'Honda',
+        model: 'SH 150i',
+        vehicleType: 'SCOOTER',
+      ),
+      const VehicleModel(
+        id: 2,
+        licensePlate: '59-S3 481.09',
+        brand: 'Yamaha',
+        model: 'Exciter 150',
+        vehicleType: 'CLUTCH',
+      ),
+      const VehicleModel(
+        id: 3,
+        licensePlate: '59-X1 204.88',
+        brand: 'Honda',
+        model: 'Wave Alpha',
+        vehicleType: 'MANUAL',
+      ),
+    ];
+    _selectedVehicle = _vehicles.first;
+  }
+
+  List<VehicleModel> _vehicles = [];
+  VehicleModel? _selectedVehicle;
+
+  @override
+  List<VehicleModel> get vehicles => _vehicles;
+
+  @override
+  VehicleModel? get selectedVehicle => _selectedVehicle;
+
+  @override
+  void selectVehicle(VehicleModel vehicle) {
+    _selectedVehicle = vehicle;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> fetchVehicles() async {}
+}
+
 const _capture = bool.fromEnvironment('CAPTURE_CUSTOMER_UI');
 final _previewKey = GlobalKey();
 Future<void> _mount(
   WidgetTester tester, {
   _Flood? flood,
+  _Vehicle? vehicle,
   double width = 390,
   double scale = 1,
 }) async {
@@ -69,6 +119,9 @@ Future<void> _mount(
         ChangeNotifierProvider<AuthProvider>.value(value: _Auth()),
         ChangeNotifierProvider<FloodReportProvider>.value(
           value: flood ?? _Flood(),
+        ),
+        ChangeNotifierProvider<VehicleProvider>.value(
+          value: vehicle ?? _Vehicle(),
         ),
       ],
       child: RepaintBoundary(
@@ -203,20 +256,19 @@ void main() {
       );
     },
   );
-  testWidgets('History filters do not show unrelated sample orders', (
+  testWidgets('History displays filter tabs and empty state when no real orders', (
     tester,
   ) async {
     await _mount(tester);
     await _tab(tester, 'Lịch sử');
-    await tester.tap(find.text('Sửa tại chỗ'));
+    expect(find.text('Tất cả'), findsOneWidget);
+    expect(find.text('Đang xử lý'), findsOneWidget);
+    expect(find.text('Hoàn tất'), findsOneWidget);
+    expect(find.text('Đã hủy'), findsOneWidget);
+    expect(find.text('Chưa có lịch sử cứu hộ'), findsOneWidget);
+    await tester.tap(find.text('Hoàn tất'));
     await tester.pumpAndSettle();
-    expect(find.text('#PRM-8924'), findsOneWidget);
-    expect(find.text('#PRM-8201'), findsNothing);
-    expect(find.text('#PRM-7819'), findsNothing);
-    await tester.tap(find.text('Vận chuyển'));
-    await tester.pumpAndSettle();
-    expect(find.text('#PRM-8924'), findsNothing);
-    expect(find.text('#PRM-8201'), findsOneWidget);
+    expect(find.text('Chưa có lịch sử cứu hộ'), findsOneWidget);
   });
   testWidgets(
     'Failed map load displays an error rather than a safe-road claim',

@@ -41,8 +41,20 @@ public class StaffGarageController {
 
     @GetMapping
     @Operation(summary = "Lấy tất cả danh sách Garage trong hệ thống")
-    public ResponseEntity<ApiResponse<List<GarageResponse>>> getAllGarages() {
+    public ResponseEntity<ApiResponse<List<GarageResponse>>> getAllGarages(
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size
+    ) {
         List<GarageResponse> all = garageService.getAllGarages();
+        if (page != null && size != null && size > 0 && page >= 0) {
+            int fromIndex = page * size;
+            if (fromIndex >= all.size()) {
+                all = java.util.Collections.emptyList();
+            } else {
+                int toIndex = Math.min(fromIndex + size, all.size());
+                all = all.subList(fromIndex, toIndex);
+            }
+        }
         return ResponseEntity.ok(ApiResponse.success(all));
     }
 

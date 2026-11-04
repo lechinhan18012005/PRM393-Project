@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile/core/services/auth_service.dart';
 import 'package:mobile/core/theme/app_theme.dart';
 import 'package:mobile/providers/auth_provider.dart';
+import 'package:mobile/providers/flood_report_provider.dart';
 import 'package:mobile/screens/customer/account_screen.dart';
 import 'package:mobile/screens/customer/stitch_hydro_rescue_screen.dart';
 import 'package:mobile/screens/auth/login_screen.dart';
@@ -72,8 +73,11 @@ void main() {
   testWidgets('Customer can open account from home', (tester) async {
     final auth = await provider();
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: auth,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: auth),
+          ChangeNotifierProvider(create: (_) => FloodReportProvider()),
+        ],
         child: MaterialApp(
           theme: AppTheme.light,
           home: const StitchHydroRescueScreen(),

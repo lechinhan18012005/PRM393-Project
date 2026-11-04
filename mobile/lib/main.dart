@@ -29,7 +29,7 @@ class HydroRescueApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => VehicleProvider()),
       ],
       child: MaterialApp(
-        title: 'HydroRescue Vietnam',
+        title: 'HydroRescue',
         debugShowCheckedModeBanner: false,
         builder: (context, child) => Banner(
           message: 'UI DEMO',

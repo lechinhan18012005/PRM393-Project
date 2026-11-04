@@ -1,8 +1,83 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:mobile/core/models/vehicle_model.dart';
 import 'package:mobile/core/theme/app_theme.dart';
+import 'package:mobile/providers/flood_report_provider.dart';
+import 'package:mobile/providers/vehicle_provider.dart';
 import 'package:mobile/screens/customer/stitch_hydro_rescue_screen.dart';
 import 'package:mobile/screens/customer/service_selection_screen.dart';
+
+class _FlowFlood extends FloodReportProvider {
+  @override
+  Future<void> fetchActiveFloodPoints() async {}
+}
+
+class _FlowVehicle extends VehicleProvider {
+  _FlowVehicle() {
+    _vehicles = [
+      const VehicleModel(
+        id: 1,
+        licensePlate: '59-B1 892.44',
+        brand: 'Honda',
+        model: 'SH 150i',
+        vehicleType: 'SCOOTER',
+      ),
+      const VehicleModel(
+        id: 2,
+        licensePlate: '59-S3 481.09',
+        brand: 'Yamaha',
+        model: 'Exciter 150',
+        vehicleType: 'CLUTCH',
+      ),
+      const VehicleModel(
+        id: 3,
+        licensePlate: '59-X1 204.88',
+        brand: 'Honda',
+        model: 'Wave Alpha',
+        vehicleType: 'MANUAL',
+      ),
+    ];
+    _selectedVehicle = _vehicles.first;
+  }
+
+  List<VehicleModel> _vehicles = [];
+  VehicleModel? _selectedVehicle;
+
+  @override
+  List<VehicleModel> get vehicles => _vehicles;
+
+  @override
+  VehicleModel? get selectedVehicle => _selectedVehicle;
+
+  @override
+  void selectVehicle(VehicleModel vehicle) {
+    _selectedVehicle = vehicle;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> fetchVehicles() async {}
+}
+
+Widget _wrap(Widget child, {TextScaler? textScaler}) {
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider<FloodReportProvider>.value(value: _FlowFlood()),
+      ChangeNotifierProvider<VehicleProvider>.value(value: _FlowVehicle()),
+    ],
+    child: MaterialApp(
+      theme: AppTheme.light,
+      builder: textScaler != null
+          ? (context, c) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+                child: c!,
+              )
+          : null,
+      home: child,
+    ),
+  );
+}
 
 void main() {
   testWidgets('Choose vehicle and open rescue services', (tester) async {
@@ -10,9 +85,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light, home: const StitchHydroRescueScreen()),
-    );
+    await tester.pumpWidget(_wrap(const StitchHydroRescueScreen()));
     await tester.tap(find.byKey(const Key('choose-vehicle')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Yamaha Exciter 150'));
@@ -57,17 +130,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.light,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: TextScaler.linear(1.4)),
-            child: child!,
-          ),
-          home: screen,
-        ),
-      );
+      await tester.pumpWidget(_wrap(screen, textScaler: const TextScaler.linear(1.4)));
       await tester.pump();
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());

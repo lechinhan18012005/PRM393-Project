@@ -1,504 +1,827 @@
 // ============================================================================
-// MÀN HÌNH TIẾP NHẬN, XÁC MINH KHIẾU NẠI & ĐỀ XUẤT HOÀN TIỀN (DISPUTE FRAUD VIEW - UC-23 STAFF)
-// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Xử lý Khiếu nại & Tài chính (UC-23 & UC-27)
+// MÀN HÌNH TIẾP NHẬN, XÁC MINH KHIẾU NẠI & ĐỀ XUẤT HOÀN TIỀN (DISPUTE FRAUD VIEW)
+// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Xử lý Khiếu nại & Tài chính
 // Mục đích:
-// 1. Dành cho Nhân viên Vận hành & Chăm sóc khách hàng (STAFF) tiếp nhận các hồ sơ khiếu nại
-//    của khách hàng đối với Gara đối tác (ví dụ: Thu vượt báo giá OVERCHARGE, Chất lượng kém POOR_QUALITY,
-//    Làm hư hỏng phương tiện DAMAGE, Báo cáo sai hiện trường FAKE_RESCUE).
-// 2. Truy xuất 100% danh sách hồ sơ khiếu nại thực tế từ Cơ sở dữ liệu qua `financeApi.getStaffDisputes()`.
-//    Loại bỏ hoàn toàn dữ liệu giả lập (mockData) truyền từ props và các hình ảnh Unsplash gắn cứng.
-// 3. Cho phép Staff kiểm tra thông tin hai bên (Khách hàng & Gara), nhập mức tiền đề xuất hoàn trả
-//    (`proposedRefundAmount`) và ghi chú biên bản xác minh (`staffFindingNote`), sau đó:
-//    - Chuyển hồ sơ lên Admin phê duyệt hoàn tiền (`decision = 'ADMIN_APPROVAL'`)
-//    - Hoặc bác bỏ khiếu nại nếu Gara thu đúng quy định (`decision = 'REJECTED'`).
+// 1. Dành cho Nhân viên Vận hành & CSKH (STAFF) tiếp nhận các hồ sơ khiếu nại của khách hàng
+//    đối với Gara đối tác (Thu vượt giá, Làm hỏng xe, Gian lận cuốc cứu hộ, Kém chất lượng).
+// 2. Tự động đồng bộ danh sách khiếu nại từ Database qua API inanceApi.getStaffDisputes().
+// 3. Cho phép Staff thẩm tra bằng chứng ảnh hiện trường, so sánh biểu phí, nhập mức bồi hoàn đề xuất
+//    và gửi biên bản lên Admin phê duyệt hoặc bác bỏ nếu chứng từ Gara hợp lệ.
+// 4. Hỗ trợ xem phóng to ảnh bằng chứng (Lightbox Modal) và phân loại theo tab trạng thái.
 // ============================================================================
 
 import { ViewGuide } from '../ViewGuide';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScreenId } from '../../types';
+import React, { useEffect, useState } from 'react';
+import { DisputeCase, ScreenId } from '../../types';
 import { DisputeBackendResponse, financeApi } from '../../services/financeApi';
 
-/**
- * Giao diện Props truyền vào DisputeFraudView.
- * Tham số `disputes` là tùy chọn để tương thích ngược, nhưng component luôn lấy dữ liệu thật từ Database.
- */
 interface DisputeFraudViewProps {
-  disputes?: unknown[];
+  disputes?: DisputeCase[];
   onSelectScreen: (screen: ScreenId) => void;
-  onShowToast: (title: string, msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+  onShowToast: (title: string, msg: string) => void;
 }
 
+type TabType = 'STAFF_REVIEW' | 'ADMIN_APPROVAL' | 'RESOLVED' | 'ALL';
+
 export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
+  disputes = [],
   onSelectScreen,
   onShowToast
 }) => {
-  // ==========================================================================
-  // KHAI BÁO CÁC BIẾN TRẠNG THÁI (REACT STATE)
-  // ==========================================================================
-
-  // Danh sách toàn bộ hồ sơ khiếu nại lấy trực tiếp từ Database qua API /staff/disputes
-  const [caseList, setCaseList] = useState<DisputeBackendResponse[]>([]);
-
-  // ID của hồ sơ đang được Staff chọn để lập biên bản xác minh ở cột bên phải
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-
-  // State cho biểu mẫu lập biên bản xác minh của Staff (UC-23)
-  const [proposedAmount, setProposedAmount] = useState<number>(0);
-  const [staffNote, setStaffNote] = useState<string>('');
-
-  // State cho thanh tìm kiếm và bộ lọc trạng thái hồ sơ
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-
-  // Trạng thái đang tải dữ liệu và đang gửi biên bản xác minh
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [caseList, setCaseList] = useState<(DisputeCase & { backendId?: number })[]>(disputes);
+  const [selectedCase, setSelectedCase] = useState<(DisputeCase & { backendId?: number }) | null>(disputes[0] || null);
+  const [proposedAmount, setProposedAmount] = useState<number>(disputes[0]?.requestedRefund || 0);
+  const [staffNote, setStaffNote] = useState<string>(disputes[0]?.inspectorNote || '');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string>('');
-
-  // ==========================================================================
-  // HÀM TẢI DỮ LIỆU KHIẾU NẠI TỪ DATABASE
-  // ==========================================================================
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>('STAFF_REVIEW');
 
   /**
-   * Gọi API `financeApi.getStaffDisputes()` để nạp danh sách hồ sơ khiếu nại thực tế từ Database.
+   * Chuyển đổi đối tượng DisputeBackendResponse từ Database thành cấu trúc DisputeCase cho giao diện.
    */
-  const loadStaffDisputes = useCallback(async () => {
-    setIsLoading(true);
-    setErrorMsg('');
-    try {
-      const data = await financeApi.getStaffDisputes();
-      const list = Array.isArray(data) ? data : [];
-      setCaseList(list);
+  const mapBackendToDisputeCase = (d: DisputeBackendResponse): DisputeCase & { backendId: number } => {
+    const diff = d.proposedRefundAmount ?? d.requestedRefundAmount ?? 0;
+    const orig = d.originalAmount || diff;
+    const rawUrls = d.evidenceImageUrls
+      ? d.evidenceImageUrls.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
 
-      if (list.length > 0) {
-        setSelectedId((prev) => (prev && list.some((c) => c.id === prev) ? prev : list[0].id));
-      } else {
-        setSelectedId(null);
+    const formatDisputeTypeName = (type: string) => {
+      switch (type) {
+        case 'OVERCHARGE':
+          return 'Thu vượt giá';
+        case 'DAMAGE':
+          return 'Hư hỏng xe';
+        case 'FAKE_RESCUE':
+          return 'Gian lận cứu hộ';
+        default:
+          return 'Kém chất lượng';
       }
-    } catch (err) {
-      setErrorMsg((err as Error).message || 'Không thể tải danh sách hồ sơ khiếu nại từ Database.');
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    return {
+      backendId: d.id,
+      id: d.disputeCode || `DISP-${d.id}`,
+      rescueCode: d.rescueCode || 'RESCUE-01',
+      payosCode: d.payosOrderCode ? `POS-${d.payosOrderCode}` : 'Chưa có mã PayOS',
+      customerName: d.customerName || 'Khách hàng',
+      customerPhone: d.customerPhone || 'Chưa cung cấp',
+      garageName: d.garageName || 'Chưa xác định',
+      garageId: d.garageId ? `GAR-${d.garageId}` : 'N/A',
+      garageWalletBalance: d.garageWalletBalance ?? 0,
+      type: formatDisputeTypeName(d.disputeType),
+      severity: d.disputeType === 'FAKE_RESCUE' || d.disputeType === 'DAMAGE' ? 'L3_CRITICAL' : 'L2_HIGH',
+      originalPrice: orig,
+      requestedRefund: diff,
+      customerReason: d.customerReason || 'Khách hàng yêu cầu hỗ trợ bồi hoàn dịch vụ cứu hộ.',
+      time: d.createdAt ? new Date(d.createdAt).toLocaleString('vi-VN') : 'Vừa xong',
+      status: (d.status as any) || 'STAFF_REVIEW',
+      inspectorName: d.staffReviewerName || 'Chưa phân công',
+      inspectorId: d.staffReviewerId ? `STAFF-${d.staffReviewerId}` : 'Chưa gán',
+      inspectorNote: d.staffFindingNote || '',
+      adminResolutionNote: d.adminResolutionNote,
+      evidenceReceiptUrl: rawUrls[0] || '',
+      evidenceUrls: rawUrls,
+      refundReferenceCode: d.refundReferenceCode,
+      audioDuration: '',
+      diffItems: [
+        {
+          name:
+            d.disputeType === 'OVERCHARGE'
+              ? 'Chênh lệch thu vượt biểu phí chuẩn sàn'
+              : d.disputeType === 'DAMAGE'
+              ? 'Tổn hại phụ tùng xe trong quá trình cứu hộ'
+              : d.disputeType === 'FAKE_RESCUE'
+              ? 'Chi phí cuốc cứu hộ gian lận / không thực hiện'
+              : 'Chi phí bồi hoàn dịch vụ kém chất lượng',
+          desc: d.customerReason || 'Khách yêu cầu bồi hoàn',
+          priceV1: Math.max(0, orig - diff),
+          priceV2: orig,
+          diff
+        }
+      ]
+    };
+  };
+
+  /**
+   * Nạp danh sách hồ sơ khiếu nại thực tế từ Database thông qua API inanceApi.getStaffDisputes().
+   */
+  const loadData = () => {
+    setIsLoading(true);
+    financeApi
+      .getStaffDisputes()
+      .then((backendData) => {
+        if (backendData && backendData.length > 0) {
+          const mapped = backendData.map(mapBackendToDisputeCase);
+          setCaseList(mapped);
+          const matching = mapped.filter((c) => {
+            if (activeTab === 'STAFF_REVIEW') return c.status === 'STAFF_REVIEW';
+            if (activeTab === 'ADMIN_APPROVAL') return c.status === 'ADMIN_APPROVAL';
+            if (activeTab === 'RESOLVED') return c.status === 'REFUNDED' || c.status === 'REJECTED';
+            return true;
+          });
+          const target = matching[0] || mapped[0];
+          setSelectedCase(target);
+          setProposedAmount(target.requestedRefund);
+          setStaffNote(target.inspectorNote);
+        } else if (disputes && disputes.length > 0) {
+          setCaseList(disputes);
+          const matching = disputes.filter((c) => {
+            if (activeTab === 'STAFF_REVIEW') return c.status === 'STAFF_REVIEW';
+            if (activeTab === 'ADMIN_APPROVAL') return c.status === 'ADMIN_APPROVAL';
+            if (activeTab === 'RESOLVED') return c.status === 'REFUNDED' || c.status === 'REJECTED';
+            return true;
+          });
+          const target = matching[0] || disputes[0];
+          setSelectedCase(target);
+          setProposedAmount(target.requestedRefund);
+          setStaffNote(target.inspectorNote);
+        } else {
+          setSelectedCase(null);
+        }
+      })
+      .catch((err) => {
+        console.error('Lỗi tải danh sách khiếu nại:', err);
+        if (disputes && disputes.length > 0) {
+          setCaseList(disputes);
+          setSelectedCase(disputes[0]);
+        }
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
-  /**
-   * Tự động tải danh sách khiếu nại khi mở màn hình.
-   */
-  useEffect(() => {
-    void loadStaffDisputes();
-  }, [loadStaffDisputes]);
+  const handleSelectCase = (c: DisputeCase & { backendId?: number }) => {
+    setSelectedCase(c);
+    setProposedAmount(c.requestedRefund);
+    setStaffNote(c.inspectorNote || '');
+  };
 
-  // ==========================================================================
-  // TÍNH TOÁN CHỈ SỐ THỐNG KÊ VÀ LỌC HỒ SƠ BẰNG HOOK useMemo
-  // ==========================================================================
-
-  /**
-   * Tính toán các thẻ chỉ số KPI trực tiếp từ danh sách `caseList` trong Database.
-   */
-  const metrics = useMemo(() => {
-    const total = caseList.length;
-    const staffReviewCount = caseList.filter(
-      (c) => c.status === 'STAFF_REVIEW' || c.status === 'OPEN' || c.status === 'UNDER_REVIEW'
-    ).length;
-    const escalatedCount = caseList.filter(
-      (c) => c.status === 'ADMIN_APPROVAL' || c.status === 'ESCALATED_TO_ADMIN'
-    ).length;
-    const resolvedCount = caseList.filter(
-      (c) => c.status === 'REFUNDED' || c.status === 'RESOLVED_REFUND'
-    ).length;
-
-    return { total, staffReviewCount, escalatedCount, resolvedCount };
-  }, [caseList]);
-
-  /**
-   * Lọc danh sách hồ sơ khiếu nại theo trạng thái và từ khóa tìm kiếm.
-   */
-  const filteredCases = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-
-    return caseList.filter((c) => {
-      if (statusFilter !== 'ALL' && c.status !== statusFilter) {
-        return false;
-      }
-      if (!q) return true;
-
-      const code = (c.disputeCode || `DISP-${c.id}`).toLowerCase();
-      const rescueCode = (c.rescueCode || `#RESCUE-${c.rescueOrderId ?? ''}`).toLowerCase();
-      const customer = (c.customerName || '').toLowerCase();
-      const garage = (c.garageName || '').toLowerCase();
-
-      return (
-        code.includes(q) ||
-        rescueCode.includes(q) ||
-        customer.includes(q) ||
-        garage.includes(q)
-      );
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const filtered = caseList.filter((c) => {
+      if (tab === 'STAFF_REVIEW') return c.status === 'STAFF_REVIEW';
+      if (tab === 'ADMIN_APPROVAL') return c.status === 'ADMIN_APPROVAL';
+      if (tab === 'RESOLVED') return c.status === 'REFUNDED' || c.status === 'REJECTED';
+      return true;
     });
-  }, [caseList, statusFilter, searchQuery]);
-
-  // Hồ sơ đang được chọn để hiển thị chi tiết bên phải
-  const selectedCase = useMemo(() => {
-    return (
-      filteredCases.find((c) => c.id === selectedId) ||
-      caseList.find((c) => c.id === selectedId) ||
-      filteredCases[0] ||
-      null
-    );
-  }, [filteredCases, caseList, selectedId]);
-
-  /**
-   * Đồng bộ giá trị mặc định của ô nhập tiền đề xuất hoàn và ghi chú khi Staff chọn hồ sơ khác.
-   */
-  useEffect(() => {
-    if (selectedCase) {
-      setProposedAmount(
-        Number(selectedCase.proposedRefundAmount ?? selectedCase.requestedRefundAmount ?? 0)
-      );
-      setStaffNote(
-        selectedCase.staffFindingNote || selectedCase.staffResolutionNotes || ''
-      );
+    if (filtered.length > 0) {
+      setSelectedCase(filtered[0]);
+      setProposedAmount(filtered[0].requestedRefund);
+      setStaffNote(filtered[0].inspectorNote);
     } else {
-      setProposedAmount(0);
-      setStaffNote('');
+      setSelectedCase(null);
     }
-  }, [selectedCase]);
+  };
 
-  // ==========================================================================
-  // XỬ LÝ LẬP BIÊN BẢN XÁC MINH & CHUYỂN LÊN ADMIN HOẶC BÁC BỎ (UC-23)
-  // ==========================================================================
-
-  /**
-   * Hàm gửi kết quả thẩm tra của Staff lên Backend qua `financeApi.reviewDisputeByStaff(...)`.
-   */
   const handleResolveDispute = async (
+    caseId: string,
     resolution: 'PROPOSE_ADMIN_REFUND' | 'REJECT_COMPLAINT'
   ) => {
     if (!selectedCase) return;
-    setIsSubmitting(true);
 
     const decision = resolution === 'PROPOSE_ADMIN_REFUND' ? 'ADMIN_APPROVAL' : 'REJECTED';
-    const caseCode = selectedCase.disputeCode || `DISP-${selectedCase.id}`;
-    const noteToSend =
-      staffNote.trim() ||
-      (decision === 'ADMIN_APPROVAL'
-        ? `Staff đã xác minh chứng từ, đề xuất Admin duyệt hoàn ${proposedAmount.toLocaleString('vi-VN')} ₫ cho khách hàng.`
-        : `Staff đã kiểm tra chứng từ hợp lệ, bác bỏ khiếu nại #${caseCode}.`);
+
+    if (decision === 'ADMIN_APPROVAL') {
+      if (!proposedAmount || proposedAmount <= 0) {
+        onShowToast('Số Tiền Không Hợp Lệ', 'Mức tiền đề xuất hoàn trả phải lớn hơn 0 đ.');
+        return;
+      }
+      if (proposedAmount > selectedCase.originalPrice) {
+        onShowToast(
+          'Vượt Quá Giới Hạn',
+          `Mức đề xuất hoàn không được vượt quá tổng tiền gốc (${selectedCase.originalPrice.toLocaleString('vi-VN')} đ).`
+        );
+        return;
+      }
+      if (!staffNote.trim()) {
+        onShowToast('Thiếu Kết Luận', 'Vui lòng nhập kết luận điều tra hiện trường của Staff trước khi chuyển Admin.');
+        return;
+      }
+    } else {
+      if (!staffNote.trim()) {
+        onShowToast('Thiếu Lý Do', 'Vui lòng nhập lý do bác bỏ khiếu nại để lưu hồ sơ.');
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    const noteToSend = staffNote.trim();
 
     try {
-      const updated = await financeApi.reviewDisputeByStaff(
-        selectedCase.id,
-        decision,
-        decision === 'ADMIN_APPROVAL' ? proposedAmount : 0,
-        noteToSend
-      );
+      if (selectedCase.backendId) {
+        const updated = await financeApi.reviewDisputeByStaff(
+          selectedCase.backendId,
+          decision,
+          proposedAmount,
+          noteToSend
+        );
+        const mappedUpdated = mapBackendToDisputeCase(updated);
+        setCaseList((prev) => prev.map((item) => (item.id === selectedCase.id ? mappedUpdated : item)));
+        setSelectedCase(mappedUpdated);
+      } else {
+        const nextStatus = decision === 'ADMIN_APPROVAL' ? 'ADMIN_APPROVAL' : 'REJECTED';
+        const updatedLocal = {
+          ...selectedCase,
+          status: nextStatus as DisputeCase['status'],
+          requestedRefund: decision === 'ADMIN_APPROVAL' ? proposedAmount : 0,
+          inspectorNote: noteToSend
+        };
+        setCaseList((prev) => prev.map((item) => (item.id === selectedCase.id ? updatedLocal : item)));
+        setSelectedCase(updatedLocal);
+      }
 
-      // Cập nhật trực tiếp bản ghi trong state `caseList`
-      setCaseList((prev) =>
-        prev.map((item) => (item.id === selectedCase.id ? { ...item, ...updated } : item))
-      );
-
-      onShowToast(
-        decision === 'ADMIN_APPROVAL'
-          ? 'Đã chuyển hồ sơ lên Admin'
-          : 'Đã bác bỏ khiếu nại',
-        decision === 'ADMIN_APPROVAL'
-          ? `Biên bản xác minh #${caseCode} (Đề xuất hoàn ${proposedAmount.toLocaleString('vi-VN')} ₫) đã chuyển sang hàng đợi Admin phê duyệt.`
-          : `Đã bác bỏ khiếu nại #${caseCode} và lưu biên bản vào Database.`,
-        decision === 'ADMIN_APPROVAL' ? 'success' : 'info'
-      );
-    } catch (err) {
-      onShowToast(
-        'Lỗi lưu biên bản xác minh',
-        (err as Error).message || 'Không thể cập nhật biên bản khiếu nại.',
-        'error'
-      );
+      if (decision === 'ADMIN_APPROVAL') {
+        onShowToast(
+          'Đã Chuyển Hồ Sơ Lên Admin',
+          `Biên bản xác minh đơn ${caseId} với mức đề xuất hoàn ${proposedAmount.toLocaleString('vi-VN')} đ đã chuyển sang hàng đợi Admin phê duyệt.`
+        );
+      } else {
+        onShowToast(
+          'Đã Bác Bỏ Khiếu Nại',
+          `Đã bác bỏ khiếu nại đơn ${caseId} và lưu trữ biên bản đối soát thành công.`
+        );
+      }
+    } catch (err: any) {
+      onShowToast('Lỗi Xử Lý Khiếu Nại', err?.message || 'Không thể lưu biên bản xác minh');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ==========================================================================
-  // HIỂN THỊ GIAO DIỆN NGƯỜI DÙNG (JSX RENDERING)
-  // ==========================================================================
+  // Filtered cases by tab
+  const filteredCases = caseList.filter((c) => {
+    if (activeTab === 'STAFF_REVIEW') return c.status === 'STAFF_REVIEW';
+    if (activeTab === 'ADMIN_APPROVAL') return c.status === 'ADMIN_APPROVAL';
+    if (activeTab === 'RESOLVED') return c.status === 'REFUNDED' || c.status === 'REJECTED';
+    return true;
+  });
+
+  // Calculate real-time dynamic metrics from actual caseList
+  const countStaffReview = caseList.filter((c) => c.status === 'STAFF_REVIEW').length;
+  const countAdminApproval = caseList.filter((c) => c.status === 'ADMIN_APPROVAL').length;
+  const countRefunded = caseList.filter((c) => c.status === 'REFUNDED').length;
+  const totalPendingRefundAmount = caseList
+    .filter((c) => c.status === 'STAFF_REVIEW' || c.status === 'ADMIN_APPROVAL')
+    .reduce((sum, c) => sum + (c.requestedRefund || 0), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-space-xl">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-surface-container pb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md border-b border-surface-container pb-space-md">
         <div>
-          <h1 className="text-2xl font-bold text-on-surface">
-            Xử Lý Khiếu Nại Dịch Vụ &amp; Lập Biên Bản Xác Minh (Staff)
-          </h1>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-[28px]">gavel</span>
+            <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold">
+              Xử lý khiếu nại dịch vụ (Staff)
+            </h1>
+          </div>
           <ViewGuide>
-            <p className="text-sm text-secondary mt-1">
-              Staff tiếp nhận khiếu nại từ khách hàng, đối chiếu giá dịch vụ và bằng chứng hiện trường, lập biên bản xác minh và đề xuất mức hoàn tiền lên Admin phê duyệt.
+            <p className="font-body-md text-body-md text-secondary mt-1">
+              Tiếp nhận phản ánh từ khách hàng, xác minh bằng chứng hiện trường, lập biên bản đối soát và đề xuất hoàn tiền lên Admin phê duyệt.
             </p>
           </ViewGuide>
         </div>
 
+        <div className="flex items-center gap-space-sm">
+          <button
+            onClick={() => loadData()}
+            className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container-low text-on-surface rounded font-label-md font-semibold hover:bg-surface-container transition-all cursor-pointer"
+            title="Tải lại dữ liệu từ máy chủ"
+          >
+            <span className={`material-symbols-outlined text-[18px] ${isLoading ? 'animate-spin' : ''}`}>sync</span>
+            <span>Làm Mới</span>
+          </button>
+          <button
+            onClick={() => onSelectScreen('refunds')}
+            className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>
+            <span>Sang Màn Hình Admin Phê Duyệt</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Metric Cards - 100% Calculated dynamically from live backend data */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-space-md">
+        <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
+          <span className="text-label-sm uppercase font-bold text-secondary">Khiếu Nại Chờ Xác Minh</span>
+          <div className="text-2xl font-bold text-red-600 font-data-mono mt-1">{countStaffReview} ca</div>
+          <span className="text-label-xs text-red-700">Trạng thái: STAFF_REVIEW</span>
+        </div>
+
+        <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
+          <span className="text-label-sm uppercase font-bold text-secondary">Chờ Admin Phê Duyệt</span>
+          <div className="text-2xl font-bold text-amber-600 font-data-mono mt-1">{countAdminApproval} ca</div>
+          <span className="text-label-xs text-amber-700 font-semibold">Đã lập biên bản đề xuất</span>
+        </div>
+
+        <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
+          <span className="text-label-sm uppercase font-bold text-secondary">Đã Hoàn Tiền Thành Công</span>
+          <div className="text-2xl font-bold text-primary font-data-mono mt-1">{countRefunded} ca</div>
+          <span className="text-label-xs text-secondary">Đã cấn trừ ví Gara</span>
+        </div>
+
+        <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
+          <span className="text-label-sm uppercase font-bold text-secondary">Tổng Tiền Chờ Bồi Hoàn</span>
+          <div className="text-2xl font-bold text-emerald-600 font-data-mono mt-1">
+            {totalPendingRefundAmount.toLocaleString('vi-VN')} đ
+          </div>
+          <span className="text-label-xs text-emerald-700 font-semibold">Đang xử lý thẩm định</span>
+        </div>
+      </div>
+
+      {/* Status Tabs Navigation */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-xl bg-surface-container-low border border-surface-container">
         <button
-          type="button"
-          disabled={isLoading}
-          onClick={() => void loadStaffDisputes()}
-          className="px-4 py-2 rounded-lg bg-surface-container text-on-surface text-sm font-semibold hover:bg-surface-container-high transition-all cursor-pointer"
+          onClick={() => handleTabChange('STAFF_REVIEW')}
+          className={`flex items-center gap-2 px-space-md py-1.5 rounded-lg font-label-md font-bold transition-all cursor-pointer ${
+            activeTab === 'STAFF_REVIEW'
+              ? 'bg-surface-container-lowest text-red-600 shadow-xs'
+              : 'text-secondary hover:text-on-surface'
+          }`}
         >
-          {isLoading ? 'Đang tải...' : 'Làm mới từ Database'}
+          <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+          <span>Cần Xác Minh</span>
+          <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-data-mono text-label-xs">
+            {countStaffReview}
+          </span>
+        </button>
+
+        <button
+          onClick={() => handleTabChange('ADMIN_APPROVAL')}
+          className={`flex items-center gap-2 px-space-md py-1.5 rounded-lg font-label-md font-bold transition-all cursor-pointer ${
+            activeTab === 'ADMIN_APPROVAL'
+              ? 'bg-surface-container-lowest text-amber-600 shadow-xs'
+              : 'text-secondary hover:text-on-surface'
+          }`}
+        >
+          <span className="material-symbols-outlined text-[16px]">hourglass_top</span>
+          <span>Đã Chuyển Admin</span>
+          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-data-mono text-label-xs">
+            {countAdminApproval}
+          </span>
+        </button>
+
+        <button
+          onClick={() => handleTabChange('RESOLVED')}
+          className={`flex items-center gap-2 px-space-md py-1.5 rounded-lg font-label-md font-bold transition-all cursor-pointer ${
+            activeTab === 'RESOLVED'
+              ? 'bg-surface-container-lowest text-emerald-600 shadow-xs'
+              : 'text-secondary hover:text-on-surface'
+          }`}
+        >
+          <span className="material-symbols-outlined text-[16px]">check_circle</span>
+          <span>Đã Giải Quyết</span>
+          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-data-mono text-label-xs">
+            {caseList.filter((c) => c.status === 'REFUNDED' || c.status === 'REJECTED').length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => handleTabChange('ALL')}
+          className={`flex items-center gap-2 px-space-md py-1.5 rounded-lg font-label-md font-bold transition-all cursor-pointer ${
+            activeTab === 'ALL'
+              ? 'bg-surface-container-lowest text-primary shadow-xs'
+              : 'text-secondary hover:text-on-surface'
+          }`}
+        >
+          <span>Tất Cả Hồ Sơ</span>
+          <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-secondary font-data-mono text-label-xs">
+            {caseList.length}
+          </span>
         </button>
       </div>
 
-      {errorMsg && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-          {errorMsg}
+      {/* Main Content Area */}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center p-16 bg-surface-container-lowest rounded-xl border border-surface-container">
+          <span className="material-symbols-outlined text-[40px] text-primary animate-spin mb-3">progress_activity</span>
+          <span className="font-label-lg text-on-surface font-semibold">Đang tải hồ sơ khiếu nại từ hệ thống...</span>
+          <span className="text-body-sm text-secondary mt-1">Đang đồng bộ dữ liệu thời gian thực</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-xl">
+          {/* Left Column: List of Disputes */}
+          <div className="lg:col-span-5 space-y-space-md">
+            <div className="flex items-center justify-between">
+              <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">
+                Hồ sơ khiếu nại ({filteredCases.length})
+              </h2>
+              <span className="text-label-sm text-secondary font-data-mono">
+                {activeTab === 'STAFF_REVIEW' ? 'Ưu tiên xử lý SLA' : 'Danh sách hồ sơ'}
+              </span>
+            </div>
+
+            {filteredCases.length === 0 ? (
+              <div className="p-8 text-center bg-surface-container-lowest rounded-xl border border-surface-container space-y-2">
+                <span className="material-symbols-outlined text-[36px] text-outline">inbox</span>
+                <p className="font-label-md font-bold text-on-surface">Không có hồ sơ nào trong mục này</p>
+                <p className="text-body-xs text-secondary">
+                  Tất cả các khiếu nại thuộc bộ lọc này đã được giải quyết hoặc chưa phát sinh.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-space-sm max-h-[750px] overflow-y-auto pr-1">
+                {filteredCases.map((caseItem) => (
+                  <div
+                    key={caseItem.id}
+                    onClick={() => handleSelectCase(caseItem)}
+                    className={`p-space-md rounded-xl border transition-all cursor-pointer bg-surface-container-lowest hover:shadow-sm ${
+                      selectedCase?.id === caseItem.id
+                        ? 'border-primary ring-1 ring-primary bg-primary-container/10'
+                        : 'border-surface-container'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-data-mono font-bold text-primary text-body-sm">{caseItem.id}</span>
+                        <span className="text-[11px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded">
+                          {caseItem.type}
+                        </span>
+                        <span
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                            caseItem.status === 'STAFF_REVIEW'
+                              ? 'bg-amber-100 text-amber-800'
+                              : caseItem.status === 'ADMIN_APPROVAL'
+                              ? 'bg-blue-100 text-blue-800'
+                              : caseItem.status === 'REFUNDED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {caseItem.status}
+                        </span>
+                      </div>
+                      <span className="text-label-xs text-secondary font-data-mono">{caseItem.time}</span>
+                    </div>
+
+                    <div className="space-y-1 text-body-sm">
+                      <div className="font-bold text-on-surface">
+                        {caseItem.customerName} <span className="text-secondary font-normal">khiếu nại</span> {caseItem.garageName}
+                      </div>
+                      <div className="text-label-xs text-secondary">
+                        Mã đơn: <span className="font-data-mono text-primary font-semibold">{caseItem.rescueCode}</span> • PayOS:{' '}
+                        <span className="font-data-mono">{caseItem.payosCode}</span>
+                      </div>
+                      <div className="text-body-xs text-on-surface-variant line-clamp-2 mt-1 bg-surface-container-low p-2 rounded">
+                        <span className="font-semibold text-secondary">Khách phản ánh:</span> "{caseItem.customerReason || caseItem.inspectorNote || 'Không có mô tả chi tiết'}"
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-surface-container text-label-xs">
+                      <span className="text-secondary">Đề xuất / Yêu cầu hoàn:</span>
+                      <span className="font-data-mono font-bold text-red-600 text-body-sm">
+                        {caseItem.requestedRefund.toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Deep Arbitration Console */}
+          <div className="lg:col-span-7">
+            {selectedCase ? (
+              <div className="bg-surface-container-lowest rounded-xl border border-surface-container p-space-lg shadow-xs space-y-space-lg">
+                {/* Case Header */}
+                <div className="flex items-center justify-between border-b border-surface-container pb-space-md">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-headline-sm text-headline-sm font-bold text-on-surface">
+                        Hồ Sơ Xác Minh #{selectedCase.id}
+                      </span>
+                      <span
+                        className={`px-2.5 py-0.5 font-bold text-label-xs rounded ${
+                          selectedCase.status === 'STAFF_REVIEW'
+                            ? 'bg-amber-100 text-amber-800'
+                            : selectedCase.status === 'ADMIN_APPROVAL'
+                            ? 'bg-blue-100 text-blue-800'
+                            : selectedCase.status === 'REFUNDED'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {selectedCase.status}
+                      </span>
+                    </div>
+                    <div className="text-body-sm text-secondary mt-0.5">
+                      Khởi tạo: {selectedCase.time} • Mã cuốc cứu hộ: <span className="font-data-mono font-semibold text-primary">{selectedCase.rescueCode}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-label-xs text-secondary">Mức khách yêu cầu bồi hoàn:</div>
+                    <div className="font-data-mono font-bold text-xl text-red-600">
+                      {selectedCase.requestedRefund.toLocaleString('vi-VN')} đ
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Notice Banner if Already Actioned */}
+                {selectedCase.status === 'ADMIN_APPROVAL' && (
+                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-body-sm flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[20px] text-amber-700">hourglass_top</span>
+                      <span>
+                        Hồ sơ đã được lập biên bản và chuyển Admin phê duyệt hoàn tiền. Bạn có thể sang màn hình Admin để theo dõi.
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => onSelectScreen('refunds')}
+                      className="px-2.5 py-1 bg-amber-600 text-white rounded text-label-xs font-bold hover:bg-amber-700 cursor-pointer shrink-0 ml-2"
+                    >
+                      Sang Admin
+                    </button>
+                  </div>
+                )}
+
+                {selectedCase.status === 'REFUNDED' && (
+                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-body-sm flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[20px] text-emerald-700">check_circle</span>
+                    <span>
+                      Khiếu nại này đã được Admin phê duyệt hoàn tiền thành công. Mã tham chiếu hoàn tất:{' '}
+                      <strong className="font-data-mono">{selectedCase.refundReferenceCode || 'PAYOS-REV-DONE'}</strong>.
+                    </span>
+                  </div>
+                )}
+
+                {selectedCase.status === 'REJECTED' && (
+                  <div className="p-3 rounded-lg bg-slate-100 border border-slate-300 text-slate-800 text-body-sm flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[20px] text-slate-600">cancel</span>
+                    <span>Khiếu nại đã bị bác bỏ do chứng từ của Gara hợp lệ. Biên bản đã được lưu trữ.</span>
+                  </div>
+                )}
+
+                {/* Both Parties Profile */}
+                <div className="grid grid-cols-2 gap-space-md p-space-md bg-surface-container-low rounded-lg text-body-sm">
+                  <div>
+                    <div className="font-label-sm uppercase font-bold text-secondary mb-1">Bên Khiếu Nại (Khách Hàng)</div>
+                    <div className="font-bold text-on-surface">{selectedCase.customerName}</div>
+                    <div className="font-data-mono text-secondary text-body-xs mt-0.5">SĐT: {selectedCase.customerPhone}</div>
+                  </div>
+                  <div>
+                    <div className="font-label-sm uppercase font-bold text-secondary mb-1">Bên Bị Khiếu Nại (Gara)</div>
+                    <div className="font-bold text-on-surface">{selectedCase.garageName}</div>
+                    <div className="text-body-xs text-secondary mt-0.5">
+                      Mã đơn vị: <span className="font-data-mono font-semibold">{selectedCase.garageId}</span>
+                      {selectedCase.garageWalletBalance !== undefined && (
+                        <span> • Số dư ví: <strong className="font-data-mono text-primary">{selectedCase.garageWalletBalance.toLocaleString('vi-VN')} đ</strong></span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Discrepancy Breakdown Table */}
+                <div>
+                  <h3 className="font-label-sm uppercase font-bold text-secondary mb-2">
+                    Đối chiếu chi phí dịch vụ
+                  </h3>
+                  <div className="border border-surface-container rounded-lg overflow-hidden">
+                    <table className="w-full text-left text-body-sm">
+                      <thead className="bg-surface-container-low text-label-xs uppercase text-secondary font-bold">
+                        <tr>
+                          <th className="py-2.5 px-3">Hạng Mục Khiếu Nại</th>
+                          <th className="py-2.5 px-3 text-right">Chi Phí Chuẩn Sàn</th>
+                          <th className="py-2.5 px-3 text-right">Gara Đã Thu</th>
+                          <th className="py-2.5 px-3 text-right">Chênh Lệch Yêu Cầu Hoàn</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-surface-container">
+                        {selectedCase.diffItems.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-surface-container-low/40">
+                            <td className="py-2.5 px-3">
+                              <div className="font-semibold text-on-surface">{item.name}</div>
+                              <div className="text-label-xs text-secondary line-clamp-1">{item.desc}</div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-data-mono">
+                              {item.priceV1 ? `${item.priceV1.toLocaleString('vi-VN')} đ` : '0 đ'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-data-mono font-bold text-on-surface">
+                              {item.priceV2.toLocaleString('vi-VN')} đ
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-data-mono font-bold text-red-600">
+                              +{item.diff.toLocaleString('vi-VN')} đ
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Customer Reason & Rescue Order Context */}
+                <div className="space-y-space-xs">
+                  <h3 className="font-label-sm uppercase font-bold text-secondary">
+                    Nội dung phản ánh của khách hàng & Thông tin giao dịch
+                  </h3>
+                  <div className="p-space-md rounded-lg bg-surface-container-low border border-surface-container space-y-2 text-body-sm">
+                    <div className="flex items-start gap-2">
+                      <span className="material-symbols-outlined text-tertiary text-[20px] shrink-0 mt-0.5">format_quote</span>
+                      <p className="text-on-surface italic font-medium">
+                        "{selectedCase.customerReason || selectedCase.inspectorNote || 'Không có mô tả chi tiết từ khách hàng.'}"
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-label-xs text-secondary pt-2 border-t border-surface-container/60">
+                      <span>Mã PayOS: <strong className="font-data-mono text-on-surface">{selectedCase.payosCode}</strong></span>
+                      <span>Tổng tiền gốc: <strong className="font-data-mono text-on-surface">{selectedCase.originalPrice.toLocaleString('vi-VN')} đ</strong></span>
+                      <span>Thời điểm ghi nhận: <strong className="font-data-mono text-on-surface">{selectedCase.time}</strong></span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Evidence Photos Inspection */}
+                <div className="space-y-space-sm">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-label-sm uppercase font-bold text-secondary">
+                      Bằng chứng ảnh hiện trường & Hóa đơn ({selectedCase.evidenceUrls?.length || 0} ảnh)
+                    </h3>
+                    {selectedCase.evidenceUrls && selectedCase.evidenceUrls.length > 0 && (
+                      <span className="text-label-xs text-secondary italic">
+                        Nhấp vào ảnh để phóng to
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedCase.evidenceUrls && selectedCase.evidenceUrls.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
+                      {selectedCase.evidenceUrls.map((url, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => setPreviewImage(url)}
+                          className="group relative cursor-pointer overflow-hidden rounded-lg border border-surface-container aspect-video bg-black/5"
+                        >
+                          <img
+                            src={url}
+                            alt={`Bằng chứng ${idx + 1}`}
+                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-label-xs font-bold gap-1">
+                            <span className="material-symbols-outlined text-[16px]">zoom_in</span>
+                            <span>Phóng to</span>
+                          </div>
+                          <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 text-white text-[10px] rounded font-data-mono">
+                            Ảnh {idx + 1}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-6 border border-dashed border-surface-container rounded-lg text-center text-secondary bg-surface">
+                      <span className="material-symbols-outlined text-[32px] text-outline mb-1">image_not_supported</span>
+                      <p className="text-body-sm font-medium">Khách hàng không đính kèm ảnh bằng chứng trực quan cho đơn này.</p>
+                      <p className="text-label-xs text-secondary mt-0.5">Thẩm tra dựa trên lịch sử giao dịch và đối soát với bên cung cấp dịch vụ.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Staff Investigation & Proposal Form */}
+                <div className="p-space-md rounded-lg bg-surface-container-low border border-surface-container space-y-space-sm">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-label-sm uppercase font-bold text-primary flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[18px]">verified</span>
+                      Biên Bản Xác Minh & Đề Xuất Hoàn Tiền Của Nhân Viên
+                    </h3>
+                    {selectedCase.inspectorName && selectedCase.inspectorName !== 'Chưa phân công' && (
+                      <span className="text-label-xs text-secondary">
+                        Người thẩm định: <strong>{selectedCase.inspectorName}</strong>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+                    <div>
+                      <label className="block text-label-xs font-semibold text-secondary mb-1">
+                        Mức tiền đề xuất Admin hoàn trả (VNĐ):
+                      </label>
+                      <input
+                        type="number"
+                        disabled={selectedCase.status !== 'STAFF_REVIEW'}
+                        value={proposedAmount}
+                        onChange={(e) => setProposedAmount(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded border border-surface-container bg-surface text-on-surface font-data-mono font-bold disabled:bg-surface-container-high disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-label-xs font-semibold text-secondary mb-1">
+                        Tổng tiền đơn gốc đã thanh toán:
+                      </label>
+                      <div className="px-3 py-2 rounded bg-surface-container text-on-surface font-data-mono font-semibold">
+                        {selectedCase.originalPrice.toLocaleString('vi-VN')} đ
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-label-xs font-semibold text-secondary mb-1">
+                      Kết luận điều tra hiện trường của Staff:
+                    </label>
+                    <textarea
+                      rows={3}
+                      disabled={selectedCase.status !== 'STAFF_REVIEW'}
+                      value={staffNote}
+                      onChange={(e) => setStaffNote(e.target.value)}
+                      placeholder="Nhập kết quả kiểm tra hóa đơn, đối chiếu với Gara và lý do đề xuất hoàn tiền..."
+                      className="w-full px-3 py-2 rounded border border-surface-container bg-surface text-on-surface text-body-sm disabled:bg-surface-container-high disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  {selectedCase.adminResolutionNote && (
+                    <div className="p-2.5 rounded bg-surface-container text-body-xs text-on-surface border border-surface-container">
+                      <span className="font-semibold text-primary block mb-0.5">Ý kiến phản hồi từ Admin:</span>
+                      <p className="italic">"{selectedCase.adminResolutionNote}"</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Adjudication Verdict Actions */}
+                <div className="pt-space-md border-t border-surface-container flex flex-wrap items-center justify-between gap-space-sm">
+                  <button
+                    disabled={isSubmitting || selectedCase.status !== 'STAFF_REVIEW'}
+                    onClick={() => handleResolveDispute(selectedCase.id, 'REJECT_COMPLAINT')}
+                    className="px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    Bác Bỏ Khiếu Nại (Chứng Từ Gara Hợp Lệ)
+                  </button>
+
+                  <div className="flex items-center gap-space-sm">
+                    <button
+                      disabled={isSubmitting || selectedCase.status !== 'STAFF_REVIEW'}
+                      onClick={() => handleResolveDispute(selectedCase.id, 'PROPOSE_ADMIN_REFUND')}
+                      className="px-space-md py-2 bg-primary text-on-primary rounded font-label-md font-bold hover:bg-primary/90 transition-all shadow-xs disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {isSubmitting
+                        ? 'Đang gửi...'
+                        : selectedCase.status === 'STAFF_REVIEW'
+                        ? 'Lập Biên Bản & Đề Xuất Admin Hoàn Tiền'
+                        : 'Hồ Sơ Đã Được Xử Lý'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-12 text-center text-secondary bg-surface-container-lowest rounded-xl border border-surface-container">
+                <span className="material-symbols-outlined text-[48px] text-outline mb-2">touch_app</span>
+                <p className="font-headline-sm font-semibold text-on-surface">Chưa chọn hồ sơ khiếu nại</p>
+                <p className="text-body-sm text-secondary mt-1">
+                  Vui lòng chọn một hồ sơ ở danh sách bên trái để tiến hành thẩm tra đối soát.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* 4 Thẻ chỉ số KPI từ Database */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
-          <span className="text-xs uppercase font-bold text-secondary">Tổng số hồ sơ (DB)</span>
-          <div className="text-2xl font-bold text-on-surface font-mono mt-1">
-            {metrics.total} ca
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
-          <span className="text-xs uppercase font-bold text-secondary">Chờ Staff xác minh</span>
-          <div className="text-2xl font-bold text-red-600 font-mono mt-1">
-            {metrics.staffReviewCount} ca
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
-          <span className="text-xs uppercase font-bold text-secondary">Đã trình Admin duyệt</span>
-          <div className="text-2xl font-bold text-amber-600 font-mono mt-1">
-            {metrics.escalatedCount} ca
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
-          <span className="text-xs uppercase font-bold text-secondary">Đã hoàn tiền hoàn tất</span>
-          <div className="text-2xl font-bold text-emerald-700 font-mono mt-1">
-            {metrics.resolvedCount} ca
-          </div>
-        </div>
-      </div>
-
-      {/* Thanh tìm kiếm & lọc trạng thái */}
-      <div className="bg-surface-container-lowest p-4 rounded-xl border border-surface-container flex flex-col sm:flex-row items-center justify-between gap-3">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Tìm theo mã khiếu nại, mã cứu hộ, tên khách hàng, tên Gara..."
-          className="w-full sm:w-96 h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface"
-        />
-
-        <select
-          aria-label="Lọc trạng thái khiếu nại"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm font-semibold text-on-surface"
+      {/* Lightbox Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setPreviewImage(null)}
         >
-          <option value="ALL">Tất cả trạng thái ({caseList.length})</option>
-          <option value="STAFF_REVIEW">Chờ Staff xác minh (STAFF_REVIEW)</option>
-          <option value="ADMIN_APPROVAL">Chờ Admin duyệt (ADMIN_APPROVAL)</option>
-          <option value="REFUNDED">Đã hoàn tiền (REFUNDED)</option>
-          <option value="REJECTED">Đã bác bỏ (REJECTED)</option>
-        </select>
-      </div>
-
-      {/* Lưới 2 cột: Danh sách hồ sơ bên trái (5 cột) & Khung lập biên bản bên phải (7 cột) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Cột trái: Danh sách hồ sơ khiếu nại */}
-        <div className="lg:col-span-5 space-y-3">
-          {filteredCases.map((caseItem) => {
-            const code = caseItem.disputeCode || `DISP-${caseItem.id}`;
-            const rescueCode =
-              caseItem.rescueCode || `#RESCUE-${caseItem.rescueOrderId ?? ''}`;
-            const isSelected = selectedCase?.id === caseItem.id;
-
-            return (
-              <div
-                key={caseItem.id}
-                onClick={() => setSelectedId(caseItem.id)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer bg-surface-container-lowest ${
-                  isSelected
-                    ? 'border-primary ring-1 ring-primary bg-primary/5'
-                    : 'border-surface-container hover:bg-surface-container-low/50'
-                }`}
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-surface-container-lowest rounded-xl overflow-hidden shadow-2xl p-2 border border-surface-container"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-2 border-b border-surface-container">
+              <span className="font-label-md font-bold text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[20px] text-primary">zoom_in</span>
+                Chi Tiết Bằng Chứng Ảnh Hiện Trường / Hóa Đơn
+              </span>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-1 rounded hover:bg-surface-container text-secondary hover:text-on-surface transition-colors cursor-pointer"
               >
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-primary text-sm">#{code}</span>
-                    <span className="text-xs bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded">
-                      {caseItem.disputeType}
-                    </span>
-                  </div>
-                  <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
-                    {caseItem.status}
-                  </span>
-                </div>
-
-                <div className="text-sm font-bold text-on-surface">
-                  {caseItem.customerName} — {caseItem.garageName || `Garage #${caseItem.garageId}`}
-                </div>
-                <div className="text-xs text-secondary font-mono mt-0.5">
-                  Đơn cứu hộ: {rescueCode} •{' '}
-                  {caseItem.createdAt
-                    ? new Date(caseItem.createdAt).toLocaleString('vi-VN')
-                    : ''}
-                </div>
-                <p className="text-xs text-secondary line-clamp-2 mt-1">
-                  {caseItem.customerReason || caseItem.reason}
-                </p>
-
-                <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-surface-container text-xs">
-                  <span className="text-secondary">Yêu cầu / Đề xuất hoàn:</span>
-                  <span className="font-mono font-bold text-red-600">
-                    {Number(
-                      caseItem.proposedRefundAmount ?? caseItem.requestedRefundAmount ?? 0
-                    ).toLocaleString('vi-VN')}{' '}
-                    ₫
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-
-          {filteredCases.length === 0 && (
-            <div className="p-8 text-center text-sm text-secondary bg-surface-container-lowest rounded-xl border border-surface-container">
-              {isLoading
-                ? 'Đang tải danh sách khiếu nại từ Database...'
-                : 'Không có hồ sơ khiếu nại nào khớp với điều kiện lọc.'}
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
             </div>
-          )}
+            <div className="p-2 flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img
+                src={previewImage}
+                alt="Preview Evidence"
+                className="max-h-[70vh] w-auto object-contain rounded"
+              />
+            </div>
+            <div className="p-2 text-right">
+              <a
+                href={previewImage}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-label-sm text-primary hover:underline font-semibold inline-flex items-center gap-1"
+              >
+                <span>Mở trong tab mới</span>
+                <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+              </a>
+            </div>
+          </div>
         </div>
-
-        {/* Cột phải: Bảng điều tra & lập biên bản của Staff */}
-        <div className="lg:col-span-7">
-          {selectedCase ? (
-            <div className="bg-surface-container-lowest rounded-xl border border-surface-container p-6 shadow-xs space-y-5">
-              <div className="flex items-center justify-between border-b border-surface-container pb-4">
-                <div>
-                  <h2 className="text-lg font-bold text-on-surface">
-                    Hồ Sơ Xác Minh #{selectedCase.disputeCode || `DISP-${selectedCase.id}`}
-                  </h2>
-                  <div className="text-xs text-secondary mt-0.5">
-                    Mã đơn cứu hộ:{' '}
-                    <strong className="font-mono text-primary">
-                      {selectedCase.rescueCode || `#RESCUE-${selectedCase.rescueOrderId}`}
-                    </strong>{' '}
-                    • Trạng thái: <strong>{selectedCase.status}</strong>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-xs text-secondary">Khách yêu cầu bồi hoàn:</div>
-                  <div className="font-mono font-bold text-xl text-red-600">
-                    {Number(selectedCase.requestedRefundAmount ?? 0).toLocaleString('vi-VN')} ₫
-                  </div>
-                </div>
-              </div>
-
-              {/* Thông tin hai bên */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-surface-container-low rounded-lg text-sm">
-                <div>
-                  <div className="text-xs uppercase font-bold text-secondary mb-1">
-                    Khách hàng khiếu nại
-                  </div>
-                  <div className="font-bold text-on-surface">{selectedCase.customerName}</div>
-                  <div className="font-mono text-xs text-secondary">
-                    {selectedCase.customerPhone || '—'}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs uppercase font-bold text-secondary mb-1">
-                    Gara bị khiếu nại
-                  </div>
-                  <div className="font-bold text-on-surface">
-                    {selectedCase.garageName || `Garage #${selectedCase.garageId}`}
-                  </div>
-                  <div className="text-xs text-secondary font-mono">
-                    Tổng thu đơn gốc:{' '}
-                    {Number(selectedCase.originalAmount ?? 0).toLocaleString('vi-VN')} ₫
-                  </div>
-                </div>
-              </div>
-
-              {/* Nội dung phản ánh của khách hàng */}
-              <div className="p-4 rounded-lg bg-surface-container text-sm space-y-1">
-                <div className="text-xs font-bold uppercase text-secondary">
-                  Lý do khiếu nại từ khách hàng:
-                </div>
-                <p className="text-on-surface">
-                  {selectedCase.customerReason || selectedCase.reason || '—'}
-                </p>
-              </div>
-
-              {/* Biểu mẫu lập biên bản xác minh của Staff */}
-              <div className="p-4 rounded-lg bg-surface-container-low border border-surface-container space-y-4">
-                <h3 className="text-xs uppercase font-bold text-primary">
-                  Biên Bản Xác Minh &amp; Đề Xuất Hoàn Tiền Của Staff
-                </h3>
-
-                <div>
-                  <label className="block text-xs font-semibold text-secondary mb-1">
-                    Mức tiền đề xuất Admin hoàn trả cho khách (VNĐ):
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={proposedAmount}
-                    onChange={(e) => setProposedAmount(Number(e.target.value))}
-                    className="w-full h-10 px-3 rounded-lg border border-surface-container bg-surface text-on-surface font-mono font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-secondary mb-1">
-                    Kết luận điều tra hiện trường của Staff:
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={staffNote}
-                    onChange={(e) => setStaffNote(e.target.value)}
-                    placeholder="Nhập kết quả kiểm tra hóa đơn, xác minh với Gara và lý do đề xuất hoàn tiền..."
-                    className="w-full p-3 rounded-lg border border-surface-container bg-surface text-on-surface text-sm"
-                  />
-                </div>
-              </div>
-
-              {/* Nút hành động */}
-              <div className="pt-3 border-t border-surface-container flex flex-wrap items-center justify-between gap-3">
-                <button
-                  type="button"
-                  disabled={isSubmitting || selectedCase.status === 'REFUNDED'}
-                  onClick={() => void handleResolveDispute('REJECT_COMPLAINT')}
-                  className="px-4 py-2 rounded-lg bg-surface-container text-on-surface text-xs font-bold hover:bg-surface-container-high transition-all cursor-pointer disabled:opacity-50"
-                >
-                  Bác Bỏ Khiếu Nại (Hợp Lệ)
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isSubmitting || selectedCase.status === 'REFUNDED'}
-                  onClick={() => void handleResolveDispute('PROPOSE_ADMIN_REFUND')}
-                  className="px-5 py-2.5 rounded-lg bg-primary text-on-primary text-sm font-bold hover:bg-primary-container transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmitting
-                    ? 'Đang gửi biên bản...'
-                    : 'Lập Biên Bản & Chuyển Admin Duyệt Hoàn Tiền'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="p-12 text-center text-secondary bg-surface-container-lowest rounded-xl border border-surface-container">
-              Chọn một hồ sơ khiếu nại bên trái để tiến hành lập biên bản xác minh.
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 };

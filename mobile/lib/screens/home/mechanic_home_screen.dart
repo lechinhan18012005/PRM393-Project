@@ -426,7 +426,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'FLOOD RESCUE / ĐỘI CỨU HỘ',
+                    'HYDRORESCUE / ĐỘI CỨU HỘ',
                     style: TextStyle(
                       fontSize: 9,
                       letterSpacing: 1.4,

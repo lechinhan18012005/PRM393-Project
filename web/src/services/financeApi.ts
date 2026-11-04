@@ -698,10 +698,12 @@ export const financeApi = {
   // ==========================================================================
 
   /**
-   * Lấy toàn bộ danh sách đánh giá sao và nhận xét của khách hàng sau cứu hộ (`GET /api/v1/ratings`).
+   * Lấy toàn bộ danh sách đánh giá sao và nhận xét của khách hàng sau cứu hộ (GET /api/v1/ratings).
+   * Hỗ trợ phân trang tùy chọn (page, size) hoặc lấy tất cả nếu không truyền tham số.
    */
-  getAllRatings: async (): Promise<ServiceRatingBackendResponse[]> => {
-    const res = await fetch(`${API_BASE_URL}/ratings`, {
+  getAllRatings: async (page?: number, size?: number): Promise<ServiceRatingBackendResponse[]> => {
+    const qs = page !== undefined && size !== undefined ? `?page=${page}&size=${size}` : '';
+    const res = await fetch(`${API_BASE_URL}/ratings${qs}`, {
       headers: getAuthHeaders()
     });
     const json = await res.json();
@@ -717,5 +719,13 @@ export const financeApi = {
     });
     const json = await res.json();
     return json.success && Array.isArray(json.data) ? json.data : [];
+  }
+,
+
+  /**
+   * Lấy danh sách toàn bộ hồ sơ khiếu nại (bí danh tương thích với App.tsx).
+   */
+  getAllDisputes: async (status?: string): Promise<DisputeBackendResponse[]> => {
+    return financeApi.getRefunds(status);
   }
 };

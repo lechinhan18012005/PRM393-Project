@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { managementApi } from '../../services/managementApi';
+import { formatAuthErrorMessage } from '../../services/authApi';
 
 export function InvitationActivationView({ onBack }: { onBack: () => void }) {
   const [message, setMessage] = useState('');
@@ -64,7 +65,7 @@ export function InvitationActivationView({ onBack }: { onBack: () => void }) {
       setDone(true);
       setMessage('Kích hoạt thành công. Staff đăng nhập trên Web; Thợ cứu hộ đăng nhập trên Mobile.');
     } catch (e) {
-      setMessage((e as Error).message);
+      setMessage(formatAuthErrorMessage(e, 'Kích hoạt thất bại. Vui lòng thử lại.'));
     } finally {
       setBusy(false);
     }

@@ -115,6 +115,51 @@ class VehicleProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> updateVehicle(
+    int vehicleId, {
+    required String licensePlate,
+    required String brand,
+    required String model,
+    String? vehicleType,
+    String? engineCapacity,
+    String? color,
+    bool? isDefault,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final updated = await _vehicleService.updateVehicle(
+        vehicleId,
+        licensePlate: licensePlate,
+        brand: brand,
+        model: model,
+        vehicleType: vehicleType,
+        engineCapacity: engineCapacity,
+        color: color,
+        isDefault: isDefault,
+      );
+      final index = _vehicles.indexWhere((v) => v.id == vehicleId);
+      if (index != -1) {
+        if (updated.isDefault) {
+          _vehicles = _vehicles.map((v) => v.copyWith(isDefault: false)).toList();
+        }
+        _vehicles[index] = updated;
+        if (_selectedVehicle?.id == vehicleId) {
+          _selectedVehicle = updated;
+        }
+      }
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> deleteVehicle(int vehicleId) async {
     _isLoading = true;
     _errorMessage = null;

@@ -25,7 +25,9 @@ import '../../core/constants/app_colors.dart';
 import '../../core/models/payment_transaction_model.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/services/dispute_service.dart';
+import '../../core/services/media_service.dart';
 import '../../core/widgets/rescue_ui.dart';
+import 'customer_disputes_screen.dart';
 import 'stitch_hydro_rescue_screen.dart';
 
 /// Widget màn hình Biên nhận thanh toán cứu hộ & Gửi yêu cầu khiếu nại hoàn tiền (UC-18 & UC-23).
@@ -79,6 +81,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
     int? paymentTransactionId,
     required String rescueCode,
     required double paidAmount,
+    String? garageName,
   }) {
     // Khởi tạo controller cho ô nhập số tiền yêu cầu hoàn (mặc định điền sẵn toàn bộ số tiền đã trả)
     final amountController = TextEditingController(
@@ -88,6 +91,8 @@ class ElectronicInvoiceScreen extends StatelessWidget {
     final reasonController = TextEditingController();
     // Nhóm lý do khiếu nại mặc định: Thu vượt báo giá ('OVERCHARGE')
     String selectedType = 'OVERCHARGE';
+    // Danh sách ảnh bằng chứng đính kèm khiếu nại được chọn từ thiết bị
+    final List<PickedMediaFile> pickedImages = [];
     // Cờ kiểm soát trạng thái đang gửi request API để khóa nút bấm tránh gửi trùng
     bool isSubmitting = false;
 
@@ -198,6 +203,103 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                         border: OutlineInputBorder(),
                       ),
                     ),
+                    const SizedBox(height: 14),
+
+                    // Section: Bằng chứng ảnh
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Ảnh chụp bằng chứng (${pickedImages.length}/3)',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.secondary,
+                          ),
+                        ),
+                        if (pickedImages.length < 3)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextButton.icon(
+                                onPressed: isSubmitting
+                                    ? null
+                                    : () async {
+                                        final photo = await MediaService.instance.pickImageFromCamera();
+                                        if (photo != null) {
+                                          setModalState(() {
+                                            if (pickedImages.length < 3) pickedImages.add(photo);
+                                          });
+                                        }
+                                      },
+                                icon: const Icon(Icons.camera_alt_outlined, size: 16),
+                                label: const Text('Chụp', style: TextStyle(fontSize: 12)),
+                              ),
+                              TextButton.icon(
+                                onPressed: isSubmitting
+                                    ? null
+                                    : () async {
+                                        final photo = await MediaService.instance.pickImageFromGallery();
+                                        if (photo != null) {
+                                          setModalState(() {
+                                            if (pickedImages.length < 3) pickedImages.add(photo);
+                                          });
+                                        }
+                                      },
+                                icon: const Icon(Icons.photo_library_outlined, size: 16),
+                                label: const Text('Thư viện', style: TextStyle(fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+
+                    if (pickedImages.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 74,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: pickedImages.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (ctx, idx) {
+                            final img = pickedImages[idx];
+                            return Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.memory(
+                                    img.bytes,
+                                    width: 74,
+                                    height: 74,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 2,
+                                  right: 2,
+                                  child: GestureDetector(
+                                    onTap: isSubmitting
+                                        ? null
+                                        : () {
+                                            setModalState(() {
+                                              pickedImages.removeAt(idx);
+                                            });
+                                          },
+                                    child: const CircleAvatar(
+                                      radius: 10,
+                                      backgroundColor: Colors.black54,
+                                      child: Icon(Icons.close, size: 12, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+
                     const SizedBox(height: 16),
 
                     // Nút xác nhận gửi hồ sơ khiếu nại lên Backend
@@ -236,6 +338,18 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                               // Bước 2: Bật trạng thái loading và gọi DisputeService.createDispute(...)
                               setModalState(() => isSubmitting = true);
                               try {
+                                // Upload photos
+                                final List<String> uploadedUrls = [];
+                                for (final img in pickedImages) {
+                                  final url = await DisputeService().uploadEvidencePhoto(
+                                    img.bytes,
+                                    img.filename,
+                                  );
+                                  uploadedUrls.add(url);
+                                }
+                                final evidenceUrls =
+                                    uploadedUrls.isNotEmpty ? uploadedUrls.join(',') : null;
+
                                 final created =
                                     await DisputeService().createDispute(
                                   rescueOrderId: rescueOrderId,
@@ -243,6 +357,10 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                   disputeType: selectedType,
                                   requestedRefundAmount: amount,
                                   customerReason: reason,
+                                  evidenceImageUrls: evidenceUrls,
+                                  rescueCode: rescueCode,
+                                  garageName: garageName,
+                                  originalAmount: paidAmount,
                                 );
                                 // Đóng BottomSheet sau khi gửi thành công
                                 if (sheetCtx.mounted) {
@@ -253,8 +371,21 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       backgroundColor: Colors.green.shade700,
+                                      duration: const Duration(seconds: 5),
                                       content: Text(
                                         'Đã gửi hồ sơ khiếu nại ${created.disputeCode}! Bộ phận CSKH sẽ xác minh sớm nhất.',
+                                      ),
+                                      action: SnackBarAction(
+                                        label: 'Xem hồ sơ',
+                                        textColor: Colors.white,
+                                        onPressed: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  const CustomerDisputesScreen(),
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ),
                                   );
@@ -274,6 +405,18 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                             ? 'Đã ghi nhận yêu cầu khiếu nại ($e)'
                                             : 'Đã gửi hồ sơ khiếu nại mẫu thành công! Bộ phận CSKH đang tiếp nhận xử lý.',
                                       ),
+                                      action: SnackBarAction(
+                                        label: 'Xem hồ sơ',
+                                        textColor: Colors.white,
+                                        onPressed: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  const CustomerDisputesScreen(),
+                                            ),
+                                          );
+                                        },
+                                      ),
                                     ),
                                   );
                                 }
@@ -287,7 +430,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                       icon: const Icon(Icons.report_problem_outlined),
                       label: Text(
                         isSubmitting
-                            ? 'Đang gửi hồ sơ...'
+                            ? 'Đang gửi hồ sơ & ảnh...'
                             : 'Gửi Khiếu Nại & Yêu Cầu Hoàn Tiền',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
@@ -392,7 +535,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'Hệ thống cứu hộ Motorbike Flood Rescue',
+                              'Hệ thống cứu hộ HydroRescue',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: AppColors.secondary,
@@ -524,6 +667,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                 paymentTransactionId: transaction?.id,
                 rescueCode: code,
                 paidAmount: total,
+                garageName: garageName,
               ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red.shade700,

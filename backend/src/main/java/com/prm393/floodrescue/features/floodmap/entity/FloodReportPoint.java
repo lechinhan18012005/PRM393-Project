@@ -65,6 +65,10 @@ public class FloodReportPoint {
     @Column(name = "nearby_stations", length = 255)
     private String nearbyStations;
 
+    @Column(name = "receded_confirm_count")
+    @Builder.Default
+    private Integer recededConfirmCount = 0;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

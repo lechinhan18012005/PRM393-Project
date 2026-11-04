@@ -1,209 +1,339 @@
 // ============================================================================
-// COMPONENT THANH ĐIỀU HƯỚNG TRÊN CÙNG (APPLICATION HEADER)
-// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Quản trị Tài chính & Hệ thống Admin
-// Mục đích: Hiển thị thương hiệu ứng dụng RescueOps, thanh chuyển đổi phân hệ (nếu tài khoản
-// có nhiều hơn 1 phân hệ), trạng thái kết nối thời gian thực, chuông thông báo khẩn cấp từ DB,
-// và menu thông tin hồ sơ người dùng / đăng xuất.
-// Cơ chế bảo mật (Yêu cầu #1):
-// - Khi đăng nhập bằng tài khoản ADMIN, getAccessibleModules('ADMIN') chỉ trả về ['admin']
-//   (độ dài mảng là 1, không lớn hơn 1), đồng thời có thêm chốt chặn tường minh (explicit guard)
-//   loại bỏ hoàn toàn nút chuyển sang trang Staff ('staff') khỏi Header.
+// TẬP TIN: Header.tsx
+// TÁC GIẢ / PHỤ TRÁCH: Nguyễn Hoàng Long - Quản trị Tài chính & Hệ thống Admin
+// PHÂN HỆ: Thanh điều hướng cấp cao (Top Application Header)
+// MÔ TẢ NGHIỆP VỤ & KỸ THUẬT:
+//   - Cung cấp thanh Header toàn cục gắn trên đỉnh màn hình của toàn bộ 3 phân hệ.
+//   - Tích hợp Logo thương hiệu RescueOps, Trạng thái kết nối trực tuyến (Healthcheck ping).
+//   - Điều hướng nhanh giữa các phân hệ được cấp quyền (Admin / Staff / Gara) theo vai trò (RBAC).
+//   - Ô tìm kiếm nhanh toàn hệ thống (mã đơn cứu hộ, tên gara, thợ).
+//   - Nút Chuông thông báo hiển thị số lượng cảnh báo khẩn cấp chưa đọc.
+//   - Menu hồ sơ cá nhân (Profile Dropdown) hiển thị thông tin tài khoản, vai trò và nút Đăng xuất.
 // ============================================================================
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Bell, ChevronDown, LogOut, Waves } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Bell, ChevronDown, LogOut, Search, X } from 'lucide-react';
 import { ModuleType, ScreenId } from '../types';
 import { User } from '../types/auth';
-import { getAccessibleModules } from '../permissions';
+import { roleModules } from '../permissions';
 import { DEMO_MODE } from '../context/AuthContext';
+import { API_BASE_URL } from '../services/apiConfig';
+import logoImg from '../assets/logo.png';
 
 /**
- * Giao diện Props truyền từ MainDashboard (App.tsx) xuống Header component.
+ * Định nghĩa các thuộc tính đầu vào (Props) cho thành phần Header.
  */
-interface HeaderProps {
-  // Phân hệ đang hoạt động hiện tại ('admin' | 'staff' | 'owner')
+export interface HeaderProps {
   currentModule: ModuleType;
-  // Màn hình chi tiết đang mở hiện tại
-  currentScreen: ScreenId;
-  // Callback xử lý khi người dùng chuyển đổi phân hệ (chỉ hoạt động nếu có quyền)
+  currentScreen?: ScreenId;
   onSelectModule: (mod: ModuleType) => void;
-  // Callback xử lý khi người dùng chọn một màn hình cụ thể
-  onSelectScreen: (screen: ScreenId) => void;
-  // Từ khóa tìm kiếm toàn cục
-  searchQuery: string;
-  // Hàm cập nhật từ khóa tìm kiếm toàn cục
-  onSearchChange: (q: string) => void;
-  // Số lượng thông báo / cảnh báo chưa đọc (được tính động từ dữ liệu Database đối với Admin)
-  unreadAlertsCount: number;
-  // Callback mở hộp thoại (Modal) danh sách thông báo khẩn
-  onOpenAlerts: () => void;
-  // Đối tượng thông tin người dùng đang đăng nhập hiện tại
+  onSelectScreen?: (screen: ScreenId) => void;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
+  unreadAlertsCount?: number;
+  onOpenAlerts?: () => void;
   user?: User | null;
-  // Callback thực hiện đăng xuất và xóa phiên JWT
   onLogout?: () => void;
 }
 
 /**
- * Nhãn hiển thị tiếng Việt cho từng phân hệ trên giao diện.
+ * Bảng ánh xạ nhãn hiển thị cho 3 phân hệ chính.
  */
-const labels: Record<ModuleType, string> = {
-  admin: 'Quản trị & Tài chính',
-  staff: 'Vận hành & CSKH',
-  owner: 'Đối tác Gara'
+export const MODULE_LABELS: Record<ModuleType, string> = {
+  admin: 'Tài chính',
+  staff: 'Điều phối',
+  owner: 'Gara'
 };
 
+/**
+ * Bảng ánh xạ nhãn hiển thị cho các vai trò người dùng (Roles).
+ */
+export const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Quản trị viên',
+  SUPER_ADMIN: 'Quản trị cấp cao',
+  STAFF: 'Nhân viên điều phối',
+  KYC_VERIFIER: 'Kiểm duyệt viên KYC',
+  GARAGE_OWNER: 'Chủ Gara',
+  FIELD_MECHANIC: 'Thợ cứu hộ cơ động',
+  CUSTOMER: 'Khách hàng'
+};
+
+const DEFAULT_SCREENS: Record<ModuleType, ScreenId> = {
+  admin: 'overview',
+  staff: 'dashboard',
+  owner: 'owner-dashboard'
+};
+
+/**
+ * Thành phần Header ứng dụng Web Portal.
+ */
 export const Header: React.FC<HeaderProps> = ({
   currentModule,
+  currentScreen,
   onSelectModule,
-  unreadAlertsCount,
+  onSelectScreen,
+  searchQuery = '',
+  onSearchChange,
+  unreadAlertsCount = 0,
   onOpenAlerts,
   user,
   onLogout
 }) => {
-  // State quản lý trạng thái đóng/mở của menu thả xuống (dropdown) thông tin tài khoản
+  // Trạng thái đóng/mở menu thả xuống của tài khoản (Account Dropdown)
   const [open, setOpen] = useState(false);
-  // Tham chiếu DOM (ref) tới vùng chứa menu tài khoản để phát hiện sự kiện click ra ngoài
-  const menu = useRef<HTMLDivElement>(null);
+  // Trạng thái lỗi tải ảnh avatar
+  const [avatarError, setAvatarError] = useState(false);
+  // Trạng thái kết nối máy chủ: 'online' | 'checking' | 'offline'
+  const [connectionStatus, setConnectionStatus] = useState<'online' | 'checking' | 'offline'>('online');
 
-  // Lấy danh sách các phân hệ mà vai trò của người dùng hiện tại được phép truy cập
-  const userRole = user?.role;
-  const accessibleModules = getAccessibleModules(userRole).filter((mod) => {
-    // Chốt chặn tường minh (Explicit Guard): Nếu người dùng là ADMIN thì không bao giờ hiển thị nút 'staff'
-    if (userRole === 'ADMIN' && mod === 'staff') {
-      return false;
-    }
-    return true;
-  });
+  // Tham chiếu (Ref) tới phần tử DOM của profile menu để phát hiện click bên ngoài
+  const menuRef = useRef<HTMLDivElement>(null);
 
   /**
-   * Hook useEffect đăng ký sự kiện lắng nghe thao tác chuột (mousedown) và bàn phím (keydown)
-   * trên toàn bộ tài liệu (document) để tự động đóng menu tài khoản khi người dùng click ra ngoài
-   * hoặc nhấn phím Escape.
+   * Kiểm tra kết nối mạng và máy chủ backend định kỳ
+   */
+  const checkHealth = useCallback(async () => {
+    try {
+      if (!navigator.onLine) {
+        setConnectionStatus('offline');
+        return;
+      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`${API_BASE_URL}/health`, {
+        method: 'GET',
+        signal: controller.signal
+      }).catch(() => null);
+      clearTimeout(timeoutId);
+
+      if (res && res.ok) {
+        setConnectionStatus('online');
+      } else {
+        setConnectionStatus(DEMO_MODE ? 'online' : 'offline');
+      }
+    } catch {
+      setConnectionStatus(DEMO_MODE ? 'online' : 'offline');
+    }
+  }, []);
+
+  useEffect(() => {
+    checkHealth();
+    const interval = setInterval(checkHealth, 45000);
+    const handleOnline = () => {
+      setConnectionStatus('checking');
+      checkHealth();
+    };
+    const handleOffline = () => setConnectionStatus('offline');
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [checkHealth]);
+
+  /**
+   * Đăng ký sự kiện lắng nghe click chuột và nhấn phím Escape để tự động đóng dropdown.
    */
   useEffect(() => {
-    // Hàm đóng menu nếu vị trí click chuột không nằm bên trong phần tử ref `menu`
-    const close = (event: MouseEvent) => {
-      if (!menu.current?.contains(event.target as Node)) {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
         setOpen(false);
       }
     };
-    // Hàm đóng menu khi người dùng nhấn phím Escape trên bàn phím
-    const escape = (event: KeyboardEvent) => {
+
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setOpen(false);
       }
     };
-    // Gắn listener vào document khi component được mount
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', escape);
-    // Dọn dẹp (cleanup) listener khi component bị unmount để tránh rò rỉ bộ nhớ (memory leak)
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+
     return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', escape);
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
-  // Trích xuất chữ cái đầu của tên người dùng để hiển thị làm Avatar mặc định
-  const avatarInitial = user?.fullName?.trim()?.split(/\s+/).slice(-1)[0]?.charAt(0)?.toUpperCase() || 'U';
+  // Chữ cái viết tắt cho avatar đại diện
+  const userInitials =
+    user?.fullName
+      ?.split(' ')
+      .filter(Boolean)
+      .slice(-1)[0]
+      ?.charAt(0)
+      .toUpperCase() || 'U';
+
+  const roleText = (user && ROLE_LABELS[user.role]) || user?.role || 'Khách';
 
   return (
     <header className="app-header">
-      {/* Khu vực Logo & Tên thương hiệu ứng dụng RescueOps */}
+      {/* Logo thương hiệu RescueOps & Nhận diện ứng dụng */}
       <a
         className="app-brand"
         href="#"
         onClick={(e) => {
           e.preventDefault();
-          // Khi nhấn vào logo, đưa người dùng về màn hình mặc định của phân hệ hiện tại
           onSelectModule(currentModule);
         }}
-        aria-label="RescueOps — Trang chủ"
+        aria-label="RescueOps — Về bảng điều khiển chính"
       >
         <span className="brand-mark">
-          <Waves size={23} />
+          <img src={logoImg} alt="RescueOps Logo" className="w-8 h-8 rounded-lg object-contain" />
         </span>
-        <span>
-          rescue<span className="text-primary">ops</span>
-          <small>CỨU HỘ XE MÁY</small>
+        <span className="brand-text">
+          rescue<span className="text-primary font-bold">ops</span>
+          <small>ĐIỀU HÀNH CỨU HỘ</small>
         </span>
       </a>
 
-      {/*
-        Thanh chuyển đổi phân hệ (Module Switcher):
-        - Chỉ hiển thị các nút chuyển phân hệ khi tài khoản có quyền truy cập nhiều hơn 1 phân hệ (accessibleModules.length > 1).
-        - Đối với ADMIN, accessibleModules chỉ có ['admin'] (length === 1) và có thêm điều kiện chặn userRole !== 'ADMIN' cho nút 'staff',
-          do đó Admin sẽ hoàn toàn không thấy và không thể bấm sang trang Staff.
-      */}
+      {/* Menu chuyển đổi nhanh giữa các phân hệ được cấp quyền (RBAC) */}
       <nav className="module-nav" aria-label="Khu vực quản lý">
-        {accessibleModules.length > 1 ? (
-          accessibleModules.map((mod) => {
-            // Chốt chặn bổ sung: Tuyệt đối không render nút Staff nếu vai trò là ADMIN
-            if (userRole === 'ADMIN' && mod === 'staff') {
-              return null;
-            }
-            return (
-              <button
-                key={mod}
-                aria-current={currentModule === mod ? 'page' : undefined}
-                onClick={() => onSelectModule(mod)}
-              >
-                {labels[mod]}
-              </button>
-            );
-          })
-        ) : (
-          // Khi người dùng chỉ có 1 phân hệ duy nhất (ví dụ ADMIN chỉ ở 'admin'), hiển thị huy hiệu tên phân hệ tĩnh
-          <span className="px-3 py-1 rounded bg-surface-container-low text-on-surface font-label-md text-label-md font-semibold">
-            {labels[currentModule]}
-          </span>
-        )}
+        {user &&
+          roleModules[user.role]?.map((mod) => (
+            <button
+              key={mod}
+              type="button"
+              className={currentModule === mod ? 'active' : ''}
+              aria-current={currentModule === mod ? 'page' : undefined}
+              onClick={() => onSelectModule(mod)}
+            >
+              {MODULE_LABELS[mod]}
+            </button>
+          ))}
       </nav>
 
-      {/* Khu vực tiện ích bên phải Header: Nhãn chế độ, Trạng thái hệ thống, Chuông thông báo, Hồ sơ cá nhân */}
+      {/* Ô tìm kiếm nhanh toàn hệ thống */}
+      {onSearchChange && (
+        <div className="header-search" role="search">
+          <Search size={15} className="header-search-icon" aria-hidden="true" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Tìm mã đơn, đối tác, thợ..."
+            aria-label="Tìm kiếm toàn hệ thống"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="header-search-clear"
+              onClick={() => onSearchChange('')}
+              aria-label="Xóa tìm kiếm"
+              title="Xóa nội dung tìm kiếm"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Khu vực tiện ích hệ thống bên phải (Status, Thông báo, Hồ sơ người dùng) */}
       <div className="header-utilities">
-        {/* Chỉ hiển thị nhãn Bản demo nếu cờ DEMO_MODE đang bật */}
         {DEMO_MODE && (
-          <span className="demo-label" title="Dữ liệu mẫu; thao tác nghiệp vụ chưa kết nối backend">
+          <span
+            className="demo-label"
+            title="Dữ liệu mẫu phục vụ kiểm thử; kết nối backend theo môi trường"
+          >
             Bản demo
           </span>
         )}
 
-        {/* Chỉ báo trạng thái kết nối trực tuyến với máy chủ Backend */}
-        <span className="system-status">
-          <i />
-          Trực tuyến
+        {/* Trạng thái kết nối máy chủ */}
+        <span
+          className={`system-status ${connectionStatus}`}
+          title={
+            connectionStatus === 'online'
+              ? 'Hệ thống đang kết nối trực tuyến'
+              : connectionStatus === 'checking'
+                ? 'Đang kiểm tra kết nối máy chủ'
+                : 'Mất kết nối mạng hoặc máy chủ'
+          }
+        >
+          <i aria-hidden="true" />
+          {connectionStatus === 'online'
+            ? 'Trực tuyến'
+            : connectionStatus === 'checking'
+              ? 'Đang kết nối'
+              : 'Ngoại tuyến'}
         </span>
 
-        {/* Nút chuông thông báo khẩn cấp kèm số lượng cảnh báo chưa đọc lấy từ Database */}
+        {/* Nút Chuông thông báo hiển thị số lượng cảnh báo khẩn */}
         <button
+          type="button"
           className="icon-button notification-button"
-          aria-label={'Thông báo: ' + unreadAlertsCount + ' chưa đọc'}
+          aria-label={`Thông báo: ${unreadAlertsCount} chưa đọc`}
+          title={`Thông báo hệ thống (${unreadAlertsCount} chưa đọc)`}
           onClick={onOpenAlerts}
         >
           <Bell size={19} />
-          {unreadAlertsCount > 0 && <span>{unreadAlertsCount}</span>}
+          {unreadAlertsCount > 0 && (
+            <span aria-hidden="true">
+              {unreadAlertsCount > 99 ? '99+' : unreadAlertsCount}
+            </span>
+          )}
         </button>
 
-        {/* Menu thông tin tài khoản người dùng đang đăng nhập và nút Đăng xuất */}
-        <div className="profile-menu" ref={menu}>
+        {/* Menu tài khoản người dùng và Đăng xuất */}
+        <div className="profile-menu" ref={menuRef}>
           <button
+            type="button"
             className="profile-trigger"
             aria-expanded={open}
             aria-controls="account-menu"
             onClick={() => setOpen(!open)}
           >
-            <span className="avatar">{avatarInitial}</span>
-            <span className="profile-name">{user?.fullName}</span>
+            <span className="avatar" aria-hidden="true">
+              {user?.avatarUrl && !avatarError ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.fullName || 'Avatar'}
+                  className="avatar-img"
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                userInitials
+              )}
+            </span>
+            <span className="profile-name">{user?.fullName || 'Người dùng'}</span>
             <ChevronDown size={14} />
           </button>
 
-          {/* Dropdown chi tiết tài khoản khi state `open` === true */}
+          {/* Menu thả xuống thông tin tài khoản */}
           {open && (
-            <div id="account-menu" className="account-dropdown">
-              <strong>{user?.fullName}</strong>
-              <p>{user?.email}</p>
-              <p>{labels[currentModule]}</p>
+            <div id="account-menu" className="account-dropdown" role="menu">
+              <div className="account-info">
+                <strong className="block truncate">{user?.fullName || 'Tài khoản'}</strong>
+                <p className="truncate text-secondary">{user?.email || 'Chưa thiết lập email'}</p>
+                <div className="mt-2 flex flex-wrap gap-1 items-center">
+                  <span className="user-role-badge">{roleText}</span>
+                  <span className="text-[11px] text-secondary font-medium px-1.5 py-0.5 rounded bg-surface-container">
+                    {MODULE_LABELS[currentModule] || currentModule}
+                  </span>
+                </div>
+              </div>
+
+              {onSelectScreen && (
+                <button
+                  type="button"
+                  className="dropdown-item-btn mt-3 pt-2 border-t border-slate-100"
+                  onClick={() => {
+                    setOpen(false);
+                    onSelectScreen(DEFAULT_SCREENS[currentModule] || 'overview');
+                  }}
+                >
+                  Bảng điều khiển chính
+                </button>
+              )}
+
               <button
+                type="button"
+                className="logout-btn"
                 onClick={() => {
                   setOpen(false);
                   onLogout?.();

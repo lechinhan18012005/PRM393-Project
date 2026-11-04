@@ -102,8 +102,9 @@ export const garageApi = {
     return json.data;
   },
 
-  getAllGarages: async (): Promise<GarageBackendResponse[]> => {
-    const res = await fetch(`${API_BASE_URL}/staff/garages`, {
+  getAllGarages: async (page?: number, size?: number): Promise<GarageBackendResponse[]> => {
+    const qs = page !== undefined && size !== undefined ? `?page=${page}&size=${size}` : '';
+    const res = await fetch(`${API_BASE_URL}/staff/garages${qs}`, {
       headers: getAuthHeaders()
     });
     const json = await res.json();

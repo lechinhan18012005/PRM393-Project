@@ -12,6 +12,7 @@ import com.prm393.floodrescue.features.floodmap.entity.FloodReportPoint;
 import com.prm393.floodrescue.features.floodmap.entity.FloodStatus;
 import com.prm393.floodrescue.features.floodmap.repository.FloodReportRepository;
 import com.prm393.floodrescue.features.floodmap.service.FloodReportService;
+import com.prm393.floodrescue.features.garage.repository.GarageBranchRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,9 @@ class FloodReportServiceTest {
 
     @Mock
     private FloodReportRepository floodReportRepository;
+
+    @Mock
+    private GarageBranchRepository garageBranchRepository;
 
     @InjectMocks
     private FloodReportService floodReportService;
@@ -76,7 +80,7 @@ class FloodReportServiceTest {
     @Test
     @DisplayName("UC-20: Tin báo điểm ngập đầu tiên ở khu vực mới -> Trạng thái PENDING, clusterCount = 1, confidenceScore = 2")
     void createReport_SingleReport_StartsAsPending() {
-        when(floodReportRepository.findAll()).thenReturn(List.of());
+        when(floodReportRepository.findByCreatedAtAfter(any())).thenReturn(List.of());
         when(floodReportRepository.save(any(FloodReportPoint.class))).thenAnswer(inv -> {
             FloodReportPoint p = inv.getArgument(0);
             p.setId(401L);
@@ -145,7 +149,7 @@ class FloodReportServiceTest {
                 .createdAt(LocalDateTime.now().minusMinutes(5))
                 .build();
 
-        when(floodReportRepository.findAll()).thenReturn(List.of(point1, point2, farPoint));
+        when(floodReportRepository.findByCreatedAtAfter(any())).thenReturn(List.of(point1, point2, farPoint));
         when(floodReportRepository.save(any(FloodReportPoint.class))).thenAnswer(inv -> {
             FloodReportPoint p = inv.getArgument(0);
             if (p.getId() == null) {
@@ -193,7 +197,7 @@ class FloodReportServiceTest {
                 .createdAt(LocalDateTime.now().minusMinutes(5)) // Vừa gửi 5 phút trước
                 .build();
 
-        when(floodReportRepository.findAll()).thenReturn(List.of(existingReport));
+        when(floodReportRepository.findByCreatedAtAfter(any())).thenReturn(List.of(existingReport));
 
         CreateFloodReportRequest spamReq = CreateFloodReportRequest.builder()
                 .latitude(10.7422) // Cách điểm cũ ~30 mét
@@ -226,7 +230,7 @@ class FloodReportServiceTest {
     }
 
     @Test
-    @DisplayName("UC-20 (4.2.4): Người dùng cộng đồng báo nước đã rút tại điểm ngập -> Cập nhật sang EXPIRED")
+    @DisplayName("UC-20 (4.2.4): Người dùng cộng đồng báo nước đã rút tại điểm ngập (Đạt 2 lượt xác nhận) -> Cập nhật sang EXPIRED")
     void reportWaterRecededByCommunity_SetsStatusToExpired() {
         FloodReportPoint activePoint = FloodReportPoint.builder()
                 .id(420L)
@@ -236,6 +240,7 @@ class FloodReportServiceTest {
                 .address("Đường Trần Xuân Soạn, Q.7")
                 .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
                 .moderationStatus(FloodStatus.APPROVED)
+                .recededConfirmCount(1) // Đã có 1 lượt xác nhận trước đó
                 .build();
 
         when(floodReportRepository.findById(420L)).thenReturn(Optional.of(activePoint));
@@ -245,8 +250,33 @@ class FloodReportServiceTest {
 
         assertNotNull(res);
         assertEquals(FloodStatus.EXPIRED, res.getModerationStatus());
-        assertTrue(res.getModeratorNote().contains("Cộng đồng báo nước đã rút"));
+        assertTrue(res.getModeratorNote().contains("Cộng đồng đã xác nhận nước rút"));
         assertTrue(res.getModeratorNote().contains("Lê Hoàng Nam"));
+    }
+
+    @Test
+    @DisplayName("UC-20 (4.2.4 Consensus): Lượt báo nước rút đầu tiên -> Giữ APPROVED, chờ thêm xác thực từ cộng đồng")
+    void reportWaterRecededByCommunity_FirstVote_AwaitsConsensus() {
+        FloodReportPoint activePoint = FloodReportPoint.builder()
+                .id(421L)
+                .reportedBy(customer2)
+                .latitude(10.7420)
+                .longitude(106.7020)
+                .address("Đường Trần Xuân Soạn, Q.7")
+                .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
+                .moderationStatus(FloodStatus.APPROVED)
+                .recededConfirmCount(0)
+                .build();
+
+        when(floodReportRepository.findById(421L)).thenReturn(Optional.of(activePoint));
+        when(floodReportRepository.save(any(FloodReportPoint.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FloodReportResponse res = floodReportService.reportWaterRecededByCommunity(customer1, 421L);
+
+        assertNotNull(res);
+        assertEquals(FloodStatus.APPROVED, res.getModerationStatus());
+        assertEquals(1, res.getRecededConfirmCount());
+        assertTrue(res.getModeratorNote().contains("Có 1 phản hồi nước đang rút"));
     }
 
     @Test

@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { API_BASE_URL, getAuthHeaders } from './apiConfig';
+import { BACKEND_CONNECTION_ERROR_MESSAGE } from './authApi';
 import { GarageBackendResponse } from './garageApi';
 import { RegisterPayload, User } from '../types/auth';
 
@@ -40,11 +41,16 @@ export class ApiError extends Error {
  */
 export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   // Thực thi lời gọi mạng bất đồng bộ bằng Fetch API tới địa chỉ API_BASE_URL + path
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: getAuthHeaders(),
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: getAuthHeaders(),
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+  } catch {
+    throw new ApiError(BACKEND_CONNECTION_ERROR_MESSAGE, 0);
+  }
 
   // Biến tạm lưu trữ đối tượng JSON sau khi phân tích cú pháp từ phản hồi của Server
   let json: any = null;
@@ -62,6 +68,9 @@ export async function request<T>(path: string, method = 'GET', body?: unknown): 
 
   // Kiểm tra trạng thái thành công của HTTP Response và cờ logic `success` trong cấu trúc ApiResponse
   if (!response.ok || (json && json.success === false)) {
+    if (response.status >= 502 && response.status <= 504) {
+      throw new ApiError(`Máy chủ backend tạm thời không phản hồi (Mã lỗi ${response.status}). Vui lòng thử lại sau.`, response.status);
+    }
     const message = json?.message || `Lỗi hệ thống (${response.status})`;
     throw new ApiError(message, response.status, json?.validationErrors);
   }

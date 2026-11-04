@@ -6,19 +6,26 @@
 //    - Phân hệ A (Admin): Quản lý tài khoản Staff, Tổng quan GMV, Phí & Chiết khấu Gara,
 //      Đối soát PayOS, Duyệt rút tiền Gara, Hoàn tiền khiếu nại, Báo cáo tài chính P&L.
 //    - Phân hệ B (Staff): Điều phối cứu hộ trực tuyến, Duyệt Gara eKYC, Bản đồ ngập GIS,
-//      Xử lý tranh chấp (UC-23), Giám sát chất lượng dịch vụ SLA/CSAT (UC-19), Chuyến gom xe.
+//      Xử lý tranh chấp, Giám sát chất lượng dịch vụ SLA/CSAT.
 //    - Phân hệ C (Garage Owner): Quản lý Gara, Chi nhánh & Đội thợ, Doanh thu & Ví, Dịch vụ.
 // 2. Thực thi kiểm soát phân quyền nghiêm ngặt (RBAC):
 //    - Tài khoản ADMIN chỉ được phép truy cập phân hệ 'admin' (`/admin/*`), tuyệt đối không
 //      truy cập sang phân hệ 'staff'.
-// 3. Loại bỏ hoàn toàn dữ liệu giả lập (mockData) khỏi các màn hình Admin; đồng thời tải động
-//    số lượng yêu cầu rút tiền chờ duyệt và khiếu nại chờ xử lý từ Database qua `financeApi`
-//    để hiển thị trên chuông thông báo Header.
+//    - Tài khoản STAFF không được phép truy cập trang quản lý tài khoản Staff (`/admin/staff-accounts`).
+// 3. Đồng bộ cảnh báo trực tiếp từ Backend API (Đơn cứu hộ khẩn cấp, Rút tiền ví Gara, Khiếu nại hoàn tiền)
+//    lên chuông thông báo Header.
 // ============================================================================
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { ModuleType, ScreenId } from './types';
+import {
+  ModuleType,
+  ScreenId,
+  PayOSTransaction,
+  GarageApplicant,
+  DisputeCase,
+  PayoutItem
+} from './types';
 import { Role } from './types/auth';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -31,6 +38,7 @@ import {
   screenModule
 } from './permissions';
 import { financeApi } from './services/financeApi';
+import { rescueApi } from './services/rescueApi';
 import { GarageAccessGate } from './components/views/GarageAccessGate';
 import { GarageManagementView } from './components/views/GarageManagementView';
 import { StaffAccountsView } from './components/views/StaffAccountsView';
@@ -38,6 +46,7 @@ import { InvitationActivationView } from './components/views/InvitationActivatio
 import { GarageOperationsView } from './components/views/GarageOperationsView';
 import { LoginView } from './components/views/LoginView';
 import { RegisterView } from './components/views/RegisterView';
+import { INITIAL_DISPUTES, INITIAL_GARAGE_APPLICANTS } from './data/mockData';
 
 // Nhập các màn hình thuộc Phân hệ A (Quản trị viên & Tài chính - Module A Views)
 import { OverviewGMVView } from './components/views/OverviewGMVView';
@@ -53,21 +62,11 @@ import GarageVerificationView from './components/views/GarageVerificationView';
 import { GISFloodMapView } from './components/views/GISFloodMapView';
 import { DisputeFraudView } from './components/views/DisputeFraudView';
 import { SLAMonitoringView } from './components/views/SLAMonitoringView';
-import { BatchTripMonitoringView } from './components/views/BatchTripMonitoringView';
 
 // Nhập các màn hình thuộc Phân hệ C (Chủ Gara đối tác - Module C Views)
 import { GarageOwnerDashboardView } from './components/views/GarageOwnerDashboardView';
 import { GarageServicesPricingView } from './components/views/GarageServicesPricingView';
 
-// Chỉ giữ lại dữ liệu mẫu cho các màn hình thuộc phân hệ Staff (Duyệt Gara & Bản đồ ngập) của thành viên khác
-import {
-  INITIAL_GARAGE_APPLICANTS,
-  INITIAL_FLOOD_POINTS
-} from './data/mockData';
-
-/**
- * Giao diện mô tả một thông báo nổi (Toast Notification) hiển thị ở góc dưới bên phải màn hình.
- */
 interface ToastItem {
   id: string;
   title: string;
@@ -75,25 +74,16 @@ interface ToastItem {
   type: 'info' | 'success' | 'warning' | 'error';
 }
 
-/**
- * Giao diện mô tả một mục cảnh báo hiển thị trong hộp thoại Chuông thông báo trên Header.
- */
-interface UrgentAlertItem {
+export interface SystemAlert {
   id: string;
   title: string;
   desc: string;
   time: string;
   level: 'CRITICAL' | 'WARNING' | 'INFO';
+  isRead?: boolean;
   targetScreen?: ScreenId;
 }
 
-/**
- * Hàm xác định đường dẫn mặc định (Default Path) dựa trên vai trò (Role) của người dùng.
- * Tuân thủ cấu hình ROLE_DEFAULT_ROUTE trong permissions.ts:
- * - ADMIN -> '/admin/overview'
- * - STAFF -> '/staff/dashboard'
- * - GARAGE_OWNER -> '/owner/owner-dashboard'
- */
 const getDefaultPath = (role: Role): string => {
   return ROLE_DEFAULT_ROUTE[role] || '/login';
 };
@@ -102,28 +92,121 @@ const getDefaultPath = (role: Role): string => {
  * Component chính điều phối bố cục (Header + Sidebar + Main Router) sau khi xác thực người dùng.
  */
 function MainDashboard() {
-  // Truy xuất thông tin người dùng, trạng thái đăng nhập và hàm đăng xuất từ AuthContext
   const { user, isAuthenticated, isLoading, logout } = useAuth();
-  // Hook lấy thông tin đường dẫn URL hiện tại
   const location = useLocation();
-  // Hook điều hướng trang bằng code (Programmatic Navigation)
   const navigate = useNavigate();
 
-  // State lưu từ khóa tìm kiếm trên Header
   const [searchQuery, setSearchQuery] = useState('');
-  // State lưu danh sách các thông báo Toast đang hiển thị
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  // State đóng/mở hộp thoại (Modal) danh sách cảnh báo khi nhấn vào biểu tượng Chuông
   const [showAlertsModal, setShowAlertsModal] = useState(false);
+  const [alerts, setAlerts] = useState<SystemAlert[]>([]);
 
-  // State lưu trữ dữ liệu động từ Database để tính toán cảnh báo thực tế cho Admin (Yêu cầu #1)
-  const [adminPendingPayoutsCount, setAdminPendingPayoutsCount] = useState<number>(0);
-  const [adminPendingPayoutsAmount, setAdminPendingPayoutsAmount] = useState<number>(0);
-  const [adminEscalatedDisputesCount, setAdminEscalatedDisputesCount] = useState<number>(0);
-
-  // Dữ liệu cho các màn hình duyệt hồ sơ Gara và điểm ngập của phân hệ Staff
+  // Dữ liệu cho các màn hình duyệt hồ sơ Gara của phân hệ Staff
   const [applicants] = useState(INITIAL_GARAGE_APPLICANTS);
-  const [floodPoints] = useState(INITIAL_FLOOD_POINTS);
+
+  // Đồng bộ cảnh báo thời gian thực từ Backend Orders & Finance APIs
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    let isMounted = true;
+
+    const loadLiveAlerts = async () => {
+      try {
+        if (user.role === 'STAFF' || user.role === 'ADMIN') {
+          const orders = await rescueApi.getStaffOrders().catch(() => []);
+          if (!isMounted) return;
+          const pending = orders.filter(
+            (o) => o.status === 'REQUESTED' || o.status === 'SEARCHING_MECHANIC'
+          );
+          if (pending.length > 0) {
+            const liveAlert: SystemAlert = {
+              id: `LIVE-ORD-${pending[0].id}`,
+              title: `Có ${pending.length} đơn cứu hộ mới cần điều phối`,
+              desc: `Đơn gần nhất #${pending[0].orderCode} tại ${pending[0].pickupAddress || 'chưa rõ vị trí'}.`,
+              time: 'Vừa xong',
+              level: 'CRITICAL',
+              isRead: false,
+              targetScreen: 'dashboard'
+            };
+            setAlerts((prev) => {
+              if (prev.some((a) => a.id === liveAlert.id)) return prev;
+              return [liveAlert, ...prev];
+            });
+          }
+
+          // Cảnh báo tài chính cho Admin (Yêu cầu rút tiền chờ duyệt & Khiếu nại chờ hoàn tiền)
+          if (user.role === 'ADMIN') {
+            try {
+              const [payouts, disputes] = await Promise.all([
+                financeApi.getAllPayouts('PENDING').catch(() => []),
+                financeApi.getAllDisputes('ADMIN_APPROVAL').catch(() => [])
+              ]);
+              if (!isMounted) return;
+              if (payouts.length > 0) {
+                const payoutAlert: SystemAlert = {
+                  id: `LIVE-PAYOUT-${payouts[0].id}`,
+                  title: `Có ${payouts.length} yêu cầu rút tiền ví Gara đang chờ duyệt`,
+                  desc: `Gara đề nghị giải ngân gần nhất: ${payouts[0].garageName || 'Đối tác'}.`,
+                  time: 'Vừa xong',
+                  level: 'WARNING',
+                  isRead: false,
+                  targetScreen: 'payouts'
+                };
+                setAlerts((prev) => {
+                  if (prev.some((a) => a.id === payoutAlert.id)) return prev;
+                  return [payoutAlert, ...prev];
+                });
+              }
+              if (disputes.length > 0) {
+                const disputeAlert: SystemAlert = {
+                  id: `LIVE-DISPUTE-${disputes[0].id}`,
+                  title: `Có ${disputes.length} hồ sơ khiếu nại chờ Admin hoàn tiền`,
+                  desc: `Đã có biên bản xác minh từ nhân viên CSKH.`,
+                  time: 'Vừa xong',
+                  level: 'CRITICAL',
+                  isRead: false,
+                  targetScreen: 'refunds'
+                };
+                setAlerts((prev) => {
+                  if (prev.some((a) => a.id === disputeAlert.id)) return prev;
+                  return [disputeAlert, ...prev];
+                });
+              }
+            } catch {
+              // Ignore auxiliary finance alert errors
+            }
+          }
+        } else if (user.role === 'GARAGE_OWNER') {
+          const orders = await rescueApi.getGarageOrders().catch(() => []);
+          if (!isMounted) return;
+          const pending = orders.filter((o) => o.status === 'ASSIGNED' || o.status === 'ACCEPTED');
+          if (pending.length > 0) {
+            const liveAlert: SystemAlert = {
+              id: `LIVE-GARAGE-${pending[0].id}`,
+              title: `Gara có ${pending.length} đơn cứu hộ đang xử lý`,
+              desc: `Đơn #${pending[0].orderCode} đang chờ thợ cơ động tiếp nhận và xử lý.`,
+              time: 'Vừa xong',
+              level: 'WARNING',
+              isRead: false,
+              targetScreen: 'owner-dashboard'
+            };
+            setAlerts((prev) => {
+              if (prev.some((a) => a.id === liveAlert.id)) return prev;
+              return [liveAlert, ...prev];
+            });
+          }
+        }
+      } catch {
+        // Ignored when offline
+      }
+    };
+
+    loadLiveAlerts();
+    const timer = setInterval(loadLiveAlerts, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [isAuthenticated, user]);
 
   /**
    * Hàm hiển thị thông báo nổi (Toast) tự động biến mất sau 4.5 giây.
@@ -135,9 +218,8 @@ function MainDashboard() {
   ) => {
     if (DEMO_MODE) {
       message = `Bản demo: ${message} Dữ liệu chưa được lưu hoặc gửi tới hệ thống thật.`;
-      type = 'info';
     }
-    const id = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+    const id = Date.now().toString();
     setToasts((prev) => [...prev, { id, title, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -145,168 +227,56 @@ function MainDashboard() {
   };
 
   /**
-   * Hook useEffect tự động tải số lượng yêu cầu rút tiền đang chờ duyệt (`getPayouts`)
-   * và số lượng hồ sơ khiếu nại chờ phán quyết hoàn tiền (`getRefunds`) từ Database
-   * khi người dùng đăng nhập có vai trò là ADMIN (Yêu cầu #1).
+   * Tính toán phân hệ hiện tại (currentModule) và màn hình hiện tại (currentScreen) từ URL pathname.
    */
-  useEffect(() => {
-    // Chỉ gọi API thống kê cảnh báo tài chính khi đã đăng nhập với quyền ADMIN
-    if (!isAuthenticated || user?.role !== 'ADMIN') {
-      return;
+  const { currentModule, currentScreen } = React.useMemo(() => {
+    const path = location.pathname;
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length >= 2) {
+      const mod = parts[0] as ModuleType;
+      const scr = parts[1] as ScreenId;
+      return { currentModule: mod, currentScreen: scr };
     }
-
-    let isMounted = true;
-
-    const fetchAdminAlertsFromDb = async () => {
-      try {
-        // Gọi song song 2 API lấy danh sách rút tiền và danh sách hoàn tiền/khiếu nại từ Database
-        const [payoutsData, refundsData] = await Promise.all([
-          financeApi.getPayouts(),
-          financeApi.getRefunds()
-        ]);
-
-        if (!isMounted) return;
-
-        // Lọc các yêu cầu rút tiền đang ở trạng thái chờ Admin phê duyệt (PENDING hoặc PROCESSING)
-        const pendingPayouts = (payoutsData || []).filter(
-          (p) => p.status === 'PENDING' || p.status === 'PROCESSING'
-        );
-        // Tính tổng số tiền các Gara đang yêu cầu rút chờ duyệt
-        const totalPendingAmount = pendingPayouts.reduce(
-          (sum, p) => sum + Number(p.amount ?? p.requestedAmount ?? 0),
-          0
-        );
-
-        // Lọc các hồ sơ khiếu nại đang chờ xử lý / chờ Admin ra phán quyết hoàn tiền
-        const pendingDisputes = (refundsData || []).filter(
-          (d) =>
-            d.status === 'ESCALATED_TO_ADMIN' ||
-            d.status === 'ADMIN_APPROVAL' ||
-            d.status === 'OPEN' ||
-            d.status === 'UNDER_REVIEW' ||
-            d.status === 'STAFF_REVIEW'
-        );
-
-        // Cập nhật vào React state để hiển thị số đếm thực tế trên chuông thông báo Header
-        setAdminPendingPayoutsCount(pendingPayouts.length);
-        setAdminPendingPayoutsAmount(totalPendingAmount);
-        setAdminEscalatedDisputesCount(pendingDisputes.length);
-      } catch {
-        // Nếu kết nối mạng tạm thời gián đoạn, giữ nguyên giá trị 0 thay vì dùng dữ liệu giả
-      }
+    return {
+      currentModule: 'admin' as ModuleType,
+      currentScreen: 'overview' as ScreenId
     };
+  }, [location.pathname]);
 
-    void fetchAdminAlertsFromDb();
-    // Làm mới tự động mỗi 30 giây hoặc khi Admin chuyển màn hình
-    const timer = setInterval(fetchAdminAlertsFromDb, 30000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(timer);
-    };
-  }, [isAuthenticated, user?.role, location.pathname]);
-
-  /**
-   * Phân tích đường dẫn URL hiện tại (`location.pathname`) để suy ra `currentModule` và `currentScreen`.
-   */
-  const pathSegments = location.pathname.split('/').filter(Boolean);
-  const urlModule = pathSegments[0] as ModuleType | undefined;
-  const urlScreen = pathSegments[1] as ScreenId | undefined;
-
-  // Xác định màn hình hiện tại (currentScreen) dựa trên URL và vai trò của người dùng
-  let currentScreen: ScreenId = 'overview';
-  if (urlScreen && urlScreen in screenModule) {
-    currentScreen = urlScreen;
-  } else if (urlModule && (urlModule as unknown as ScreenId) in screenModule) {
-    currentScreen = urlModule as unknown as ScreenId;
-  } else if (user?.role === 'STAFF') {
-    currentScreen = 'dashboard';
-  } else if (user?.role === 'GARAGE_OWNER') {
-    currentScreen = 'owner-dashboard';
-  }
-
-  // Xác định phân hệ hiện tại (currentModule) từ màn hình hoặc URL
-  const currentModule: ModuleType =
-    screenModule[currentScreen] ||
-    urlModule ||
-    (user?.role === 'STAFF' ? 'staff' : user?.role === 'GARAGE_OWNER' ? 'owner' : 'admin');
-
-  /**
-   * Hàm xử lý khi người dùng chọn một phân hệ trên Header.
-   * Có kiểm tra phân quyền `canAccessModule`: ADMIN không thể chuyển sang 'staff'.
-   */
   const handleSelectModule = (mod: ModuleType) => {
-    if (!user || !canAccessModule(user.role, mod)) return;
-    if (mod === 'admin') {
-      navigate('/admin/overview');
-    } else if (mod === 'staff') {
-      navigate('/staff/dashboard');
-    } else if (mod === 'owner') {
-      navigate('/owner/owner-dashboard');
+    if (!user) return;
+    if (canAccessModule(user.role, mod)) {
+      const defaultScreen = mod === 'admin' ? 'overview' : mod === 'staff' ? 'dashboard' : 'owner-dashboard';
+      navigate(`/${mod}/${defaultScreen}`);
+    } else {
+      showToast('Từ chối truy cập', 'Bạn không có quyền truy cập vào phân hệ này.', 'warning');
     }
   };
 
-  /**
-   * Hàm xử lý khi người dùng chọn một màn hình trên thanh Sidebar hoặc từ các nút điều hướng.
-   */
-  const handleSelectScreen = (screen: ScreenId) => {
-    if (!user || !canAccessScreen(user.role, screen)) return;
-    const targetModule = screenModule[screen];
-    navigate(`/${targetModule}/${screen}`);
+  const handleSelectScreen = (scr: ScreenId) => {
+    if (!user) return;
+    if (canAccessScreen(user.role, scr)) {
+      const mod = screenModule[scr];
+      if (mod) {
+        navigate(`/${mod}/${scr}`);
+      }
+    } else {
+      showToast('Từ chối truy cập', 'Bạn không có quyền truy cập vào chức năng này.', 'warning');
+    }
   };
 
-  /**
-   * Xây dựng danh sách thông báo khẩn cấp hiển thị trong Modal Chuông thông báo:
-   * - Nếu người dùng là ADMIN: Tạo danh sách cảnh báo động 100% từ dữ liệu thực trong Database
-   *   (số lệnh rút tiền chờ duyệt và số hồ sơ khiếu nại chờ phán quyết hoàn tiền).
-   */
-  const urgentAlerts = useMemo<UrgentAlertItem[]>(() => {
-    if (user?.role === 'ADMIN') {
-      const dynamicAlerts: UrgentAlertItem[] = [];
-      if (adminPendingPayoutsCount > 0) {
-        dynamicAlerts.push({
-          id: 'ADMIN-ALERT-PAYOUT',
-          title: `${adminPendingPayoutsCount} yêu cầu rút tiền Gara đang chờ duyệt`,
-          desc: `Tổng số tiền đề nghị giải ngân: ${adminPendingPayoutsAmount.toLocaleString('vi-VN')} ₫. Nhấn để chuyển tới màn hình Rút tiền.`,
-          time: 'Dữ liệu thời gian thực từ Database',
-          level: 'WARNING',
-          targetScreen: 'payouts'
-        });
-      }
-      if (adminEscalatedDisputesCount > 0) {
-        dynamicAlerts.push({
-          id: 'ADMIN-ALERT-REFUND',
-          title: `${adminEscalatedDisputesCount} hồ sơ khiếu nại chờ quyết định hoàn tiền`,
-          desc: 'Cần Admin thẩm định biên bản của Staff và phê duyệt hoàn tiền cho khách hàng.',
-          time: 'Dữ liệu thời gian thực từ Database',
-          level: 'CRITICAL',
-          targetScreen: 'refunds'
-        });
-      }
-      return dynamicAlerts;
-    }
-
-    // Đối với các vai trò khác (Staff / Owner)
-    return [];
-  }, [user?.role, adminPendingPayoutsCount, adminPendingPayoutsAmount, adminEscalatedDisputesCount]);
-
-  // Tổng số thông báo chưa đọc hiển thị trên huy hiệu quả chuông Header
-  const unreadAlertsCount =
-    user?.role === 'ADMIN'
-      ? adminPendingPayoutsCount + adminEscalatedDisputesCount
-      : urgentAlerts.length;
-
-  // Hiển thị màn hình chờ trong lúc kiểm tra JWT Token từ LocalStorage
   if (isLoading) {
     return (
-      <div className="min-h-screen p-8 bg-slate-950 text-white">
-        Đang kiểm tra phiên đăng nhập...
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-secondary font-medium">Đang tải hệ thống điều hành...</p>
+        </div>
       </div>
     );
   }
 
-  // Nếu người dùng chưa đăng nhập, chỉ cho phép truy cập các route xác thực (/login, /register, /activate)
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user) {
     return (
       <Routes>
         <Route
@@ -331,30 +301,16 @@ function MainDashboard() {
     );
   }
 
-  // Kiểm tra quyền truy cập Web Portal: Chặn các tài khoản chỉ dành cho Mobile (CUSTOMER, FIELD_MECHANIC)
-  if (!user || !roleModules[user.role] || roleModules[user.role].length === 0) {
-    return (
-      <div className="min-h-screen p-8 bg-slate-950 text-white">
-        Tài khoản này chưa có quyền truy cập web portal. Vui lòng dùng ứng dụng mobile hoặc liên hệ quản trị viên.{' '}
-        <button className="underline ml-2" onClick={logout}>
-          Đăng xuất
-        </button>
-      </div>
-    );
-  }
-
-  // Nếu người dùng đã đăng nhập mà truy cập lại trang /login, /register, /activate thì điều hướng về trang mặc định của vai trò đó
   if (['/login', '/register', '/activate'].includes(location.pathname)) {
     return <Navigate to={getDefaultPath(user.role)} replace />;
   }
 
-  // Chốt chặn bảo mật đường dẫn: Nếu người dùng cố tình gõ URL của phân hệ không được phép (VD: Admin gõ /staff/dashboard)
-  // thì lập tức chuyển hướng về đường dẫn mặc định của vai trò đó (/admin/overview)
   if (!canAccessModule(user.role, currentModule)) {
     return <Navigate to={getDefaultPath(user.role)} replace />;
   }
 
-  // Giao diện chính của bảng điều khiển (Header + Sidebar + Nội dung màn hình)
+  const unreadAlertsCount = alerts.filter((a) => !a.isRead).length;
+
   const dashboard = (
     <div className="min-h-screen bg-surface font-body-md text-on-surface flex flex-col antialiased selection:bg-primary-container selection:text-on-primary-container">
       {/* Thanh Header trên cùng của ứng dụng */}
@@ -373,20 +329,15 @@ function MainDashboard() {
 
       {/* Khung bố cục 2 cột: Sidebar bên trái + Nội dung chính bên phải */}
       <div className="app-layout">
-        {/* Thanh điều hướng cố định bên trái (Sidebar) chỉ hiển thị menu của phân hệ được phép */}
         <Sidebar
           currentScreen={currentScreen}
           onSelectScreen={handleSelectScreen}
           allowedModule={currentModule}
         />
 
-        {/* Vùng hiển thị nội dung màn hình chính theo Route */}
         <main className="app-main">
           <Routes>
-            {/* ==============================================================
-                PHÂN HỆ A: QUẢN TRỊ VIÊN & TÀI CHÍNH (MODULE A - ADMIN VIEWS)
-                Toàn bộ dữ liệu đều lấy trực tiếp từ Database qua API, không truyền mockData
-               ============================================================== */}
+            {/* PHÂN HỆ A: QUẢN TRỊ VIÊN & TÀI CHÍNH (MODULE A - ADMIN VIEWS) */}
             {user.role === 'ADMIN' && (
               <Route path="/admin/staff-accounts" element={<StaffAccountsView />} />
             )}
@@ -430,9 +381,7 @@ function MainDashboard() {
               }
             />
 
-            {/* ==============================================================
-                PHÂN HỆ B: VẬN HÀNH & CHĂM SÓC KHÁCH HÀNG (MODULE B - STAFF VIEWS)
-               ============================================================== */}
+            {/* PHÂN HỆ B: VẬN HÀNH & CHĂM SÓC KHÁCH HÀNG (MODULE B - STAFF VIEWS) */}
             <Route
               path="/staff/dashboard"
               element={
@@ -453,12 +402,7 @@ function MainDashboard() {
             />
             <Route
               path="/staff/moderation"
-              element={
-                <GISFloodMapView
-                  floodPoints={floodPoints}
-                  onShowToast={showToast}
-                />
-              }
+              element={<GISFloodMapView onShowToast={showToast} />}
             />
             <Route
               path="/staff/disputes"
@@ -471,18 +415,10 @@ function MainDashboard() {
             />
             <Route
               path="/staff/monitoring"
-              element={
-                <SLAMonitoringView
-                  onSelectScreen={handleSelectScreen}
-                  onShowToast={showToast}
-                />
-              }
+              element={<SLAMonitoringView onShowToast={showToast} />}
             />
-            <Route path="/staff/batch-trips" element={<BatchTripMonitoringView />} />
 
-            {/* ==============================================================
-                PHÂN HỆ C: ĐỐI TÁC GARA CỨU HỘ (MODULE C - GARAGE OWNER VIEWS)
-               ============================================================== */}
+            {/* PHÂN HỆ C: CHỦ GARA ĐỐI TÁC (MODULE C - GARAGE OWNER VIEWS) */}
             <Route
               path="/owner/owner-dashboard"
               element={
@@ -492,63 +428,42 @@ function MainDashboard() {
                 />
               }
             />
-            {user.role === 'GARAGE_OWNER' && (
-              <Route
-                path="/owner/garage-team"
-                element={<GarageManagementView onShowToast={showToast} />}
-              />
-            )}
+            <Route
+              path="/owner/services-pricing"
+              element={<GarageServicesPricingView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+            />
+            <Route
+              path="/owner/garage-management"
+              element={<GarageManagementView onShowToast={showToast} />}
+            />
+            <Route
+              path="/owner/garage-operations"
+              element={<GarageOperationsView mode="transport" />}
+            />
             <Route
               path="/owner/garage-finance"
               element={<GarageOperationsView mode="finance" />}
             />
-            <Route
-              path="/owner/garage-transport"
-              element={<GarageOperationsView mode="transport" />}
-            />
-            <Route
-              path="/owner/services"
-              element={
-                <GarageServicesPricingView
-                  onSelectScreen={handleSelectScreen}
-                  onShowToast={showToast}
-                />
-              }
-            />
 
-            {/* Điều hướng mặc định khi chỉ gõ tên phân hệ trên URL */}
-            <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
-            <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
-            <Route path="/owner" element={<Navigate to="/owner/owner-dashboard" replace />} />
-
-            {/* Ánh xạ các đường dẫn tắt (/overview -> /admin/overview, v.v.) */}
-            {Object.entries(screenModule).map(([screen, mod]) => (
-              <Route
-                key={screen}
-                path={`/${screen}`}
-                element={<Navigate to={`/${mod}/${screen}`} replace />}
-              />
-            ))}
-
-            {/* Điều hướng mặc định cho đường dẫn gốc '/' và các đường dẫn không khớp '*' */}
-            <Route path="/" element={<Navigate to={getDefaultPath(user.role)} replace />} />
+            {/* Điều hướng mặc định nếu URL không khớp */}
             <Route path="*" element={<Navigate to={getDefaultPath(user.role)} replace />} />
           </Routes>
         </main>
       </div>
 
-      {/* Hộp thoại (Modal) hiển thị danh sách thông báo khẩn cấp lấy từ Database */}
+      {/* Hộp thoại (Modal) hiển thị danh sách thông báo & cảnh báo */}
       {showAlertsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
           <div className="bg-surface-container-lowest rounded-2xl border border-surface-container max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between p-space-lg border-b border-surface-container bg-surface-container-low">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-red-600">notifications_active</span>
+                <span className="material-symbols-outlined text-primary">notifications_active</span>
                 <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-                  Thông Báo Hệ Thống ({unreadAlertsCount})
+                  Thông Báo & Cảnh Báo ({alerts.length})
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setShowAlertsModal(false)}
                 className="p-1 rounded-full text-secondary hover:text-on-surface hover:bg-surface-container"
               >
@@ -557,49 +472,70 @@ function MainDashboard() {
             </div>
 
             <div className="p-space-lg space-y-space-md max-h-[70vh] overflow-y-auto divide-y divide-surface-container">
-              {urgentAlerts.length > 0 ? (
-                urgentAlerts.map((alt) => (
+              {alerts.length === 0 ? (
+                <div className="py-8 text-center text-secondary text-body-sm">
+                  <span className="material-symbols-outlined text-[36px] text-secondary/40 block mb-2">notifications_none</span>
+                  <p>Hiện không có thông báo hoặc cảnh báo khẩn cấp nào.</p>
+                </div>
+              ) : (
+                alerts.map((alt) => (
                   <div
                     key={alt.id}
                     onClick={() => {
+                      setAlerts((prev) =>
+                        prev.map((a) => (a.id === alt.id ? { ...a, isRead: true } : a))
+                      );
                       if (alt.targetScreen) {
                         handleSelectScreen(alt.targetScreen);
                         setShowAlertsModal(false);
                       }
                     }}
-                    className={`pt-space-md first:pt-0 space-y-1 ${
-                      alt.targetScreen ? 'cursor-pointer hover: opacity-90' : ''
+                    className={`pt-space-md first:pt-0 space-y-1 cursor-pointer transition-opacity ${
+                      alt.isRead ? 'opacity-60' : 'opacity-100 font-medium'
                     }`}
+                    title="Nhấn để xem và đánh dấu đã đọc"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-body-md text-on-surface">{alt.title}</span>
+                      <span className="font-bold text-body-md text-on-surface flex items-center gap-2">
+                        {!alt.isRead && (
+                          <span className="w-2 h-2 rounded-full bg-primary inline-block flex-shrink-0" />
+                        )}
+                        {alt.title}
+                      </span>
                       <span
                         className={`px-2 py-0.5 rounded text-label-xs font-bold ${
                           alt.level === 'CRITICAL'
                             ? 'bg-red-100 text-red-800'
                             : alt.level === 'WARNING'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-blue-100 text-blue-800'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-blue-100 text-blue-800'
                         }`}
                       >
                         {alt.level}
                       </span>
                     </div>
                     <p className="text-body-sm text-secondary">{alt.desc}</p>
-                    <div className="text-label-xs text-secondary font-data-mono pt-1">
-                      {alt.time}
-                    </div>
+                    <div className="text-label-xs text-secondary font-data-mono pt-1">{alt.time}</div>
                   </div>
                 ))
-              ) : (
-                <div className="py-6 text-center text-secondary text-body-sm">
-                  Hiện không có yêu cầu rút tiền hay khiếu nại hoàn tiền nào đang tồn đọng.
-                </div>
               )}
             </div>
 
-            <div className="p-space-md bg-surface-container-low border-t border-surface-container flex items-center justify-end">
+            <div className="p-space-md bg-surface-container-low border-t border-surface-container flex items-center justify-between">
               <button
+                type="button"
+                onClick={() => {
+                  setAlerts((prev) => prev.map((a) => ({ ...a, isRead: true })));
+                  showToast('Đã đánh dấu', 'Đã đọc toàn bộ thông báo khẩn', 'info');
+                  setShowAlertsModal(false);
+                }}
+                disabled={alerts.length === 0 || unreadAlertsCount === 0}
+                className="px-space-md py-1.5 rounded font-label-md text-label-md text-secondary hover:text-on-surface disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Đánh dấu đã đọc tất cả
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowAlertsModal(false)}
                 className="px-space-md py-1.5 rounded bg-primary-container text-on-primary-container font-label-md text-label-md font-bold"
               >
@@ -610,7 +546,7 @@ function MainDashboard() {
         </div>
       )}
 
-      {/* Vùng hiển thị danh sách thông báo nổi (Floating Toast Notifications) */}
+      {/* Floating Toast Notification Container */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full">
         {toasts.map((toast) => (
           <div
@@ -619,10 +555,10 @@ function MainDashboard() {
               toast.type === 'success'
                 ? 'bg-surface-container-lowest border-emerald-500/30 text-on-surface'
                 : toast.type === 'error'
-                ? 'bg-surface-container-lowest border-red-500/30 text-on-surface'
-                : toast.type === 'warning'
-                ? 'bg-surface-container-lowest border-amber-500/30 text-on-surface'
-                : 'bg-surface-container-lowest border-blue-500/30 text-on-surface'
+                  ? 'bg-surface-container-lowest border-red-500/30 text-on-surface'
+                  : toast.type === 'warning'
+                    ? 'bg-surface-container-lowest border-amber-500/30 text-on-surface'
+                    : 'bg-surface-container-lowest border-blue-500/30 text-on-surface'
             }`}
           >
             <span
@@ -630,25 +566,23 @@ function MainDashboard() {
                 toast.type === 'success'
                   ? 'text-emerald-600'
                   : toast.type === 'error'
-                  ? 'text-red-600'
-                  : toast.type === 'warning'
-                  ? 'text-amber-600'
-                  : 'text-blue-600'
+                    ? 'text-red-600'
+                    : toast.type === 'warning'
+                      ? 'text-amber-600'
+                      : 'text-blue-600'
               }`}
             >
               {toast.type === 'success'
                 ? 'check_circle'
                 : toast.type === 'error'
-                ? 'error'
-                : toast.type === 'warning'
-                ? 'warning'
-                : 'info'}
+                  ? 'error'
+                  : toast.type === 'warning'
+                    ? 'warning'
+                    : 'info'}
             </span>
             <div className="flex-1">
               <h5 className="font-label-lg text-label-lg font-bold leading-snug">{toast.title}</h5>
-              <p className="font-body-sm text-body-sm text-secondary leading-snug mt-0.5">
-                {toast.message}
-              </p>
+              <p className="font-body-sm text-body-sm text-secondary leading-snug mt-0.5">{toast.message}</p>
             </div>
           </div>
         ))}
@@ -656,7 +590,6 @@ function MainDashboard() {
     </div>
   );
 
-  // Nếu là Chủ Gara (GARAGE_OWNER), bọc qua cổng kiểm tra trạng thái phê duyệt Gara (GarageAccessGate)
   return user.role === 'GARAGE_OWNER' ? (
     <GarageAccessGate screen={currentScreen}>{dashboard}</GarageAccessGate>
   ) : (
@@ -664,9 +597,6 @@ function MainDashboard() {
   );
 }
 
-/**
- * Component gốc (Root Component) của ứng dụng React.
- */
 export default function App() {
   return (
     <BrowserRouter>

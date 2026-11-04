@@ -79,6 +79,9 @@ function extractDisputeFields(d: DisputeBackendResponse) {
   const staffResolutionNotes =
     d.staffResolutionNotes || d.staffFindingNote || 'Chưa có ghi chú xác minh từ Staff';
   const resolutionNotes = d.resolutionNotes || d.adminResolutionNote || '';
+  const rawUrls = d.evidenceImageUrls
+    ? d.evidenceImageUrls.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
   const normalizedStatus = normalizeDisputeStatus(d.status);
 
   return {
@@ -91,6 +94,7 @@ function extractDisputeFields(d: DisputeBackendResponse) {
     description,
     staffResolutionNotes,
     resolutionNotes,
+    evidenceUrls: rawUrls,
     normalizedStatus
   };
 }
@@ -122,6 +126,8 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  // State phục vụ modal phóng to ảnh bằng chứng hiện trường (Lightbox)
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // ==========================================================================
   // HÀM TẢI DỮ LIỆU KHIẾU NẠI & HOÀN TIỀN TỪ DATABASE
@@ -590,6 +596,26 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
                     </div>
                   </div>
 
+                  {/* Hình ảnh bằng chứng do khách hàng tải lên */}
+                  {f.evidenceUrls.length > 0 && (
+                    <div className="p-3.5 rounded-lg bg-surface-container space-y-2 text-xs">
+                      <span className="font-bold uppercase text-secondary block">
+                        Bằng chứng hiện trường / Hóa đơn ({f.evidenceUrls.length} ảnh):
+                      </span>
+                      <div className="grid grid-cols-3 gap-2">
+                        {f.evidenceUrls.map((url, idx) => (
+                          <img
+                            key={idx}
+                            src={url}
+                            alt={'Bằng chứng ' + (idx + 1)}
+                            onClick={() => setPreviewImage(url)}
+                            className="w-full h-20 object-cover rounded border border-surface-container-high cursor-pointer hover:opacity-80 transition-opacity"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Biểu mẫu ra quyết định của Admin */}
                   {!isResolved ? (
                     <form onSubmit={handleSubmitDecision} className="space-y-3 pt-1">
@@ -706,6 +732,39 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
           )}
         </div>
       </div>
+      {/* Modal phóng to ảnh bằng chứng (Lightbox) */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-surface-container-lowest rounded-xl overflow-hidden shadow-2xl p-2 border border-surface-container"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-2 border-b border-surface-container">
+              <span className="font-label-md font-bold text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[20px] text-primary">zoom_in</span>
+                Chi Tiết Bằng Chứng Ảnh Hiện Trường / Hóa Đơn
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="p-1 rounded hover:bg-surface-container text-secondary hover:text-on-surface transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <div className="p-2 flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img
+                src={previewImage}
+                alt="Preview Evidence"
+                className="max-h-[70vh] w-auto object-contain rounded"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
