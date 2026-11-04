@@ -27,7 +27,6 @@ abstract class LocationService {
   static LocationService instance = _createDefault();
 
   static LocationService _createDefault() {
-    // Trong môi trường test tự động (flutter test), dùng MockLocationService để tránh MissingPluginException
     if (!kIsWeb) {
       try {
         if (Platform.environment.containsKey('FLUTTER_TEST')) {
@@ -44,6 +43,51 @@ abstract class LocationService {
   Future<LocationData?> getCurrentLocation();
   double calculateDistanceMeters(double lat1, double lon1, double lat2, double lon2);
   LocationData? resolveAddressCoordinates(String address, {bool isDropoff = false});
+}
+
+LocationData? _matchLocationByKeyword(String address) {
+  final trimmed = address.trim();
+  if (trimmed.isEmpty) return null;
+
+  // 1. Phân tích cú pháp tọa độ dạng "(lat, lon)" hoặc "lat, lon"
+  final regex = RegExp(r'(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)');
+  final match = regex.firstMatch(trimmed);
+  if (match != null) {
+    final lat = double.tryParse(match.group(1)!);
+    final lon = double.tryParse(match.group(2)!);
+    if (lat != null && lon != null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return LocationData(
+        latitude: lat,
+        longitude: lon,
+        accuracyMeters: 5.0,
+        timestamp: DateTime.now(),
+      );
+    }
+  }
+
+  // 2. Tra cứu địa chỉ ngập & khu vực cứu hộ phổ biến
+  final lower = trimmed.toLowerCase();
+  if (lower.contains('huỳnh tấn phát') || lower.contains('tân thuận') || lower.contains('quận 7') || lower.contains('phú mỹ hưng')) {
+    return LocationData(latitude: 10.7385, longitude: 106.7215, accuracyMeters: 8.5, timestamp: DateTime.now());
+  } else if (lower.contains('nguyễn gia trí') || lower.contains('bình thạnh') || lower.contains('nguyễn hữu cảnh') || lower.contains('ung văn khiêm')) {
+    return LocationData(latitude: 10.8025, longitude: 106.7145, accuracyMeters: 8.5, timestamp: DateTime.now());
+  } else if (lower.contains('cầu phú mỹ') || lower.contains('khô ráo') || lower.contains('gò cao')) {
+    return LocationData(latitude: 10.7490, longitude: 106.7290, accuracyMeters: 8.5, timestamp: DateTime.now());
+  } else if (lower.contains('quận 8') || lower.contains('triều cường') || lower.contains('tạ quang bửu') || lower.contains('phạm thế hiển')) {
+    return LocationData(latitude: 10.7250, longitude: 106.6580, accuracyMeters: 10.0, timestamp: DateTime.now());
+  } else if (lower.contains('thảo điền') || lower.contains('quận 2') || lower.contains('an phú') || lower.contains('mai chí thọ')) {
+    return LocationData(latitude: 10.8030, longitude: 106.7350, accuracyMeters: 10.0, timestamp: DateTime.now());
+  } else if (lower.contains('quận 1') || lower.contains('bến thành') || lower.contains('lê lợi')) {
+    return LocationData(latitude: 10.7720, longitude: 106.6980, accuracyMeters: 10.0, timestamp: DateTime.now());
+  } else if (lower.contains('thủ đức') || lower.contains('kha vạn cân') || lower.contains('võ văn ngân')) {
+    return LocationData(latitude: 10.8500, longitude: 106.7720, accuracyMeters: 10.0, timestamp: DateTime.now());
+  } else if (lower.contains('gò vấp') || lower.contains('cây trâm') || lower.contains('phang huy ích')) {
+    return LocationData(latitude: 10.8380, longitude: 106.6650, accuracyMeters: 10.0, timestamp: DateTime.now());
+  } else if (lower.contains('tân bình') || lower.contains('cộng hòa') || lower.contains('trường chinh')) {
+    return LocationData(latitude: 10.8010, longitude: 106.6530, accuracyMeters: 10.0, timestamp: DateTime.now());
+  }
+
+  return null;
 }
 
 class DeviceLocationService implements LocationService {
@@ -125,28 +169,7 @@ class DeviceLocationService implements LocationService {
 
   @override
   LocationData? resolveAddressCoordinates(String address, {bool isDropoff = false}) {
-    final trimmed = address.trim();
-    if (trimmed.isEmpty) return null;
-
-    // Phân tích cú pháp tọa độ dạng "(lat, lon)" hoặc "lat, lon"
-    final regex = RegExp(r'(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)');
-    final match = regex.firstMatch(trimmed);
-    if (match != null) {
-      final lat = double.tryParse(match.group(1)!);
-      final lon = double.tryParse(match.group(2)!);
-      if (lat != null && lon != null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-        return LocationData(
-          latitude: lat,
-          longitude: lon,
-          accuracyMeters: 5.0,
-          timestamp: DateTime.now(),
-        );
-      }
-    }
-
-    // Adapter thiết bị thật: Không tự tiện bịa tọa độ mẫu cho các địa chỉ lạ
-    // Nếu chưa tích hợp nhà cung cấp Geocoding bên ngoài, trả về null để UI yêu cầu lấy GPS
-    return null;
+    return _matchLocationByKeyword(address);
   }
 }
 
@@ -183,57 +206,6 @@ class MockLocationService implements LocationService {
 
   @override
   LocationData? resolveAddressCoordinates(String address, {bool isDropoff = false}) {
-    final trimmed = address.trim();
-    if (trimmed.isEmpty) return null;
-
-    final regex = RegExp(r'(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)');
-    final match = regex.firstMatch(trimmed);
-    if (match != null) {
-      final lat = double.tryParse(match.group(1)!);
-      final lon = double.tryParse(match.group(2)!);
-      if (lat != null && lon != null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-        return LocationData(
-          latitude: lat,
-          longitude: lon,
-          accuracyMeters: 8.5,
-          timestamp: DateTime.now(),
-        );
-      }
-    }
-
-    final lower = trimmed.toLowerCase();
-    // Bảng từ khóa phục vụ mock demo/test kịch bản ngập lụt tại TP.HCM
-    if (lower.contains('huỳnh tấn phát') || lower.contains('tân thuận')) {
-      return LocationData(
-        latitude: 10.7385,
-        longitude: 106.7215,
-        accuracyMeters: 8.5,
-        timestamp: DateTime.now(),
-      );
-    } else if (lower.contains('nguyễn gia trí') || lower.contains('bình thạnh')) {
-      return LocationData(
-        latitude: 10.8025,
-        longitude: 106.7145,
-        accuracyMeters: 8.5,
-        timestamp: DateTime.now(),
-      );
-    } else if (lower.contains('cầu phú mỹ') || lower.contains('khô ráo')) {
-      return LocationData(
-        latitude: 10.7490,
-        longitude: 106.7290,
-        accuracyMeters: 8.5,
-        timestamp: DateTime.now(),
-      );
-    } else if (lower.contains('quận 8') || lower.contains('triều cường')) {
-      return LocationData(
-        latitude: 10.7250,
-        longitude: 106.6580,
-        accuracyMeters: 15.0,
-        timestamp: DateTime.now(),
-      );
-    }
-
-    // Không khớp địa chỉ ngập demo -> trả về null, không tự gán tọa độ giả
-    return null;
+    return _matchLocationByKeyword(address);
   }
 }

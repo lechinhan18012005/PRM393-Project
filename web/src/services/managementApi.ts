@@ -1,4 +1,5 @@
 import { API_BASE_URL, getAuthHeaders } from './apiConfig';
+import { BACKEND_CONNECTION_ERROR_MESSAGE } from './authApi';
 import { GarageBackendResponse } from './garageApi';
 import { RegisterPayload, User } from '../types/auth';
 
@@ -13,11 +14,17 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: getAuthHeaders(),
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: getAuthHeaders(),
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+  } catch {
+    throw new ApiError(BACKEND_CONNECTION_ERROR_MESSAGE, 0);
+  }
+
   let json: any = null;
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {
@@ -27,7 +34,11 @@ export async function request<T>(path: string, method = 'GET', body?: unknown): 
       json = null;
     }
   }
+
   if (!response.ok || (json && json.success === false)) {
+    if (response.status >= 502 && response.status <= 504) {
+      throw new ApiError(`Máy chủ backend tạm thời không phản hồi (Mã lỗi ${response.status}). Vui lòng thử lại sau.`, response.status);
+    }
     const message = json?.message || `Lỗi hệ thống (${response.status})`;
     throw new ApiError(message, response.status, json?.validationErrors);
   }

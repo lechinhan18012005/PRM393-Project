@@ -17,6 +17,7 @@ export interface FloodReportBackendResponse {
   moderatedByName?: string;
   moderatorNote?: string;
   nearbyStations?: string;
+  recededConfirmCount?: number;
   createdAt: string;
 }
 

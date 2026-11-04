@@ -83,8 +83,20 @@ public class ServiceRatingController {
     )
     @GetMapping
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN', 'GARAGE_OWNER')")
-    public ResponseEntity<ApiResponse<List<RatingResponse>>> getAllRatings() {
+    public ResponseEntity<ApiResponse<List<RatingResponse>>> getAllRatings(
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size
+    ) {
         List<RatingResponse> list = serviceRatingService.getAllRatings();
+        if (page != null && size != null && size > 0 && page >= 0) {
+            int fromIndex = page * size;
+            if (fromIndex >= list.size()) {
+                list = java.util.Collections.emptyList();
+            } else {
+                int toIndex = Math.min(fromIndex + size, list.size());
+                list = list.subList(fromIndex, toIndex);
+            }
+        }
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách đánh giá dịch vụ toàn hệ thống thành công", list));
     }
 }

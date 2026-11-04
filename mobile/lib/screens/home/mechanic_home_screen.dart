@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/logout_dialog.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/rescue_service.dart';
@@ -30,6 +31,15 @@ class MechanicHomeScreen extends StatefulWidget {
 
 class _MechanicHomeScreenState extends State<MechanicHomeScreen>
     with WidgetsBindingObserver {
+  MechanicProvider? get _mechanicProviderSafe {
+    try {
+      return context.read<MechanicProvider?>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+
   // Hot reload can retain a State created before these fields existed.
   // Read through defaults instead of relying on field initializers being rerun.
   int? _tab;
@@ -75,7 +85,10 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final provider = context.read<MechanicProvider>();
+    MechanicProvider? provider;
+    try {
+      provider = context.read<MechanicProvider?>();
+    } catch (_) {}
     if (_mechanicProvider != provider) {
       _mechanicProvider?.removeListener(_onProfileChanged);
       _mechanicProvider = provider;
@@ -102,8 +115,12 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   Future<void> _initializeHomeScreen() async {
     if (!mounted || !_isAppForeground) return;
     try {
+      MechanicProvider? mp;
+      try {
+        mp = context.read<MechanicProvider?>();
+      } catch (_) {}
       await Future.wait([
-        context.read<MechanicProvider>().fetchMyProfile(),
+        if (mp != null) mp.fetchMyProfile(),
         _loadActiveOrder(),
       ]);
     } catch (_) {}
@@ -140,8 +157,11 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
       _stopAllTimers();
       return;
     }
-    final provider = context.read<MechanicProvider>();
-    final profile = provider.myProfile;
+    MechanicProvider? provider;
+    try {
+      provider = context.read<MechanicProvider?>();
+    } catch (_) {}
+    final profile = provider?.myProfile;
     final isOnline = profile?.isOnline == true;
 
     // Chỉ poll offer và gửi GPS khi thợ AVAILABLE và chưa có cuốc active
@@ -207,7 +227,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
     _currentMechanicUsername = authUser.username;
 
     // Nếu đã có đơn active hoặc profile offline, không poll
-    final profile = context.read<MechanicProvider>().myProfile;
+    final profile = _mechanicProviderSafe?.myProfile;
     if (_hasActiveOrder || profile?.isOnline != true) {
       _stopAllTimers();
       return;
@@ -287,7 +307,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
 
   Future<void> _sendIdleGps() async {
     if (_isSendingGps || !mounted || !_isAppForeground) return;
-    final profile = context.read<MechanicProvider>().myProfile;
+    final profile = _mechanicProviderSafe?.myProfile;
     if (profile == null || !profile.isOnline || _hasActiveOrder) return;
 
     _isSendingGps = true;
@@ -307,7 +327,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
 
       setState(() => _gpsUnavailable = false);
       // Gửi GPS thật lên backend để làm mới last_gps_updated_at lúc thợ đang AVAILABLE
-      await context.read<MechanicProvider>().toggleStatus(
+      await _mechanicProviderSafe?.toggleStatus(
         status: 'AVAILABLE',
         latitude: loc.latitude,
         longitude: loc.longitude,
@@ -377,7 +397,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
     } finally {
       _isHandlingOfferNavigation = false;
       if (mounted && _isAppForeground) {
-        context.read<MechanicProvider>().fetchMyProfile();
+        _mechanicProviderSafe?.fetchMyProfile();
         await _loadActiveOrder();
         _syncTimers();
         _pollOffersOnce();
@@ -388,7 +408,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   Future<void> _open(Widget page) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
     if (mounted && _isAppForeground) {
-      context.read<MechanicProvider>().fetchMyProfile();
+      _mechanicProviderSafe?.fetchMyProfile();
       await _loadActiveOrder();
       _syncTimers();
       _pollOffersOnce();
@@ -406,7 +426,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'FLOOD RESCUE / ĐỘI CỨU HỘ',
+                    'HYDRORESCUE / ĐỘI CỨU HỘ',
                     style: TextStyle(
                       fontSize: 9,
                       letterSpacing: 1.4,
@@ -439,6 +459,12 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
                     Icons.refresh_rounded,
                     color: AppColors.secondary,
                   ),
+                ),
+                IconButton(
+                  key: const Key('mechanic-logout-btn'),
+                  icon: const Icon(Icons.logout, color: AppColors.error),
+                  tooltip: 'Đăng xuất',
+                  onPressed: () => showLogoutConfirmationDialog(context),
                 ),
               ],
             ),
@@ -507,9 +533,12 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   );
 
   Widget _overview() {
-    final provider = context.watch<MechanicProvider>();
-    final profile = provider.myProfile;
-    final name = context.watch<AuthProvider>().user?.fullName ?? 'Thợ cứu hộ';
+    MechanicProvider? provider;
+    try {
+      provider = context.watch<MechanicProvider?>();
+    } catch (_) {}
+    final profile = provider?.myProfile;
+    final name = context.watch<AuthProvider?>()?.user?.fullName ?? 'Thợ cứu hộ';
 
     return _scroll([
       MechanicPanel(
@@ -588,12 +617,12 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
           ),
         ],
       ),
-      if (provider.errorMessage != null)
+      if (provider?.errorMessage != null)
         Padding(
           padding: const EdgeInsets.only(top: 12),
           child: MechanicPanel(
             child: Text(
-              provider.errorMessage!,
+              provider!.errorMessage!,
               style: const TextStyle(color: AppColors.error, fontSize: 12),
             ),
           ),
@@ -653,7 +682,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
             ),
             Switch(
               value: profile?.isOnline ?? false,
-              onChanged: profile == null || profile.isBusy || provider.isLoading || (!profile.isOnline && !profile.isBranchOpen)
+              onChanged: profile == null || profile.isBusy || (provider?.isLoading == true) || (!profile.isOnline && !profile.isBranchOpen)
                   ? null
                   : (_) => _toggleAvailability(),
             ),
@@ -902,8 +931,11 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   );
 
   Widget _idleWaitingCard() {
-    final provider = context.watch<MechanicProvider>();
-    final profile = provider.myProfile;
+    MechanicProvider? provider;
+    try {
+      provider = context.watch<MechanicProvider?>();
+    } catch (_) {}
+    final profile = provider?.myProfile;
     final isOnline = profile?.isOnline ?? false;
 
     return MechanicPanel(

@@ -6,6 +6,99 @@ import '../../core/services/location_service.dart';
 import '../../providers/mechanic_provider.dart';
 import 'mechanic_ui.dart';
 
+Future<String?> showPauseReasonDialog(BuildContext context) async {
+  String selectedReason = 'Nghỉ ăn trưa';
+  final customController = TextEditingController();
+  final reasons = [
+    'Nghỉ ăn trưa',
+    'Đổ xăng / Bảo dưỡng xe máy',
+    'Sự cố cá nhân đột xuất',
+    'Hết ca làm việc',
+    'Khác (tự nhập)',
+  ];
+
+  return showDialog<String>(
+    context: context,
+    useRootNavigator: true,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.pause_circle_filled, color: AppColors.primaryOrange),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Tạm nghỉ nhận việc', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Vui lòng chọn lý do tạm nghỉ trong ca trực:',
+                    style: TextStyle(fontSize: 13, color: AppColors.secondary),
+                  ),
+                  const SizedBox(height: 10),
+                  ...reasons.map(
+                    (r) => RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(r, style: const TextStyle(fontSize: 14)),
+                      value: r,
+                      groupValue: selectedReason,
+                      activeColor: AppColors.primaryOrange,
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => selectedReason = val);
+                        }
+                      },
+                    ),
+                  ),
+                  if (selectedReason == 'Khác (tự nhập)')
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: TextField(
+                        controller: customController,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Nhập lý do cụ thể...',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(null),
+                child: const Text('Hủy', style: TextStyle(color: AppColors.secondary)),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: AppColors.primaryOrange),
+                onPressed: () {
+                  final reason = selectedReason == 'Khác (tự nhập)'
+                      ? (customController.text.trim().isEmpty ? 'Tạm nghỉ' : customController.text.trim())
+                      : selectedReason;
+                  Navigator.of(ctx).pop(reason);
+                },
+                child: const Text('Xác nhận nghỉ'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
 Future<void> changeMechanicAvailability(BuildContext context, {String? pauseReason}) async {
   final provider = context.read<MechanicProvider>();
   final profile = provider.myProfile;
@@ -236,9 +329,20 @@ class _MechanicShiftScreenState extends State<MechanicShiftScreen> {
                   ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
+                    key: const Key('mechanic-pause-shift-btn'),
                     onPressed: p == null || p.isBusy || provider.isLoading || (!p.isOnline && !p.isBranchOpen)
                         ? null
-                        : () => changeMechanicAvailability(context),
+                        : () async {
+                            final isOnline = provider.myProfile?.isOnline ?? p?.isOnline ?? false;
+                            if (isOnline) {
+                              final reason = await showPauseReasonDialog(context);
+                              if (reason != null && context.mounted) {
+                                await changeMechanicAvailability(context, pauseReason: reason);
+                              }
+                            } else {
+                              await changeMechanicAvailability(context);
+                            }
+                          },
                     icon: Icon(
                       p?.isOnline == true
                           ? Icons.pause_circle_outline

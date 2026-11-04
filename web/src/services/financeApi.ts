@@ -285,8 +285,9 @@ export const financeApi = {
   },
 
   // UC-19: Service Ratings & Reviews (CSAT / SLA Monitoring)
-  getAllRatings: async (): Promise<ServiceRatingBackendResponse[]> => {
-    const res = await fetch(`${API_BASE_URL}/ratings`, {
+  getAllRatings: async (page?: number, size?: number): Promise<ServiceRatingBackendResponse[]> => {
+    const qs = page !== undefined && size !== undefined ? `?page=${page}&size=${size}` : '';
+    const res = await fetch(`${API_BASE_URL}/ratings${qs}`, {
       headers: getAuthHeaders()
     });
     const json = await res.json();

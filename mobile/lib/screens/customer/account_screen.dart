@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/rescue_ui.dart';
 import '../auth/login_screen.dart';
+import 'customer_disputes_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -131,8 +132,8 @@ class _AccountScreenState extends State<AccountScreen> {
                       eyebrow: 'THÔNG TIN CÁ NHÂN',
                       title: user.fullName,
                       description: user.role == 'CUSTOMER'
-                          ? 'Khách hàng · Flood Rescue'
-                          : 'Nhân viên cứu hộ · Flood Rescue',
+                          ? 'Khách hàng · HydroRescue'
+                          : 'Nhân viên cứu hộ · HydroRescue',
                       trailing: const RescueLabel(
                         'Hồ sơ tài khoản',
                         color: Color(0xFFB9CEDB),
@@ -248,6 +249,37 @@ class _AccountScreenState extends State<AccountScreen> {
                         child: const Text('Hủy chỉnh sửa'),
                       ),
                     ],
+                  ],
+                  if (user?.role == 'CUSTOMER') ...[
+                    const SizedBox(height: 16),
+                    const RescueSection('Hỗ trợ & Tranh chấp'),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.shield_outlined,
+                          color: AppColors.primary,
+                        ),
+                        title: const Text(
+                          'Khiếu nại & Yêu cầu hoàn tiền',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        subtitle: const Text(
+                          'Theo dõi tiến trình thẩm định và kết quả bồi hoàn',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const CustomerDisputesScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 20),
                   OutlinedButton.icon(

@@ -1,7 +1,9 @@
 import { ViewGuide } from '../ViewGuide';
 import React, { useEffect, useState } from 'react';
 import { ScreenId } from '../../types';
-import { financeApi, ServiceRatingBackendResponse } from '../../services/financeApi';
+import { financeApi, ServiceRatingBackendResponse, DisputeBackendResponse } from '../../services/financeApi';
+import { garageApi } from '../../services/garageApi';
+import { rescueApi, RescueOrderWebResponse } from '../../services/rescueApi';
 
 interface SLAMonitoringViewProps {
   onSelectScreen: (screen: ScreenId) => void;
@@ -10,6 +12,7 @@ interface SLAMonitoringViewProps {
 
 interface GarageSLA {
   id: string;
+  rawId?: number;
   name: string;
   district: string;
   owner: string;
@@ -23,44 +26,28 @@ interface GarageSLA {
   status: 'EXCELLENT' | 'GOOD' | 'WARNING' | 'SUSPENDED';
 }
 
-const FALLBACK_RATINGS: ServiceRatingBackendResponse[] = [
-  {
-    id: 1,
-    rescueOrderId: 8821,
-    rescueCode: '#RC-8821',
-    customerName: 'Võ Minh Khôi',
-    garageName: 'Gara An Phú (Q.8)',
-    mechanicName: 'Lê Tuấn Hưng',
-    stars: 5,
-    tags: 'Đến nhanh < 15p,Nhiệt tình lội nước,Đúng giá niêm yết',
-    comment: 'Anh thợ hỗ trợ rất nhiệt tình giữa đêm mưa ngập, giá minh bạch đúng trên app!',
-    createdAt: '2026-04-16T20:15:00'
-  },
-  {
-    id: 2,
-    rescueOrderId: 8819,
-    rescueCode: '#RC-8819',
-    customerName: 'Trần Thu Hà',
-    garageName: 'Đội Cứu Hộ Bình Tân',
-    mechanicName: 'Nguyễn Văn Định',
-    stars: 5,
-    tags: 'Tay nghề cao,Cứu hộ an toàn',
-    comment: 'Xe chết máy ngập bugi được xử lý tại chỗ chỉ 20 phút là nổ máy lại.',
-    createdAt: '2026-04-16T19:40:00'
-  },
-  {
-    id: 3,
-    rescueOrderId: 8790,
-    rescueCode: '#RC-8790',
-    customerName: 'Phạm Văn Hùng',
-    garageName: 'Cơ Sở Sửa Xe Thành Lợi',
-    mechanicName: 'Trần Văn Lợi',
-    stars: 3,
-    tags: 'Cứu hộ an toàn',
-    comment: 'Thợ đến hơi trễ khoảng 25 phút do kẹt xe ngập nước.',
-    createdAt: '2026-04-16T18:10:00'
+function extractDistrict(address?: string): string {
+  if (!address) return 'Chưa cập nhật';
+  const match = address.match(/(Quận\s+\d+|Quận\s+[A-Za-zÀ-ỹ]+|Huyện\s+[A-Za-zÀ-ỹ]+|TP\.\s*[A-Za-zÀ-ỹ]+|Bình Tân|Bình Thạnh|Gò Vấp|Phú Nhuận|Tân Bình|Tân Phú|Thủ Đức)/i);
+  return match ? match[0] : address.split(',').pop()?.trim() || address;
+}
+
+function formatDateTime(dateStr?: string): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleString('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return dateStr;
   }
-];
+}
 
 export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
   onSelectScreen,
@@ -69,157 +56,291 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGarage, setSelectedGarage] = useState<GarageSLA | null>(null);
-  const [ratings, setRatings] = useState<ServiceRatingBackendResponse[]>(FALLBACK_RATINGS);
-  const [isLoadingRatings, setIsLoadingRatings] = useState<boolean>(false);
+  const [ratings, setRatings] = useState<ServiceRatingBackendResponse[]>([]);
+  const [garages, setGarages] = useState<GarageSLA[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
 
-  const loadRatings = async () => {
-    setIsLoadingRatings(true);
+  // Phân trang danh sách Gara
+  const [garagePage, setGaragePage] = useState<number>(1);
+  const [garagePageSize, setGaragePageSize] = useState<number>(5);
+
+  // Bộ lọc & phân trang nhật ký đánh giá (UC-19)
+  const [ratingStarFilter, setRatingStarFilter] = useState<string>('ALL');
+  const [ratingPage, setRatingPage] = useState<number>(1);
+  const ratingPageSize = 6;
+
+  // Tự động quay về trang 1 khi thay đổi bộ lọc tìm kiếm Gara
+  useEffect(() => {
+    setGaragePage(1);
+  }, [filterStatus, searchQuery, garagePageSize]);
+
+  // Tự động quay về trang 1 khi lọc sao đánh giá
+  useEffect(() => {
+    setRatingPage(1);
+  }, [ratingStarFilter]);
+
+  const loadAllData = async () => {
+    setIsLoading(true);
     try {
-      const data = await financeApi.getAllRatings();
-      if (data && data.length > 0) {
-        setRatings(data);
+      // 1. Đồng bộ đánh giá dịch vụ (UC-19)
+      const ratingsData = await financeApi.getAllRatings().catch(() => []);
+      setRatings(ratingsData || []);
+
+      // 2. Đồng bộ danh sách Gara từ backend (Staff/Admin)
+      const backendGarages = await garageApi.getAllGarages().catch(() => []);
+
+      // 3. Lấy dữ liệu đơn cứu hộ & khiếu nại để tính toán SLA thực tế
+      const [staffOrders, disputes] = await Promise.all([
+        rescueApi.getStaffOrders().catch(() => [] as RescueOrderWebResponse[]),
+        financeApi.getStaffDisputes().catch(() => [] as DisputeBackendResponse[])
+      ]);
+
+      if (backendGarages && backendGarages.length > 0) {
+        const activeRatings = ratingsData || [];
+
+        const mappedGarages: GarageSLA[] = backendGarages.map((bg) => {
+          // Thống kê ca cứu hộ thực tế
+          const matchedOrders = (staffOrders || []).filter((o) => o.garageId === bg.id);
+          const completedCount = matchedOrders.filter((o) => o.status === 'COMPLETED').length;
+          const cancelledCount = matchedOrders.filter((o) => o.status === 'CANCELLED').length;
+          const totalOrders = matchedOrders.length;
+
+          // Tỷ lệ nhận & hủy cuốc thực tế
+          let acceptanceRate = 100.0;
+          let cancellationRate = 0.0;
+          if (totalOrders > 0) {
+            cancellationRate = Math.round((cancelledCount / totalOrders) * 1000) / 10;
+            acceptanceRate = Math.round(((totalOrders - cancelledCount) / totalOrders) * 1000) / 10;
+          }
+
+          // Thời gian phản hồi TB (phút) thực tế
+          let avgResponseMin = 0.0;
+          const ordersWithTime = matchedOrders.filter((o) => o.requestedAt && (o.arrivedAt || o.acceptedAt));
+          if (ordersWithTime.length > 0) {
+            const validDiffs = ordersWithTime
+              .map((o) => {
+                const start = new Date(o.requestedAt).getTime();
+                const end = new Date(o.arrivedAt || o.acceptedAt!).getTime();
+                const diffMin = (end - start) / 60000;
+                return !isNaN(diffMin) && diffMin > 0 && diffMin < 180 ? diffMin : null;
+              })
+              .filter((d): d is number => d !== null);
+
+            if (validDiffs.length > 0) {
+              const totalMin = validDiffs.reduce((acc, d) => acc + d, 0);
+              avgResponseMin = Math.round((totalMin / validDiffs.length) * 10) / 10;
+            }
+          }
+
+          // CSAT tính từ đánh giá thực tế của gara
+          const matchedRatings = activeRatings.filter(
+            (r) => r.garageId === bg.id || (r.garageName && bg.garageName && r.garageName.toLowerCase().includes(bg.garageName.toLowerCase()))
+          );
+          let csat = 0.0;
+          if (matchedRatings.length > 0) {
+            csat = Number((matchedRatings.reduce((acc, r) => acc + r.stars, 0) / matchedRatings.length).toFixed(2));
+          }
+
+          // Vi phạm tính từ khiếu nại thực tế
+          const matchedDisputes = (disputes || []).filter((d) => d.garageId === bg.id);
+          const violations = matchedDisputes.length;
+
+          // Phân loại hạng SLA thực tế
+          let status: 'EXCELLENT' | 'GOOD' | 'WARNING' | 'SUSPENDED' = 'GOOD';
+          if (bg.status === 'SUSPENDED') {
+            status = 'SUSPENDED';
+          } else if (violations >= 3 || cancellationRate > 5 || (csat > 0 && csat < 4.0)) {
+            status = 'WARNING';
+          } else if (csat >= 4.8 && cancellationRate <= 2) {
+            status = 'EXCELLENT';
+          }
+
+          return {
+            id: `G-${bg.id}`,
+            rawId: bg.id,
+            name: bg.garageName || 'Chưa đặt tên',
+            district: extractDistrict(bg.address),
+            owner: bg.ownerName || 'Chưa cập nhật',
+            phone: bg.phone || 'Chưa cập nhật',
+            completedRescues: completedCount,
+            avgResponseMin,
+            acceptanceRate,
+            cancellationRate,
+            csat,
+            violations,
+            status
+          };
+        });
+
+        setGarages(mappedGarages);
+      } else {
+        setGarages([]);
       }
-    } catch {
-      // Fallback to sample ratings if offline
+    } catch (err: any) {
+      console.warn('Lỗi khi tải dữ liệu SLA từ máy chủ:', err);
+      setGarages([]);
     } finally {
-      setIsLoadingRatings(false);
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadRatings();
+    loadAllData();
   }, []);
 
-  const [garages, setGarages] = useState<GarageSLA[]>([
-    {
-      id: 'G-101',
-      name: 'Gara An Phú (Q.8)',
-      district: 'Quận 8',
-      owner: 'Lê Tuấn Hưng',
-      phone: '0903.118.291',
-      completedRescues: 412,
-      avgResponseMin: 1.4,
-      acceptanceRate: 98.8,
-      cancellationRate: 0.8,
-      csat: 4.95,
-      violations: 0,
-      status: 'EXCELLENT'
-    },
-    {
-      id: 'G-102',
-      name: 'Đội Cứu Hộ Bình Tân',
-      district: 'Bình Tân',
-      owner: 'Nguyễn Văn Định',
-      phone: '0918.420.771',
-      completedRescues: 340,
-      avgResponseMin: 1.8,
-      acceptanceRate: 97.2,
-      cancellationRate: 1.2,
-      csat: 4.88,
-      violations: 0,
-      status: 'EXCELLENT'
-    },
-    {
-      id: 'G-103',
-      name: 'Gara Tân Hưng (Q.7)',
-      district: 'Quận 7',
-      owner: 'Vũ Đức Hiệp',
-      phone: '0977.821.004',
-      completedRescues: 295,
-      avgResponseMin: 2.1,
-      acceptanceRate: 95.0,
-      cancellationRate: 2.5,
-      csat: 4.82,
-      violations: 1,
-      status: 'GOOD'
-    },
-    {
-      id: 'G-104',
-      name: 'Cơ Sở Sửa Xe Thành Lợi',
-      district: 'Quận 8',
-      owner: 'Trần Văn Lợi',
-      phone: '0934.120.948',
-      completedRescues: 180,
-      avgResponseMin: 3.6,
-      acceptanceRate: 88.5,
-      cancellationRate: 6.2,
-      csat: 4.31,
-      violations: 3,
-      status: 'WARNING'
-    },
-    {
-      id: 'G-105',
-      name: 'Trạm Xe Gò Vấp - Phạm Văn Đồng',
-      district: 'Gò Vấp',
-      owner: 'Bùi Quốc Cường',
-      phone: '0912.839.201',
-      completedRescues: 210,
-      avgResponseMin: 2.0,
-      acceptanceRate: 94.8,
-      cancellationRate: 1.9,
-      csat: 4.79,
-      violations: 0,
-      status: 'GOOD'
-    },
-    {
-      id: 'G-106',
-      name: 'Gara Cứu Hộ Xuyên Màn Đêm',
-      district: 'Bình Thạnh',
-      owner: 'Hoàng Văn Sỹ',
-      phone: '0981.332.901',
-      completedRescues: 92,
-      avgResponseMin: 4.8,
-      acceptanceRate: 79.0,
-      cancellationRate: 9.8,
-      csat: 3.92,
-      violations: 4,
-      status: 'SUSPENDED'
-    }
-  ]);
-
   const handleIssueWarning = (garage: GarageSLA) => {
-    onShowToast('Cảnh Cáo SLA', `Đã gửi văn bản cảnh cáo vi phạm chất lượng phục vụ tới ${garage.name}`);
+    onShowToast('Cảnh Cáo SLA', `Đã ghi nhận & gửi thông báo cảnh cáo vi phạm chất lượng phục vụ tới ${garage.name} (${garage.owner} - ${garage.phone})`);
   };
 
-  const handleToggleSuspend = (garage: GarageSLA) => {
+  const handleToggleSuspend = async (garage: GarageSLA) => {
     const isNowSuspended = garage.status !== 'SUSPENDED';
-    setGarages((prev) =>
-      prev.map((g) =>
-        g.id === garage.id
-          ? { ...g, status: isNowSuspended ? 'SUSPENDED' : 'WARNING' }
-          : g
-      )
-    );
-    if (selectedGarage?.id === garage.id) {
-      setSelectedGarage({
-        ...selectedGarage,
-        status: isNowSuspended ? 'SUSPENDED' : 'WARNING'
-      });
+    setIsActionLoading(true);
+    try {
+      if (garage.rawId) {
+        const nextStatus = isNowSuspended ? 'SUSPENDED' : 'APPROVED';
+        const note = isNowSuspended
+          ? 'Đình chỉ điều phối tạm thời do vi phạm tiêu chuẩn vận hành SLA'
+          : 'Khôi phục nhận đơn sau khi kiểm duyệt lại chỉ số chất lượng SLA';
+        await garageApi.moderateGarage(garage.rawId, nextStatus, note);
+      }
+
+      const newStatus = isNowSuspended ? 'SUSPENDED' : 'GOOD';
+      setGarages((prev) =>
+        prev.map((g) =>
+          g.id === garage.id
+            ? { ...g, status: newStatus }
+            : g
+        )
+      );
+      if (selectedGarage?.id === garage.id) {
+        setSelectedGarage({
+          ...selectedGarage,
+          status: newStatus
+        });
+      }
+      onShowToast(
+        isNowSuspended ? 'Đã Đình Chỉ Tạm Thời' : 'Đã Khôi Phục Hoạt Động',
+        `${garage.name} đã được ${isNowSuspended ? 'đình chỉ điều phối trên máy chủ' : 'mở lại luồng nhận đơn thành công'}`
+      );
+    } catch (err: any) {
+      onShowToast('Thao Tác Thất Bại', err?.message || 'Không thể cập nhật trạng thái gara trên máy chủ.');
+    } finally {
+      setIsActionLoading(false);
     }
-    onShowToast(
-      isNowSuspended ? 'Đã Đình Chỉ Tạm Thời' : 'Đã Khôi Phục Hoạt Động',
-      `${garage.name} đã được ${isNowSuspended ? 'đình chỉ điều phối 48 giờ' : 'mở lại luồng nhận đơn'}`
-    );
   };
 
+  const handleExportReport = () => {
+    if (garages.length === 0) {
+      onShowToast('Xuất Báo Cáo', 'Không có dữ liệu gara để xuất.');
+      return;
+    }
+    const headers = [
+      'Mã Gara',
+      'Tên Gara',
+      'Khu Vực',
+      'Người Đại Diện',
+      'Số Điện Thoại',
+      'Ca Đã Cứu Hộ',
+      'Phản Hồi SLA (phút)',
+      'Tỷ Lệ Nhận (%)',
+      'Tỷ Lệ Hủy (%)',
+      'Điểm CSAT',
+      'Vi Phạm (vụ)',
+      'Trạng Thái'
+    ];
+    const rows = garages.map((g) => [
+      `"${g.id}"`,
+      `"${g.name}"`,
+      `"${g.district}"`,
+      `"${g.owner}"`,
+      `"${g.phone}"`,
+      g.completedRescues,
+      g.avgResponseMin,
+      `${g.acceptanceRate}%`,
+      `${g.cancellationRate}%`,
+      g.csat,
+      g.violations,
+      `"${g.status}"`
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const nowStr = new Date().toISOString().slice(0, 10);
+    link.setAttribute('download', `Bao_Cao_SLA_Gara_${nowStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    onShowToast('Xuất Báo Cáo Thành Công', `Đã tải về bảng xếp hạng SLA của ${garages.length} gara (${nowStr}.csv)`);
+  };
+
+  // Lọc danh sách gara an toàn
   const filteredGarages = garages.filter((g) => {
     if (filterStatus !== 'ALL' && g.status !== filterStatus) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (
-        g.name.toLowerCase().includes(q) ||
-        g.owner.toLowerCase().includes(q) ||
-        g.district.toLowerCase().includes(q) ||
-        g.phone.includes(q)
+        (g.name && g.name.toLowerCase().includes(q)) ||
+        (g.owner && g.owner.toLowerCase().includes(q)) ||
+        (g.district && g.district.toLowerCase().includes(q)) ||
+        (g.phone && g.phone.includes(q))
       );
     }
     return true;
   });
 
+  // Tính toán phân trang cho Gara
+  const totalGarages = filteredGarages.length;
+  const totalGaragePages = Math.max(1, Math.ceil(totalGarages / garagePageSize));
+  const currentGaragePage = Math.min(garagePage, totalGaragePages);
+  const garageStartIdx = (currentGaragePage - 1) * garagePageSize;
+  const garageEndIdx = Math.min(garageStartIdx + garagePageSize, totalGarages);
+  const paginatedGarages = filteredGarages.slice(garageStartIdx, garageEndIdx);
+
+  // Lọc đánh giá theo sao
+  const filteredRatings = ratings.filter((r) => {
+    if (ratingStarFilter === '5') return r.stars === 5;
+    if (ratingStarFilter === '4') return r.stars === 4;
+    if (ratingStarFilter === '3') return r.stars === 3;
+    if (ratingStarFilter === 'LOW') return r.stars <= 2;
+    return true;
+  });
+
+  // Tính toán phân trang cho Đánh giá (UC-19)
+  const totalRatings = filteredRatings.length;
+  const totalRatingPages = Math.max(1, Math.ceil(totalRatings / ratingPageSize));
+  const currentRatingPage = Math.min(ratingPage, totalRatingPages);
+  const ratingStartIdx = (currentRatingPage - 1) * ratingPageSize;
+  const ratingEndIdx = Math.min(ratingStartIdx + ratingPageSize, totalRatings);
+  const paginatedRatings = filteredRatings.slice(ratingStartIdx, ratingEndIdx);
+
+  // Tính toán động các KPI Scorecard toàn hệ thống từ dữ liệu thực tế
+  const garagesWithResponse = garages.filter((g) => g.avgResponseMin > 0);
+  const avgResponseTime =
+    garagesWithResponse.length > 0
+      ? (garagesWithResponse.reduce((acc, g) => acc + g.avgResponseMin, 0) / garagesWithResponse.length).toFixed(1)
+      : '0.0';
+
+  const avgAcceptanceRate =
+    garages.length > 0
+      ? (garages.reduce((acc, g) => acc + g.acceptanceRate, 0) / garages.length).toFixed(1)
+      : '0.0';
+
+  const avgCancellationRate =
+    garages.length > 0
+      ? (garages.reduce((acc, g) => acc + g.cancellationRate, 0) / garages.length).toFixed(1)
+      : '0.0';
+
   const avgStars =
     ratings.length > 0
       ? (ratings.reduce((acc, r) => acc + r.stars, 0) / ratings.length).toFixed(2)
-      : '4.86';
+      : '0.00';
+
+  const totalViolations = garages.reduce((acc, g) => acc + g.violations, 0);
 
   return (
     <div className="space-y-space-xl">
@@ -234,11 +355,12 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
 
         <div className="flex items-center gap-space-sm">
           <button
-            onClick={loadRatings}
-            className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all"
+            onClick={loadAllData}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-space-md py-2 bg-surface-container text-on-surface rounded font-label-md font-semibold hover:bg-surface-container-high transition-all disabled:opacity-50"
           >
-            <span className="material-symbols-outlined text-[18px]">refresh</span>
-            <span>{isLoadingRatings ? 'Đang tải...' : 'Làm mới đánh giá'}</span>
+            <span className={`material-symbols-outlined text-[18px] ${isLoading ? 'animate-spin' : ''}`}>refresh</span>
+            <span>{isLoading ? 'Đang đồng bộ...' : 'Đồng bộ SLA & Đánh giá'}</span>
           </button>
           <button
             onClick={() => onSelectScreen('verification')}
@@ -248,7 +370,7 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
             <span>Hồ sơ mới</span>
           </button>
           <button
-            onClick={() => onShowToast('Xuất Báo Cáo SLA', 'Đã tải bảng xếp hạng SLA mạng lưới Gara')}
+            onClick={handleExportReport}
             className="flex items-center gap-1.5 px-space-md py-2 bg-primary text-on-primary rounded font-label-md font-semibold hover:bg-primary/90 transition-all shadow-xs"
           >
             <span className="material-symbols-outlined text-[18px]">download</span>
@@ -257,23 +379,23 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
         </div>
       </div>
 
-      {/* 5 KPI Scorecards */}
+      {/* 5 KPI Scorecards động tính từ dữ liệu backend */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-space-md">
         <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
           <span className="text-label-sm uppercase font-bold text-secondary">Thời Gian Phản Hồi TB</span>
-          <div className="text-2xl font-bold text-primary font-data-mono mt-1">1.8 phút</div>
+          <div className="text-2xl font-bold text-primary font-data-mono mt-1">{avgResponseTime} phút</div>
           <div className="text-label-xs text-emerald-700 font-semibold mt-1">Chuẩn SLA: &lt; 3.0 phút</div>
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
           <span className="text-label-sm uppercase font-bold text-secondary">Tỷ Lệ Nhận Cuốc</span>
-          <div className="text-2xl font-bold text-emerald-600 font-data-mono mt-1">96.4%</div>
+          <div className="text-2xl font-bold text-emerald-600 font-data-mono mt-1">{avgAcceptanceRate}%</div>
           <div className="text-label-xs text-secondary mt-1">Chỉ tiêu sàn: &gt; 92.0%</div>
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
           <span className="text-label-sm uppercase font-bold text-secondary">Tỷ Lệ Hủy Cuốc</span>
-          <div className="text-2xl font-bold text-amber-600 font-data-mono mt-1">1.6%</div>
+          <div className="text-2xl font-bold text-amber-600 font-data-mono mt-1">{avgCancellationRate}%</div>
           <div className="text-label-xs text-secondary mt-1">Ngưỡng cảnh báo: &gt; 5.0%</div>
         </div>
 
@@ -284,9 +406,9 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-lowest border border-surface-container shadow-xs">
-          <span className="text-label-sm uppercase font-bold text-secondary">Vi Phạm Giá / Thắt Cổ Chai</span>
-          <div className="text-2xl font-bold text-red-600 font-data-mono mt-1">3 vụ</div>
-          <div className="text-label-xs text-red-700 font-semibold mt-1">Đã khấu trừ &amp; khoá ví</div>
+          <span className="text-label-sm uppercase font-bold text-secondary">Vi Phạm Giá / Khiếu Nại</span>
+          <div className="text-2xl font-bold text-red-600 font-data-mono mt-1">{totalViolations} vụ</div>
+          <div className="text-label-xs text-red-700 font-semibold mt-1">Đã xử lý &amp; điều chỉnh</div>
         </div>
       </div>
 
@@ -342,175 +464,362 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container text-body-sm">
-              {filteredGarages.map((garage) => (
-                <tr
-                  key={garage.id}
-                  className={`hover:bg-surface-container-low/50 transition-colors cursor-pointer ${
-                    selectedGarage?.id === garage.id ? 'bg-primary-container/20' : ''
-                  }`}
-                  onClick={() => setSelectedGarage(garage)}
-                >
-                  <td className="py-3 px-4">
-                    <div className="font-bold text-on-surface">{garage.name}</div>
-                    <div className="text-label-xs text-secondary">{garage.district} • ID: {garage.id}</div>
-                  </td>
-
-                  <td className="py-3 px-4">
-                    <div className="font-medium text-on-surface">{garage.owner}</div>
-                    <div className="text-label-xs text-secondary font-data-mono">{garage.phone}</div>
-                  </td>
-
-                  <td className="py-3 px-4 text-center font-data-mono font-bold text-on-surface">
-                    {garage.completedRescues}
-                  </td>
-
-                  <td className="py-3 px-4 text-center">
-                    <span
-                      className={`font-data-mono font-bold ${
-                        garage.avgResponseMin <= 2.5 ? 'text-emerald-700' : 'text-amber-700'
-                      }`}
-                    >
-                      {garage.avgResponseMin} phút
-                    </span>
-                  </td>
-
-                  <td className="py-3 px-4 text-center font-data-mono">
-                    <span className="text-emerald-700 font-bold">{garage.acceptanceRate}%</span>
-                    <span className="text-secondary mx-1">/</span>
-                    <span className={garage.cancellationRate > 5 ? 'text-red-600 font-bold' : 'text-secondary'}>
-                      {garage.cancellationRate}%
-                    </span>
-                  </td>
-
-                  <td className="py-3 px-4 text-center">
-                    <span className="font-bold text-blue-700 flex items-center justify-center gap-1 font-data-mono">
-                      <span>{garage.csat}</span>
-                      <span className="text-amber-500 text-xs">⭐</span>
-                    </span>
-                  </td>
-
-                  <td className="py-3 px-4 text-center font-data-mono">
-                    {garage.violations > 0 ? (
-                      <span className="px-2 py-0.5 rounded text-label-xs font-bold bg-red-100 text-red-700">
-                        {garage.violations} vụ
+              {filteredGarages.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-secondary">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <span className="material-symbols-outlined text-[36px] text-secondary/60">
+                        {isLoading ? 'hourglass_top' : 'inbox'}
                       </span>
-                    ) : (
-                      <span className="text-emerald-700 font-semibold">0</span>
-                    )}
-                  </td>
-
-                  <td className="py-3 px-4 text-center">
-                    {garage.status === 'EXCELLENT' && (
-                      <span className="px-2 py-0.5 rounded-full text-label-xs font-bold bg-emerald-100 text-emerald-800">
-                        Top Đối Tác
+                      <span>
+                        {isLoading
+                          ? 'Đang đồng bộ dữ liệu đối tác Gara từ máy chủ...'
+                          : 'Chưa có dữ liệu đối tác Gara nào.'}
                       </span>
-                    )}
-                    {garage.status === 'GOOD' && (
-                      <span className="px-2 py-0.5 rounded-full text-label-xs font-bold bg-blue-100 text-blue-800">
-                        Đạt Chuẩn
-                      </span>
-                    )}
-                    {garage.status === 'WARNING' && (
-                      <span className="px-2 py-0.5 rounded-full text-label-xs font-bold bg-amber-100 text-amber-800">
-                        Cảnh Báo
-                      </span>
-                    )}
-                    {garage.status === 'SUSPENDED' && (
-                      <span className="px-2 py-0.5 rounded-full text-label-xs font-bold bg-red-100 text-red-800">
-                        Đã Đình Chỉ
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => handleIssueWarning(garage)}
-                        className="p-1 rounded text-secondary hover:text-amber-700 hover:bg-surface-container"
-                        title="Gửi cảnh cáo"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">warning</span>
-                      </button>
-                      <button
-                        onClick={() => handleToggleSuspend(garage)}
-                        className={`p-1 rounded ${
-                          garage.status === 'SUSPENDED'
-                            ? 'text-emerald-700 hover:bg-emerald-50'
-                            : 'text-red-600 hover:bg-red-50'
-                        }`}
-                        title={garage.status === 'SUSPENDED' ? 'Khôi phục nhận đơn' : 'Đình chỉ tạm thời'}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          {garage.status === 'SUSPENDED' ? 'lock_open' : 'block'}
-                        </span>
-                      </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedGarages.map((garage) => (
+                  <tr
+                    key={garage.id}
+                    className={`hover:bg-surface-container-low/50 transition-colors cursor-pointer ${
+                      selectedGarage?.id === garage.id ? 'bg-primary-container/20' : ''
+                    }`}
+                    onClick={() => setSelectedGarage(garage)}
+                  >
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-on-surface">{garage.name}</div>
+                      <div className="text-label-xs text-secondary">{garage.district} • ID: {garage.id}</div>
+                    </td>
+
+                    <td className="py-3 px-4">
+                      <div className="font-medium text-on-surface">{garage.owner}</div>
+                      <div className="text-label-xs text-secondary font-data-mono">{garage.phone}</div>
+                    </td>
+
+                    <td className="py-3 px-4 text-center font-data-mono font-bold text-on-surface">
+                      {garage.completedRescues}
+                    </td>
+
+                    <td className="py-3 px-4 text-center">
+                      <span
+                        className={`font-data-mono font-bold ${
+                          garage.avgResponseMin <= 2.5 && garage.avgResponseMin > 0 ? 'text-emerald-700' : 'text-amber-700'
+                        }`}
+                      >
+                        {garage.avgResponseMin > 0 ? `${garage.avgResponseMin} phút` : 'Chưa có'}
+                      </span>
+                    </td>
+
+                    <td className="py-3 px-4 text-center font-data-mono">
+                      <span className="text-emerald-700 font-bold">{garage.acceptanceRate}%</span>
+                      <span className="text-secondary mx-1">/</span>
+                      <span className={garage.cancellationRate > 5 ? 'text-red-600 font-bold' : 'text-secondary'}>
+                        {garage.cancellationRate}%
+                      </span>
+                    </td>
+
+                    <td className="py-3 px-4 text-center">
+                      <span className="font-bold text-blue-700 flex items-center justify-center gap-1 font-data-mono">
+                        <span>{garage.csat > 0 ? garage.csat : '—'}</span>
+                        {garage.csat > 0 && <span className="text-amber-500 text-xs">⭐</span>}
+                      </span>
+                    </td>
+
+                    <td className="py-3 px-4 text-center font-data-mono">
+                      {garage.violations > 0 ? (
+                        <span className="px-2 py-0.5 rounded text-label-xs font-bold bg-red-100 text-red-700">
+                          {garage.violations} vụ
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-semibold">0</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-4 text-center">
+                      {garage.status === 'EXCELLENT' && (
+                        <span className="px-2 py-0.5 rounded-full text-label-xs font-bold bg-emerald-100 text-emerald-800">
+                          Top Đối Tác
+                        </span>
+                      )}
+                      {garage.status === 'GOOD' && (
+                        <span className="px-2 py-0.5 rounded-full text-label-xs font-bold bg-blue-100 text-blue-800">
+                          Đạt Chuẩn
+                        </span>
+                      )}
+                      {garage.status === 'WARNING' && (
+                        <span className="px-2 py-0.5 rounded-full text-label-xs font-bold bg-amber-100 text-amber-800">
+                          Cảnh Báo
+                        </span>
+                      )}
+                      {garage.status === 'SUSPENDED' && (
+                        <span className="px-2 py-0.5 rounded-full text-label-xs font-bold bg-red-100 text-red-800">
+                          Đã Đình Chỉ
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => handleIssueWarning(garage)}
+                          className="p-1 rounded text-secondary hover:text-amber-700 hover:bg-surface-container"
+                          title="Gửi cảnh cáo"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">warning</span>
+                        </button>
+                        <button
+                          onClick={() => handleToggleSuspend(garage)}
+                          disabled={isActionLoading}
+                          className={`p-1 rounded ${
+                            garage.status === 'SUSPENDED'
+                              ? 'text-emerald-700 hover:bg-emerald-50'
+                              : 'text-red-600 hover:bg-red-50'
+                          } disabled:opacity-50`}
+                          title={garage.status === 'SUSPENDED' ? 'Khôi phục nhận đơn (API)' : 'Đình chỉ tạm thời (API)'}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">
+                            {garage.status === 'SUSPENDED' ? 'lock_open' : 'block'}
+                          </span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
+
+        {/* Thanh phân trang bảng Gara */}
+        {totalGarages > 0 && (
+          <div className="px-4 py-3 border-t border-surface-container bg-surface-container-low/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-body-sm text-secondary">
+            <div className="flex items-center gap-3">
+              <span>
+                Hiển thị <strong className="text-on-surface">{garageStartIdx + 1}</strong> - <strong className="text-on-surface">{garageEndIdx}</strong> trên tổng số <strong className="text-on-surface">{totalGarages}</strong> gara
+              </span>
+              <div className="flex items-center gap-1.5 pl-2 border-l border-surface-container">
+                <span className="text-label-xs">Mỗi trang:</span>
+                <select
+                  value={garagePageSize}
+                  onChange={(e) => setGaragePageSize(Number(e.target.value))}
+                  className="bg-surface-container-lowest border border-surface-container rounded px-2 py-0.5 text-label-xs text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value={5}>5 gara</option>
+                  <option value={10}>10 gara</option>
+                  <option value={20}>20 gara</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setGaragePage(1)}
+                disabled={currentGaragePage === 1}
+                className="p-1 rounded hover:bg-surface-container text-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Trang đầu"
+              >
+                <span className="material-symbols-outlined text-[18px]">first_page</span>
+              </button>
+              <button
+                onClick={() => setGaragePage((p) => Math.max(1, p - 1))}
+                disabled={currentGaragePage === 1}
+                className="p-1 rounded hover:bg-surface-container text-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Trang trước"
+              >
+                <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+              </button>
+
+              <div className="flex items-center gap-1 px-1">
+                {Array.from({ length: totalGaragePages }, (_, idx) => idx + 1)
+                  .filter((p) => p === 1 || p === totalGaragePages || Math.abs(p - currentGaragePage) <= 1)
+                  .map((p, i, arr) => (
+                    <React.Fragment key={p}>
+                      {i > 0 && p - arr[i - 1] > 1 && (
+                        <span className="px-1 text-secondary text-label-xs">...</span>
+                      )}
+                      <button
+                        onClick={() => setGaragePage(p)}
+                        className={`w-7 h-7 rounded text-label-xs font-semibold transition-all ${
+                          currentGaragePage === p
+                            ? 'bg-primary text-on-primary shadow-xs'
+                            : 'hover:bg-surface-container text-secondary'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    </React.Fragment>
+                  ))}
+              </div>
+
+              <button
+                onClick={() => setGaragePage((p) => Math.min(totalGaragePages, p + 1))}
+                disabled={currentGaragePage === totalGaragePages}
+                className="p-1 rounded hover:bg-surface-container text-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Trang sau"
+              >
+                <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+              </button>
+              <button
+                onClick={() => setGaragePage(totalGaragePages)}
+                disabled={currentGaragePage === totalGaragePages}
+                className="p-1 rounded hover:bg-surface-container text-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Trang cuối"
+              >
+                <span className="material-symbols-outlined text-[18px]">last_page</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* UC-19: Customer Ratings & Reviews Stream */}
-      <div className="bg-surface-container-lowest rounded-xl border border-surface-container p-space-lg shadow-xs">
-        <div className="flex items-center justify-between mb-space-md">
+      {/* UC-19: Customer Ratings & Reviews Stream với Bộ Lọc & Phân Trang */}
+      <div className="bg-surface-container-lowest rounded-xl border border-surface-container p-space-lg shadow-xs space-y-space-md">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-sm pb-space-sm border-b border-surface-container">
           <div>
             <span className="text-label-xs font-bold uppercase text-primary tracking-wider">Luồng 9 • UC-19</span>
             <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
               Nhật Ký Đánh Giá &amp; Nhận Xét Sau Dịch Vụ Mới Nhất
             </h3>
           </div>
-          <span className="text-label-sm font-semibold text-secondary">
-            Tổng số: {ratings.length} đánh giá
-          </span>
+
+          {/* Lọc đánh giá theo số sao */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-label-xs font-semibold text-secondary mr-1">Lọc sao:</span>
+            {[
+              { id: 'ALL', label: `Tất cả (${ratings.length})` },
+              { id: '5', label: `5 ⭐ (${ratings.filter((r) => r.stars === 5).length})` },
+              { id: '4', label: `4 ⭐ (${ratings.filter((r) => r.stars === 4).length})` },
+              { id: '3', label: `3 ⭐ (${ratings.filter((r) => r.stars === 3).length})` },
+              { id: 'LOW', label: `≤ 2 ⭐ (${ratings.filter((r) => r.stars <= 2).length})` }
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setRatingStarFilter(f.id)}
+                className={`px-2.5 py-1 rounded text-label-xs font-semibold transition-all ${
+                  ratingStarFilter === f.id
+                    ? 'bg-primary text-on-primary shadow-xs'
+                    : 'bg-surface-container-low text-secondary hover:text-on-surface'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
 
+        {/* Lưới các thẻ đánh giá */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
-          {ratings.slice(0, 6).map((r) => (
-            <div
-              key={r.id}
-              className="p-space-md rounded-xl bg-surface-container-low border border-surface-container flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="font-data-mono text-label-xs font-bold text-primary">
-                    {r.rescueCode || `#RC-${r.rescueOrderId}`}
-                  </span>
-                  <span className="font-data-mono font-bold text-amber-600 text-body-sm">
-                    {'⭐'.repeat(Math.max(1, Math.min(5, r.stars)))} ({r.stars}/5)
-                  </span>
-                </div>
-                <div className="font-bold text-on-surface mt-1">{r.customerName}</div>
-                <div className="text-label-xs text-secondary">
-                  Gara: <span className="font-semibold text-on-surface">{r.garageName || 'Đối tác cứu hộ'}</span>
-                  {r.mechanicName ? ` • Thợ: ${r.mechanicName}` : ''}
-                </div>
-                {r.tags && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {r.tags.split(',').map((t, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary"
-                      >
-                        {t.trim()}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {r.comment && (
-                  <p className="text-body-sm text-on-surface mt-2 italic">
-                    &ldquo;{r.comment}&rdquo;
-                  </p>
-                )}
-              </div>
-              <div className="text-label-xs text-secondary mt-3 pt-2 border-t border-surface-container font-data-mono">
-                {r.createdAt}
+          {filteredRatings.length === 0 ? (
+            <div className="py-12 text-center text-secondary col-span-1 md:col-span-3 bg-surface-container-low rounded-xl border border-surface-container">
+              <div className="flex flex-col items-center justify-center gap-2">
+                <span className="material-symbols-outlined text-[36px] text-secondary/60">
+                  {isLoading ? 'hourglass_top' : 'reviews'}
+                </span>
+                <span>
+                  {isLoading
+                    ? 'Đang tải nhật ký đánh giá dịch vụ...'
+                    : 'Không tìm thấy đánh giá nào phù hợp với bộ lọc.'}
+                </span>
               </div>
             </div>
-          ))}
+          ) : (
+            paginatedRatings.map((r) => (
+              <div
+                key={r.id}
+                className="p-space-md rounded-xl bg-surface-container-low border border-surface-container flex flex-col justify-between hover:border-primary/40 transition-colors"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-data-mono text-label-xs font-bold text-primary">
+                      {r.rescueCode || `#RC-${r.rescueOrderId}`}
+                    </span>
+                    <span className="font-data-mono font-bold text-amber-600 text-body-sm">
+                      {'⭐'.repeat(Math.max(1, Math.min(5, r.stars)))} ({r.stars}/5)
+                    </span>
+                  </div>
+                  <div className="font-bold text-on-surface mt-1">{r.customerName}</div>
+                  <div className="text-label-xs text-secondary">
+                    Gara: <span className="font-semibold text-on-surface">{r.garageName || 'Đối tác cứu hộ'}</span>
+                    {r.mechanicName ? ` • Thợ: ${r.mechanicName}` : ''}
+                  </div>
+                  {r.tags && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {r.tags.split(',').map((t, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary"
+                        >
+                          {t.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {r.comment && (
+                    <p className="text-body-sm text-on-surface mt-2 italic">
+                      &ldquo;{r.comment}&rdquo;
+                    </p>
+                  )}
+                </div>
+                <div className="text-label-xs text-secondary mt-3 pt-2 border-t border-surface-container font-data-mono">
+                  {formatDateTime(r.createdAt)}
+                </div>
+              </div>
+            ))
+          )}
         </div>
+
+        {/* Thanh phân trang Nhật ký đánh giá */}
+        {totalRatings > ratingPageSize && (
+          <div className="pt-space-sm border-t border-surface-container flex flex-col sm:flex-row items-center justify-between gap-3 text-body-sm text-secondary">
+            <span>
+              Hiển thị <strong className="text-on-surface">{ratingStartIdx + 1}</strong> - <strong className="text-on-surface">{ratingEndIdx}</strong> trên tổng số <strong className="text-on-surface">{totalRatings}</strong> đánh giá
+            </span>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setRatingPage((p) => Math.max(1, p - 1))}
+                disabled={currentRatingPage === 1}
+                className="flex items-center gap-1 px-3 py-1 rounded border border-surface-container hover:bg-surface-container text-label-xs font-semibold text-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+                <span>Trang trước</span>
+              </button>
+
+              <div className="flex items-center gap-1 px-1">
+                {Array.from({ length: totalRatingPages }, (_, idx) => idx + 1)
+                  .filter((p) => p === 1 || p === totalRatingPages || Math.abs(p - currentRatingPage) <= 1)
+                  .map((p, i, arr) => (
+                    <React.Fragment key={p}>
+                      {i > 0 && p - arr[i - 1] > 1 && (
+                        <span className="px-1 text-secondary text-label-xs">...</span>
+                      )}
+                      <button
+                        onClick={() => setRatingPage(p)}
+                        className={`w-7 h-7 rounded text-label-xs font-semibold transition-all ${
+                          currentRatingPage === p
+                            ? 'bg-primary text-on-primary shadow-xs'
+                            : 'hover:bg-surface-container text-secondary'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    </React.Fragment>
+                  ))}
+              </div>
+
+              <button
+                onClick={() => setRatingPage((p) => Math.min(totalRatingPages, p + 1))}
+                disabled={currentRatingPage === totalRatingPages}
+                className="flex items-center gap-1 px-3 py-1 rounded border border-surface-container hover:bg-surface-container text-label-xs font-semibold text-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span>Trang sau</span>
+                <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Drawer / Modal when selecting garage */}
@@ -538,13 +847,17 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
 
             <div className="p-3 bg-surface-container-low rounded">
               <span className="text-secondary text-label-xs">Chỉ số tiếp cận</span>
-              <div className="font-bold text-on-surface mt-0.5">{selectedGarage.avgResponseMin} phút / cuốc</div>
+              <div className="font-bold text-on-surface mt-0.5">
+                {selectedGarage.avgResponseMin > 0 ? `${selectedGarage.avgResponseMin} phút / cuốc` : 'Chưa có dữ liệu'}
+              </div>
               <div className="text-emerald-700 text-label-xs font-semibold">Tỷ lệ nhận: {selectedGarage.acceptanceRate}%</div>
             </div>
 
             <div className="p-3 bg-surface-container-low rounded">
               <span className="text-secondary text-label-xs">Mức độ hài lòng CSAT</span>
-              <div className="font-bold text-blue-700 mt-0.5">{selectedGarage.csat} / 5.0 ⭐</div>
+              <div className="font-bold text-blue-700 mt-0.5">
+                {selectedGarage.csat > 0 ? `${selectedGarage.csat} / 5.0 ⭐` : 'Chưa có đánh giá'}
+              </div>
               <div className="text-secondary text-label-xs">{selectedGarage.completedRescues} ca cứu hộ</div>
             </div>
 
@@ -559,6 +872,33 @@ export const SLAMonitoringView: React.FC<SLAMonitoringViewProps> = ({
               </div>
               <div className="text-label-xs text-secondary">{selectedGarage.violations} biên bản vi phạm</div>
             </div>
+          </div>
+
+          {/* Quick Action Buttons inside Drawer */}
+          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-surface-container justify-end">
+            <button
+              onClick={() => handleIssueWarning(selectedGarage)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 text-label-xs font-semibold transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">warning</span>
+              <span>Gửi Cảnh Cáo SLA</span>
+            </button>
+            <button
+              onClick={() => handleToggleSuspend(selectedGarage)}
+              disabled={isActionLoading}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-label-xs font-semibold text-white transition-colors ${
+                selectedGarage.status === 'SUSPENDED'
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : 'bg-red-600 hover:bg-red-700'
+              } disabled:opacity-50`}
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                {selectedGarage.status === 'SUSPENDED' ? 'lock_open' : 'block'}
+              </span>
+              <span>
+                {selectedGarage.status === 'SUSPENDED' ? 'Khôi Phục Hoạt Động (API)' : 'Đình Chỉ Tạm Thời (API)'}
+              </span>
+            </button>
           </div>
         </div>
       )}

@@ -10,6 +10,9 @@ import java.util.List;
 @Repository
 public interface FloodReportRepository extends JpaRepository<FloodReportPoint, Long> {
     List<FloodReportPoint> findByModerationStatusOrderByCreatedAtDesc(FloodStatus status);
+    List<FloodReportPoint> findByModerationStatusAndCreatedAtAfterOrderByCreatedAtDesc(FloodStatus status, java.time.LocalDateTime since);
+    List<FloodReportPoint> findByModerationStatusAndUpdatedAtBefore(FloodStatus status, java.time.LocalDateTime threshold);
+    List<FloodReportPoint> findByCreatedAtAfter(java.time.LocalDateTime since);
     List<FloodReportPoint> findAllByOrderByCreatedAtDesc();
     List<FloodReportPoint> findByReportedByIdOrderByCreatedAtDesc(Long userId);
 }

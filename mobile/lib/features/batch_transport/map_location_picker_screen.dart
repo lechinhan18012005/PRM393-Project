@@ -98,7 +98,9 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
           ),
           children: [
             TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              urlTemplate:
+                  'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+              subdomains: const ['0', '1', '2', '3'],
               userAgentPackageName: 'com.prm393.floodrescue.mobile',
             ),
             if (_selected != null)
@@ -117,11 +119,6 @@ class _MapLocationPickerScreenState extends State<MapLocationPickerScreen> {
                   ),
                 ],
               ),
-            const RichAttributionWidget(
-              attributions: [
-                TextSourceAttribution('OpenStreetMap contributors'),
-              ],
-            ),
           ],
         ),
         Positioned(

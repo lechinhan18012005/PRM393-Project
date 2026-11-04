@@ -23,6 +23,10 @@ export interface RescueOrderWebResponse {
   mechanicAvatar?: string;
   mechanicRating?: number;
   mechanicSpeciality?: string;
+  mechanicCurrentLatitude?: number | null;
+  mechanicCurrentLongitude?: number | null;
+  serviceItemId?: number;
+  serviceName?: string;
   vehicleId: number;
   vehicleModel: string;
   vehiclePlate: string;
@@ -56,4 +60,10 @@ export const rescueApi = {
   getStaffOrders: () => request<RescueOrderWebResponse[]>('/staff/rescue/orders'),
   getGarageOrders: () => request<RescueOrderWebResponse[]>('/garage/rescue/orders'),
   getOrderById: (orderId: number) => request<RescueOrderWebResponse>(`/rescue/orders/${orderId}`),
+  assignMechanic: (orderId: number, mechanicStaffId: number) =>
+    request<RescueOrderWebResponse>(`/staff/rescue/orders/${orderId}/assign`, 'POST', { mechanicStaffId }),
+  retryDispatch: (orderId: number) =>
+    request<RescueOrderWebResponse>(`/staff/rescue/orders/${orderId}/retry-dispatch`, 'POST'),
+  cancelStaffOrder: (orderId: number, reason: string) =>
+    request<RescueOrderWebResponse>(`/staff/rescue/orders/${orderId}/cancel`, 'POST', { reason }),
 };
