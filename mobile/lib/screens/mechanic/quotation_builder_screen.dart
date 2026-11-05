@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -8,21 +9,28 @@ import 'mechanic_ui.dart';
 import 'repair_execution_screen.dart';
 
 class QuotationBuilderScreen extends StatefulWidget {
-  const QuotationBuilderScreen({super.key, this.orderId, this.orderType});
+  const QuotationBuilderScreen({
+    super.key,
+    this.orderId,
+    this.orderType,
+    this.quotationApi,
+  });
 
   final int? orderId;
   final String? orderType;
+  final QuotationApi? quotationApi;
 
   @override
   State<QuotationBuilderScreen> createState() => _QuotationBuilderScreenState();
 }
 
 class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
-  final _api = QuotationApi();
+  late final QuotationApi _api;
   final _diagnosis = TextEditingController();
   final _discount = TextEditingController(text: '0');
   final Set<int> _selected = {};
   List<QuotationCatalogItem> _catalog = const [];
+  QuotationModel? _revisionSource;
   bool _loading = true;
   bool _submitting = false;
   String? _error;
@@ -41,6 +49,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
   @override
   void initState() {
     super.initState();
+    _api = widget.quotationApi ?? QuotationApi();
     if (widget.orderId != null) _load();
   }
 
@@ -50,10 +59,31 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
       _error = null;
     });
     try {
-      final catalog = await _api.catalog(widget.orderId!);
+      final results = await Future.wait([
+        _api.catalog(widget.orderId!),
+        _api.history(widget.orderId!),
+      ]);
+      final catalog = results[0] as List<QuotationCatalogItem>;
+      final history = results[1] as List<QuotationModel>;
+      final latestItems = history.where((item) => item.latest).toList();
+      final latest = latestItems.isEmpty ? null : latestItems.first;
+      final revision = latest?.status == 'REVISION_REQUESTED' ? latest : null;
       if (!mounted) return;
       setState(() {
         _catalog = catalog;
+        _revisionSource = revision;
+        if (revision != null) {
+          _diagnosis.text = revision.diagnosis;
+          _discount.text = formatVndInput(revision.discount);
+          final availableIds = catalog.map((item) => item.serviceId).toSet();
+          _selected
+            ..clear()
+            ..addAll(
+              revision.items
+                  .map((item) => item.serviceId)
+                  .where(availableIds.contains),
+            );
+        }
         _loading = false;
       });
     } catch (e) {
@@ -101,7 +131,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
       final quotation = await _api.create(
         orderId: widget.orderId!,
         diagnosis: _diagnosis.text.trim(),
-        discount: double.tryParse(_discount.text) ?? 0,
+        discount: parseVnd(_discount.text),
         serviceIds: _selected.toList(),
       );
       if (!mounted) return;
@@ -151,6 +181,19 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                   value: 'Đơn #${widget.orderId}',
                 ),
               ),
+              if (_revisionSource != null) ...[
+                const SizedBox(height: 12),
+                MechanicPanel(
+                  child: MechanicInfo(
+                    icon: Icons.edit_note_outlined,
+                    title:
+                        'Khách yêu cầu chỉnh sửa báo giá V${_revisionSource!.version}',
+                    value:
+                        _revisionSource!.customerNote ??
+                        'Khách hàng chưa nhập nội dung chi tiết.',
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               TextField(
                 controller: _diagnosis,
@@ -215,8 +258,13 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
               TextField(
                 controller: _discount,
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  const VietnameseCurrencyInputFormatter(),
+                ],
                 decoration: const InputDecoration(
-                  labelText: 'Giảm giá (đ)',
+                  labelText: 'Giảm giá',
+                  suffixText: '₫',
                   border: OutlineInputBorder(),
                 ),
                 onChanged: (_) => setState(() {}),
@@ -263,7 +311,11 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Gửi báo giá'),
+                    : Text(
+                        _revisionSource == null
+                            ? 'Gửi báo giá'
+                            : 'Gửi lại báo giá V${_revisionSource!.version + 1}',
+                      ),
               ),
             ],
           ),
