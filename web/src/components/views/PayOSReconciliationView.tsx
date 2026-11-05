@@ -93,7 +93,6 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
 
   // Trạng thái đang tải dữ liệu hoặc đang thực thi đối soát tự động
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isReconciling, setIsReconciling] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   // Các state phục vụ Tìm kiếm (Search) và Bộ lọc (Filter)
@@ -264,38 +263,6 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
   }, [filteredTransactions, transactions, selectedTxId]);
 
   // ==========================================================================
-  // XỬ LÝ ĐỐI SOÁT TỰ ĐỘNG VỚI BACKEND
-  // ==========================================================================
-
-  /**
-   * Gọi API `financeApi.reconcileAllTransactions()` để thực hiện đối soát tự động các giao dịch PayOS.
-   */
-  const handleReconcileNow = async () => {
-    setIsReconciling(true);
-    try {
-      const updated = await financeApi.reconcileAllTransactions();
-      if (Array.isArray(updated)) {
-        setTransactions(updated);
-      } else {
-        await loadTransactions();
-      }
-      onShowToast(
-        'Đối soát thành công',
-        'Đã đồng bộ và xác thực đối soát các giao dịch thanh toán từ Database.',
-        'success'
-      );
-    } catch (err) {
-      onShowToast(
-        'Lỗi đối soát',
-        (err as Error).message || 'Không thể thực hiện đối soát tự động.',
-        'error'
-      );
-    } finally {
-      setIsReconciling(false);
-    }
-  };
-
-  // ==========================================================================
   // HIỂN THỊ GIAO DIỆN NGƯỜI DÙNG (JSX RENDERING)
   // ==========================================================================
 
@@ -308,27 +275,8 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
             Đối Soát Giao Dịch Thanh Toán PayOS &amp; VietQR
           </h1>
           <p className="text-sm text-secondary mt-1">
-            Giám sát dòng tiền thu hộ từ khách hàng, khấu trừ phí chiết khấu nền tảng và cộng tiền thực nhận vào ví Gara đối tác (100% dữ liệu từ Database).
+            Giám sát dòng tiền thu hộ từ khách hàng, khấu trừ phí chiết khấu nền tảng và ghi nhận số dư ví cho gara đối tác.
           </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 self-start lg:self-auto">
-          <button
-            type="button"
-            disabled={isLoading}
-            onClick={() => void loadTransactions()}
-            className="px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-sm font-semibold text-on-surface transition-colors cursor-pointer"
-          >
-            {isLoading ? 'Đang tải...' : 'Làm mới dữ liệu'}
-          </button>
-          <button
-            type="button"
-            disabled={isReconciling || isLoading}
-            onClick={() => void handleReconcileNow()}
-            className="px-4 py-2 rounded-lg bg-primary text-on-primary font-bold text-sm hover:bg-primary-container transition-colors cursor-pointer disabled:opacity-60"
-          >
-            {isReconciling ? 'Đang đối soát...' : 'Đối soát tự động'}
-          </button>
         </div>
       </div>
 
@@ -340,10 +288,10 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
 
       {/* 4 Thẻ chỉ số KPI tính toán trực tiếp từ danh sách giao dịch trong Database */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {/* KPI 1: Tổng doanh thu giao dịch thành công (PAID) */}
+        {/* KPI 1: Tổng doanh thu giao dịch thành công */}
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            1. Tổng doanh thu đơn thành công (PAID)
+            1. Tổng doanh thu đơn thành công
           </div>
           <div className="text-2xl font-bold font-mono text-on-surface mt-1.5">
             {kpiStats.paidRevenue.toLocaleString('vi-VN')} ₫
@@ -415,10 +363,10 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
             className="w-full h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface font-semibold"
           >
             <option value="ALL">Trạng thái: Tất cả ({transactions.length})</option>
-            <option value="PAID">Thành công (PAID)</option>
-            <option value="PENDING">Đang chờ (PENDING)</option>
-            <option value="REFUNDED">Đã hoàn tiền (REFUNDED)</option>
-            <option value="FAILED">Thất bại (FAILED)</option>
+            <option value="PAID">Thành công</option>
+            <option value="PENDING">Đang chờ</option>
+            <option value="REFUNDED">Đã hoàn tiền</option>
+            <option value="FAILED">Thất bại</option>
           </select>
         </div>
 
@@ -433,7 +381,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
             <option value="ALL">Phương thức: Tất cả</option>
             <option value="PAYOS">PayOS</option>
             <option value="VIETQR">VietQR</option>
-            <option value="CASH">Tiền mặt (CASH)</option>
+            <option value="CASH">Tiền mặt</option>
           </select>
         </div>
 
@@ -539,7 +487,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
                   <tr>
                     <td colSpan={8} className="py-8 text-center text-sm text-secondary">
                       {isLoading
-                        ? 'Đang tải danh sách giao dịch từ Database...'
+                        ? 'Đang tải danh sách giao dịch...'
                         : 'Không có giao dịch nào phù hợp với điều kiện tìm kiếm.'}
                     </td>
                   </tr>
@@ -602,7 +550,7 @@ export const PayOSReconciliationView: React.FC<PayOSReconciliationViewProps> = (
                   {/* Thông tin định danh giao dịch */}
                   <div className="p-3.5 rounded-lg bg-surface-container-low space-y-2 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-secondary">Mã giao dịch (DB ID):</span>
+                      <span className="text-secondary">Mã giao dịch:</span>
                       <strong className="font-mono text-on-surface">#TX-{selectedTx.id}</strong>
                     </div>
                     <div className="flex justify-between">

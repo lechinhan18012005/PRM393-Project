@@ -26,6 +26,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.time.YearMonth;
+import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -87,7 +89,48 @@ class FinanceAdminServiceTest {
     }
 
     @Test
-    @DisplayName("UC-24: Khá»Ÿi táº¡o cáº¥u hÃ¬nh hoa há»“ng máº·c Ä‘á»‹nh khi há»‡ thá»‘ng chÆ°a cÃ³ báº£n ghi nÃ o")
+    void garageRevenueOnlyIncludesSuccessfulPaymentsInCurrentMonthForOwnersGarage() {
+        YearMonth month = YearMonth.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        when(garageRepository.findByOwnerId(garageOwner.getId())).thenReturn(Optional.of(approvedGarage));
+        PaymentTransaction repair = PaymentTransaction.builder().rescueOrderId(1L)
+                .status(PaymentStatus.SUCCESS).paidAt(month.atDay(1).atStartOfDay())
+                .orderType("ONSITE_REPAIR").netGarageAmount(new BigDecimal("90000"))
+                .platformFee(new BigDecimal("10000")).build();
+        PaymentTransaction towing = PaymentTransaction.builder().rescueOrderId(2L)
+                .status(PaymentStatus.SUCCESS).paidAt(month.atEndOfMonth().atTime(23, 59))
+                .orderType("TOWING").netGarageAmount(new BigDecimal("180000"))
+                .platformFee(new BigDecimal("20000")).build();
+        PaymentTransaction refunded = PaymentTransaction.builder().rescueOrderId(3L)
+                .status(PaymentStatus.REFUNDED).paidAt(month.atDay(1).atStartOfDay()).build();
+        PaymentTransaction previousMonth = PaymentTransaction.builder().rescueOrderId(4L)
+                .status(PaymentStatus.SUCCESS).paidAt(month.minusMonths(1).atEndOfMonth().atTime(23, 59)).build();
+        PaymentTransaction unpaid = PaymentTransaction.builder().status(PaymentStatus.PENDING).build();
+        when(paymentTransactionRepository.findByGarageIdOrderByCreatedAtDesc(100L))
+                .thenReturn(List.of(repair, towing, refunded, previousMonth, unpaid));
+
+        GarageRevenueDto revenue = financeAdminService.getGarageWalletSummary(garageOwner).getRevenue();
+
+        assertEquals(month.toString(), revenue.getMonth());
+        assertEquals(2, revenue.getPaidOrderCount());
+        assertEquals(new BigDecimal("270000"), revenue.getNetRevenue());
+        assertEquals(new BigDecimal("30000"), revenue.getPlatformFee());
+        assertEquals(new BigDecimal("90000"), revenue.getRevenueByService().get("ONSITE_REPAIR"));
+        assertEquals(new BigDecimal("180000"), revenue.getRevenueByService().get("TOWING"));
+        verify(paymentTransactionRepository).findByGarageIdOrderByCreatedAtDesc(100L);
+    }
+
+    @Test
+    void garageRevenueIsZeroWhenThereAreNoPayments() {
+        when(garageRepository.findByOwnerId(garageOwner.getId())).thenReturn(Optional.of(approvedGarage));
+        GarageRevenueDto revenue = financeAdminService.getGarageWalletSummary(garageOwner).getRevenue();
+        assertEquals(0, revenue.getPaidOrderCount());
+        assertEquals(BigDecimal.ZERO, revenue.getNetRevenue());
+        assertEquals(BigDecimal.ZERO, revenue.getPlatformFee());
+        assertTrue(revenue.getRevenueByService().isEmpty());
+    }
+
+    @Test
+    @DisplayName("UC-24: Khởi tạo cấu hình hoa hồng mặc định khi hệ thống chưa có bản ghi nào")
     void getActiveCommissionConfig_CreatesDefaultWhenEmpty() {
         when(commissionConfigRepository.findFirstByActiveTrueOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(commissionConfigRepository.save(any(CommissionConfig.class))).thenAnswer(inv -> {
