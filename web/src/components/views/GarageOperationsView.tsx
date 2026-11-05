@@ -88,7 +88,7 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
                       .filter((o) => ['COMPLETED', 'PAYMENT_PENDING'].includes(o.status))
                       .reduce((sum, o) => sum + Number(o.serviceBasePrice || 0), 0)
                   )}
-                  detail="Không gồm phí sàn 30k"
+                  detail="Theo giá dịch vụ, chưa trừ chiết khấu nền tảng"
                   icon={<CheckCircle size={18} />}
                   accent="blue"
                 />
@@ -207,7 +207,7 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
                             <strong>{money(Number(order.serviceBasePrice))}</strong>
                             <br />
                             <small className="garage-muted">
-                              + {money(Number(order.bookingFee))} phí sàn
+                              {Number(order.bookingFee) > 0 ? `+ ${money(Number(order.bookingFee))} phí đặt xe (đơn cũ)` : 'Đã bao gồm phí chiết khấu của nền tảng'}
                             </small>
                           </td>
                           <td>

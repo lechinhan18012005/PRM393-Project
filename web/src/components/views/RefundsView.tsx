@@ -126,6 +126,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [decisionError, setDecisionError] = useState('');
   // State phục vụ modal phóng to ảnh bằng chứng hiện trường (Lightbox)
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -245,6 +246,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
    */
   useEffect(() => {
     if (selectedCase) {
+      setDecisionError('');
       const f = extractDisputeFields(selectedCase);
       setRefundAmountInput(f.requestedRefundAmount);
       setResolutionNotesInput(f.resolutionNotes || '');
@@ -268,10 +270,12 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
    */
   const handleSubmitDecision = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCase) return;
+    if (!selectedCase || isSubmitting) return;
+    setDecisionError('');
 
     const f = extractDisputeFields(selectedCase);
     if (decision === 'APPROVE_REFUND' && (refundAmountInput <= 0 || !Number.isFinite(refundAmountInput))) {
+      setDecisionError('Vui lòng nhập số tiền hoàn trả lớn hơn 0 VNĐ khi duyệt hoàn tiền.');
       onShowToast(
         'Số tiền không hợp lệ',
         'Vui lòng nhập số tiền hoàn trả lớn hơn 0 VNĐ khi duyệt hoàn tiền.',
@@ -309,6 +313,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
         decision === 'APPROVE_REFUND' ? 'success' : 'info'
       );
     } catch (err) {
+      setDecisionError((err as Error).message || 'Không thể lưu quyết định hoàn tiền.');
       onShowToast(
         'Lỗi xử lý hoàn tiền',
         (err as Error).message || 'Không thể lưu quyết định hoàn tiền.',
@@ -684,6 +689,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
                         />
                       </div>
 
+                      {decisionError && <div role="alert" className="p-3 rounded border border-red-200 bg-red-50 text-red-700 text-sm">{decisionError}</div>}
                       <button
                         type="submit"
                         disabled={isSubmitting}

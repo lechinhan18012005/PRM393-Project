@@ -18,7 +18,7 @@ import { DisputeBackendResponse, financeApi } from '../../services/financeApi';
 interface DisputeFraudViewProps {
   disputes?: DisputeCase[];
   onSelectScreen: (screen: ScreenId) => void;
-  onShowToast: (title: string, msg: string) => void;
+  onShowToast: (title: string, msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 type TabType = 'STAFF_REVIEW' | 'ADMIN_APPROVAL' | 'RESOLVED' | 'ALL';
@@ -32,6 +32,7 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
   const [selectedCase, setSelectedCase] = useState<(DisputeCase & { backendId?: number }) | null>(disputes[0] || null);
   const [proposedAmount, setProposedAmount] = useState<number>(disputes[0]?.requestedRefund || 0);
   const [staffNote, setStaffNote] = useState<string>(disputes[0]?.inspectorNote || '');
+  const [resolutionError, setResolutionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -158,12 +159,14 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
   }, []);
 
   const handleSelectCase = (c: DisputeCase & { backendId?: number }) => {
+    setResolutionError('');
     setSelectedCase(c);
     setProposedAmount(c.requestedRefund);
     setStaffNote(c.inspectorNote || '');
   };
 
   const handleTabChange = (tab: TabType) => {
+    setResolutionError('');
     setActiveTab(tab);
     const filtered = caseList.filter((c) => {
       if (tab === 'STAFF_REVIEW') return c.status === 'STAFF_REVIEW';
@@ -184,29 +187,27 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
     caseId: string,
     resolution: 'PROPOSE_ADMIN_REFUND' | 'REJECT_COMPLAINT'
   ) => {
-    if (!selectedCase) return;
+    if (!selectedCase || isSubmitting) return;
+    setResolutionError('');
 
     const decision = resolution === 'PROPOSE_ADMIN_REFUND' ? 'ADMIN_APPROVAL' : 'REJECTED';
 
     if (decision === 'ADMIN_APPROVAL') {
-      if (!proposedAmount || proposedAmount <= 0) {
-        onShowToast('Số Tiền Không Hợp Lệ', 'Mức tiền đề xuất hoàn trả phải lớn hơn 0 đ.');
+      if (!Number.isFinite(proposedAmount) || proposedAmount <= 0) {
+        setResolutionError('Mức tiền đề xuất hoàn trả phải là số hữu hạn lớn hơn 0 đ.');
         return;
       }
       if (proposedAmount > selectedCase.originalPrice) {
-        onShowToast(
-          'Vượt Quá Giới Hạn',
-          `Mức đề xuất hoàn không được vượt quá tổng tiền gốc (${selectedCase.originalPrice.toLocaleString('vi-VN')} đ).`
-        );
+        setResolutionError(`Mức đề xuất hoàn không được vượt quá tổng tiền gốc (${selectedCase.originalPrice.toLocaleString('vi-VN')} đ).`);
         return;
       }
       if (!staffNote.trim()) {
-        onShowToast('Thiếu Kết Luận', 'Vui lòng nhập kết luận điều tra hiện trường của Staff trước khi chuyển Admin.');
+        setResolutionError('Vui lòng nhập kết luận điều tra hiện trường của Staff trước khi chuyển Admin.');
         return;
       }
     } else {
       if (!staffNote.trim()) {
-        onShowToast('Thiếu Lý Do', 'Vui lòng nhập lý do bác bỏ khiếu nại để lưu hồ sơ.');
+        setResolutionError('Vui lòng nhập lý do bác bỏ khiếu nại để lưu hồ sơ.');
         return;
       }
     }
@@ -249,7 +250,9 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
         );
       }
     } catch (err: any) {
-      onShowToast('Lỗi Xử Lý Khiếu Nại', err?.message || 'Không thể lưu biên bản xác minh');
+      const message = err?.message || 'Không thể lưu biên bản xác minh';
+      setResolutionError(message);
+      onShowToast('Lỗi Xử Lý Khiếu Nại', message, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -740,6 +743,8 @@ export const DisputeFraudView: React.FC<DisputeFraudViewProps> = ({
                     </div>
                   )}
                 </div>
+
+                {resolutionError && <div role="alert" className="p-3 rounded border border-red-200 bg-red-50 text-red-700 text-sm">{resolutionError}</div>}
 
                 {/* Adjudication Verdict Actions */}
                 <div className="pt-space-md border-t border-surface-container flex flex-wrap items-center justify-between gap-space-sm">

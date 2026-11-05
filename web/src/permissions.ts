@@ -26,6 +26,7 @@ export const screenModule: Record<ScreenId, ModuleType> = {
   'garage-team': 'owner',
   // Quản lý doanh thu và số dư ví Gara - Thuộc phân hệ Chủ Gara (Owner)
   'garage-finance': 'owner',
+  'garage-ratings': 'owner',
   // Quản lý điều phối chuyến chở xe vượt ngập của Gara - Thuộc phân hệ Chủ Gara (Owner)
   'garage-transport': 'owner',
   // Màn hình Tổng quan chỉ số GMV và dòng tiền toàn sàn - Thuộc phân hệ Admin

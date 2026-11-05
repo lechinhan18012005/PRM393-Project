@@ -12,6 +12,8 @@ class CrossingOptionModel {
   final String? description;
   final double serviceBasePrice;
   final double bookingFee;
+  final double commissionRate;
+  final double groupCommissionRate;
   final double totalAmount;
   final Map<int, double> groupPrices;
   final String currency;
@@ -32,6 +34,8 @@ class CrossingOptionModel {
     this.description,
     required this.serviceBasePrice,
     required this.bookingFee,
+    this.commissionRate = 0,
+    this.groupCommissionRate = 0,
     required this.totalAmount,
     this.groupPrices = const {},
     required this.currency,
@@ -53,9 +57,12 @@ class CrossingOptionModel {
       serviceName: json['serviceName'] as String? ?? 'Chở xe qua ngập',
       description: json['description'] as String?,
       serviceBasePrice:
-          (json['serviceBasePrice'] as num?)?.toDouble() ?? 120000.0,
-      bookingFee: (json['bookingFee'] as num?)?.toDouble() ?? 30000.0,
-      totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 150000.0,
+          (json['serviceBasePrice'] as num?)?.toDouble() ?? 0,
+      bookingFee: (json['bookingFee'] as num?)?.toDouble() ?? 0,
+      commissionRate: (json['commissionRate'] as num?)?.toDouble() ?? 0,
+      groupCommissionRate: (json['groupCommissionRate'] as num?)?.toDouble() ?? 0,
+      totalAmount: (json['totalAmount'] as num?)?.toDouble() ??
+          (json['serviceBasePrice'] as num?)?.toDouble() ?? 0,
       groupPrices: {
         for (final count in [2, 3, 4, 5, 6])
           if (json['groupPrice${count}Vehicles'] is num)
@@ -255,9 +262,10 @@ class RescueOrderModel {
       dropoffLatitude: (json['dropoffLatitude'] as num?)?.toDouble() ?? 0.0,
       dropoffLongitude: (json['dropoffLongitude'] as num?)?.toDouble() ?? 0.0,
       serviceBasePrice:
-          (json['serviceBasePrice'] as num?)?.toDouble() ?? 120000.0,
-      bookingFee: (json['bookingFee'] as num?)?.toDouble() ?? 30000.0,
-      totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 150000.0,
+          (json['serviceBasePrice'] as num?)?.toDouble() ?? 0,
+      bookingFee: (json['bookingFee'] as num?)?.toDouble() ?? 0,
+      totalAmount: (json['totalAmount'] as num?)?.toDouble() ??
+          (json['serviceBasePrice'] as num?)?.toDouble() ?? 0,
       currency: json['currency'] as String? ?? 'VND',
       waterLevel: json['waterLevel'] as String?,
       customerNotes: json['customerNotes'] as String?,
@@ -455,7 +463,8 @@ class RescueOfferModel {
       dropoffAddress: json['dropoffAddress'] as String? ?? '',
       dropoffLatitude: (json['dropoffLatitude'] as num?)?.toDouble() ?? 0.0,
       dropoffLongitude: (json['dropoffLongitude'] as num?)?.toDouble() ?? 0.0,
-      totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 150000.0,
+      totalAmount: (json['totalAmount'] as num?)?.toDouble() ??
+          (json['serviceBasePrice'] as num?)?.toDouble() ?? 0,
       distanceMeters: (json['distanceMeters'] as num?)?.toDouble() ?? 0.0,
       offeredAt: json['offeredAt'] as String?,
       expiresAt: json['expiresAt'] as String?,
