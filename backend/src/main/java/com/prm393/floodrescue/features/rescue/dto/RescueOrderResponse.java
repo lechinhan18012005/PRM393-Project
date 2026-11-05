@@ -20,6 +20,7 @@ public class RescueOrderResponse {
     private Long id;
     private String orderCode;
     private OrderType orderType;
+    private Integer groupVehicleCount;
     private RescueOrderStatus status;
 
     // Khách hàng

@@ -21,6 +21,7 @@ class _CaptureRescue extends RescueProvider {
   Future<void> loadCrossingOptions({
     double? pickupLatitude,
     double? pickupLongitude,
+    bool loadMore = false,
   }) async {
     latitude = pickupLatitude;
     longitude = pickupLongitude;
@@ -88,6 +89,16 @@ void main() {
             .text;
         expect(address, contains('21.0278'));
         expect(address, contains('105.8342'));
+        expect(
+          find.text('Chưa có tọa độ. Dùng GPS hoặc tìm địa chỉ trên bản đồ.'),
+          findsNothing,
+        );
+        expect(
+          find.textContaining(
+            'Tọa độ GPS (GPS thiết bị): 21.027800, 105.834200',
+          ),
+          findsOneWidget,
+        );
 
         // Tọa độ truyền vào loadCrossingOptions phải là tọa độ GPS thật (21.0278, 105.8342),
         // KHÔNG bị listener ghi đè về điểm mẫu (10.7385, 106.7215)

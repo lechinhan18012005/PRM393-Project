@@ -86,7 +86,7 @@ class RescueSingleCrossingWorkflowTest {
                 vehicleLookupService, pricingService, messagingTemplate,
                 userRepository, eligibilityChecker
         );
-        ReflectionTestUtils.setField(dispatchService, "offerTimeoutSeconds", 45);
+        ReflectionTestUtils.setField(dispatchService, "offerTimeoutSeconds", 120);
         ReflectionTestUtils.setField(dispatchService, "defaultRadiusKm", 5.0);
         ReflectionTestUtils.setField(dispatchService, "maxRadiusKm", 7.0);
         ReflectionTestUtils.setField(dispatchService, "heartbeatValidMinutes", 5);
@@ -193,7 +193,7 @@ class RescueSingleCrossingWorkflowTest {
     }
 
     @Test
-    @DisplayName("Tạo đơn thành công: Snapshot giá niêm yết, tạo đơn REQUESTED và offer tuần tự 45s")
+    @DisplayName("Tạo đơn thành công: Snapshot giá niêm yết, tạo đơn REQUESTED và offer tuần tự 2 phút")
     void createOrder_SuccessAndOffersNextCandidate() {
         VehicleDto myVehicle = VehicleDto.builder().id(1L).customerId(10L).licensePlate("59-B1 892.44").brand("Honda").model("SH 150i").vehicleType("SCOOTER").build();
         when(rescueOrderRepository.existsByCustomerIdAndStatusIn(eq(10L), anyList())).thenReturn(false);
@@ -299,12 +299,12 @@ class RescueSingleCrossingWorkflowTest {
     }
 
     @Test
-    @DisplayName("Thợ nhận đơn: Chặn khi offer đã hết hạn (quá 45s)")
+    @DisplayName("Thợ nhận đơn: Chặn khi offer đã hết hạn (quá 2 phút)")
     void acceptOffer_ExpiredBlocked() {
         RescueOrder order = RescueOrder.builder().id(1001L).status(RescueOrderStatus.REQUESTED).build();
         RescueOffer offer = RescueOffer.builder()
                 .id(5001L).rescueOrder(order).mechanicStaff(sampleMechanic).status(RescueOfferStatus.PENDING)
-                .offeredAt(LocalDateTime.now().minusSeconds(50))
+                .offeredAt(LocalDateTime.now().minusSeconds(125))
                 .expiresAt(LocalDateTime.now().minusSeconds(5)) // Đã hết hạn
                 .build();
 

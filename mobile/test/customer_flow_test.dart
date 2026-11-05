@@ -70,9 +70,9 @@ Widget _wrap(Widget child, {TextScaler? textScaler}) {
       theme: AppTheme.light,
       builder: textScaler != null
           ? (context, c) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-                child: c!,
-              )
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: c!,
+            )
           : null,
       home: child,
     ),
@@ -86,6 +86,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_wrap(const StitchHydroRescueScreen()));
+    expect(find.text('Dịch vụ hỗ trợ'), findsNothing);
     await tester.tap(find.byKey(const Key('choose-vehicle')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Yamaha Exciter 150'));
@@ -95,8 +96,20 @@ void main() {
     await tester.tap(find.byKey(const Key('request-rescue')));
     await tester.pumpAndSettle();
     expect(find.byType(ServiceSelectionScreen), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Bạn cần hỗ trợ gì?')).dy,
+      lessThan(
+        tester.getTopLeft(find.textContaining('Phương tiện đang chọn')).dy,
+      ),
+    );
     expect(find.text('Chở xe qua điểm ngập'), findsOneWidget);
     expect(find.text('Đi chuyến riêng'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('crossing-group')));
+    await tester.tap(find.byKey(const ValueKey('crossing-group')));
+    await tester.pumpAndSettle();
+    expect(find.text('Số lượng xe trong chuyến gom'), findsOneWidget);
+    expect(find.byKey(const ValueKey('group-vehicle-count-2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('group-vehicle-count-6')), findsOneWidget);
     await tester.ensureVisible(find.byKey(const ValueKey('service-1')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('service-1')));
@@ -130,7 +143,9 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(_wrap(screen, textScaler: const TextScaler.linear(1.4)));
+      await tester.pumpWidget(
+        _wrap(screen, textScaler: const TextScaler.linear(1.4)),
+      );
       await tester.pump();
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());

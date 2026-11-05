@@ -196,7 +196,7 @@ public class RescueOrderContractAdapter implements RescueOrderLookup, RescueOrde
         requireStatus(order, RescueOrderStatus.IN_PROGRESS);
         requireTowing(order);
         order.setTransportStage(TransportStage.IN_TRANSIT);
-        order.setTransportNote("Chuyển xe về chi nhánh #" + destinationBranchId);
+        order.setTransportNote("Đang chuyển xe về chi nhánh garage");
     }
 
     @Override

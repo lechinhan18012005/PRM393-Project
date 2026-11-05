@@ -74,6 +74,11 @@ export interface ServiceItemBackend {
   itemCategoryType?: 'LABOR' | 'PART' | 'PACKAGE' | string;
   applicableVehicleType?: 'ALL' | 'SCOOTER' | 'MANUAL_CLUTCH' | 'ELECTRIC' | string;
   standardPrice: number;
+  groupPrice2Vehicles?: number | null;
+  groupPrice3Vehicles?: number | null;
+  groupPrice4Vehicles?: number | null;
+  groupPrice5Vehicles?: number | null;
+  groupPrice6Vehicles?: number | null;
   minPrice: number;
   maxPrice: number;
   unit: string;

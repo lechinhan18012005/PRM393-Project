@@ -13,7 +13,7 @@ public interface ExecutionService {
 
     ExecutionActionResponse markPickedUp(Long orderId, User mechanicUser);
 
-    ExecutionActionResponse transfer(Long orderId, Long destinationBranchId, User mechanicUser);
+    ExecutionActionResponse transfer(Long orderId, User mechanicUser);
 
     ExecutionActionResponse markDelivered(Long orderId, String imageUrl, User mechanicUser);
 

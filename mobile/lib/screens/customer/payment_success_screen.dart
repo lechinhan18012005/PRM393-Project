@@ -76,21 +76,20 @@ class PaymentSuccessScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Bước 1: Tổng hợp và chuẩn hóa các thông tin hiển thị từ transaction hoặc order
-    final resolvedOrderId =
-        transaction?.rescueOrderId ?? order?.id ?? orderId;
-    final code = transaction?.rescueCode ??
+    final resolvedOrderId = transaction?.rescueOrderId ?? order?.id ?? orderId;
+    final code =
+        transaction?.rescueCode ??
         order?.orderCode ??
         rescueCode ??
         (orderId != null ? 'SOS-$orderId' : '#PRM-8924');
-    final displayAmount = transaction?.amount ??
-        order?.totalAmount ??
-        amount ??
-        150000.0;
+    final displayAmount =
+        transaction?.amount ?? order?.totalAmount ?? amount ?? 150000.0;
     // Xác định tên phương thức thanh toán: Tiền mặt hoặc PayOS VietQR kèm tên ngân hàng
     final methodStr = (transaction?.paymentMethod == 'CASH')
         ? 'Tiền mặt tại hiện trường'
         : 'PayOS VietQR (${transaction?.bankName ?? "MB Bank"})';
-    final garageName = transaction?.garageName ??
+    final garageName =
+        transaction?.garageName ??
         order?.garageName ??
         'Trung tâm cứu hộ liên kết';
     final mechanicName = order?.mechanicName ?? 'Thợ cứu hộ phụ trách';
@@ -178,7 +177,9 @@ class PaymentSuccessScreen extends StatelessWidget {
                       transaction!.payosOrderCode > 0) ...[
                     const SizedBox(height: 10),
                     _buildReceiptRow(
-                        'Mã giao dịch PayOS:', '#${transaction!.payosOrderCode}'),
+                      'Mã giao dịch PayOS:',
+                      '#${transaction!.payosOrderCode}',
+                    ),
                   ],
                   const SizedBox(height: 10),
                   _buildReceiptRow('Thời gian:', paidAtStr),

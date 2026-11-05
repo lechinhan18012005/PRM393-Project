@@ -34,6 +34,17 @@ public class ServiceItemDto {
     @DecimalMax(value = "50000000.00", message = "Giá chuẩn không được vượt quá 50.000.000 VNĐ")
     private BigDecimal standardPrice;
 
+    @DecimalMin(value = "1000", message = "Giá chuyến gom 2 xe phải tối thiểu 1.000 VNĐ")
+    private BigDecimal groupPrice2Vehicles;
+    @DecimalMin(value = "1000", message = "Giá chuyến gom 3 xe phải tối thiểu 1.000 VNĐ")
+    private BigDecimal groupPrice3Vehicles;
+    @DecimalMin(value = "1000", message = "Giá chuyến gom 4 xe phải tối thiểu 1.000 VNĐ")
+    private BigDecimal groupPrice4Vehicles;
+    @DecimalMin(value = "1000", message = "Giá chuyến gom 5 xe phải tối thiểu 1.000 VNĐ")
+    private BigDecimal groupPrice5Vehicles;
+    @DecimalMin(value = "1000", message = "Giá chuyến gom 6 xe phải tối thiểu 1.000 VNĐ")
+    private BigDecimal groupPrice6Vehicles;
+
     @DecimalMin(value = "1000", message = "Giá tối thiểu phải ít nhất 1.000 VNĐ")
     @DecimalMax(value = "50000000.00", message = "Giá tối thiểu không được vượt quá 50.000.000 VNĐ")
     private BigDecimal minPrice;

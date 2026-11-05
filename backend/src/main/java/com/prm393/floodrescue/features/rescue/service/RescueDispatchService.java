@@ -64,7 +64,7 @@ public class RescueDispatchService {
     private final com.prm393.floodrescue.features.auth.repository.UserRepository userRepository;
     private final MechanicEligibilityChecker eligibilityChecker;
 
-    @Value("${app.rescue.offer-timeout-seconds:45}")
+    @Value("${app.rescue.offer-timeout-seconds:120}")
     private int offerTimeoutSeconds;
 
     @Value("${app.rescue.default-dispatch-radius-km:5.0}")
@@ -103,9 +103,10 @@ public class RescueDispatchService {
     }
 
     public static String computePayloadHash(CreateRescueOrderRequest request) {
-        String payloadString = String.format("%d:%d:%d:%s:%.6f:%.6f:%.6f:%.6f:%s:%s:%s:%s",
+        String payloadString = String.format("%d:%d:%d:%s:%s:%.6f:%.6f:%.6f:%.6f:%s:%s:%s:%s",
                 request.getVehicleId(), request.getGarageId(), request.getServiceItemId(),
                 resolveOrderType(request).name(),
+                request.getGroupVehicleCount() != null ? request.getGroupVehicleCount() : "",
                 request.getPickupLatitude(), request.getPickupLongitude(),
                 request.getDropoffLatitude(), request.getDropoffLongitude(),
                 request.getPickupAddress() != null ? request.getPickupAddress().trim() : "",
@@ -127,20 +128,17 @@ public class RescueDispatchService {
 
     @Transactional
     public RescueOrderResponse createSingleCrossingOrder(User customer, CreateRescueOrderRequest request) {
-        if (resolveOrderType(request) == OrderType.BATCH_CROSSING) {
-            throw new BadRequestException(
-                    "Chỉ có thể tham gia gom chuyến từ một chuyến do thợ hoặc gara đã mở");
-        }
-        return createOrder(customer, request);
+        return createOrder(customer, request, true);
     }
 
     @Transactional
     public RescueOrderResponse createBatchOrderForTrip(User customer, CreateRescueOrderRequest request) {
         request.setOrderType(OrderType.BATCH_CROSSING);
-        return createOrder(customer, request);
+        return createOrder(customer, request, false);
     }
 
-    private RescueOrderResponse createOrder(User customer, CreateRescueOrderRequest request) {
+    private RescueOrderResponse createOrder(
+            User customer, CreateRescueOrderRequest request, boolean userInitiatedGroup) {
         OrderType orderType = resolveOrderType(request);
         ServiceType expectedServiceType = expectedServiceType(orderType);
         // 0. Khóa bản ghi khách hàng để tuần tự hóa các yêu cầu tạo đơn đồng thời từ cùng một người dùng (B02)
@@ -191,7 +189,20 @@ public class RescueDispatchService {
         }
 
         // 4. Lấy snapshot giá từ database (không tin cậy giá client)
+        Integer groupVehicleCount = request.getGroupVehicleCount();
         BigDecimal serviceBasePrice = serviceItem.getStandardPrice();
+        if (orderType == OrderType.BATCH_CROSSING && userInitiatedGroup) {
+            if (groupVehicleCount == null || groupVehicleCount < 2 || groupVehicleCount > 6) {
+                throw new BadRequestException("Chuyến gom phải chọn số lượng từ 2 đến 6 xe");
+            }
+            serviceBasePrice = resolveGroupPrice(serviceItem, groupVehicleCount);
+            if (serviceBasePrice == null) {
+                throw new BadRequestException("Gara chưa niêm yết giá chuyến gom cho "
+                        + groupVehicleCount + " xe");
+            }
+        } else if (orderType != OrderType.BATCH_CROSSING && groupVehicleCount != null) {
+            throw new BadRequestException("Số lượng xe gom chỉ áp dụng cho chuyến gom");
+        }
         BigDecimal bookingFee = pricingService.getBookingFee();
         BigDecimal totalAmount = serviceBasePrice.add(bookingFee);
 
@@ -236,6 +247,7 @@ public class RescueDispatchService {
                 .branch(null) // Sẽ gán theo chi nhánh của thợ nhận
                 .serviceItem(serviceItem)
                 .orderType(orderType)
+                .groupVehicleCount(groupVehicleCount)
                 .status(RescueOrderStatus.REQUESTED)
                 .vehicleId(vehicle.getId())
                 .vehiclePlate(vehicle.getLicensePlate())
@@ -260,8 +272,8 @@ public class RescueDispatchService {
         order = rescueOrderRepository.save(order);
         recordAudit(order.getId(), null, RescueOrderStatus.REQUESTED, customer.getId(), customer.getUsername(), "Khách hàng gửi yêu cầu SOS");
 
-        // Đơn gom chờ khách tham gia một chuyến ở Luồng 7; các loại còn lại điều phối ngay.
-        if (orderType != OrderType.BATCH_CROSSING) {
+        // Luồng mới do user khởi tạo được điều phối ngay; endpoint ghép chuyến cũ sẽ tự gán thợ/chuyến.
+        if (userInitiatedGroup || orderType != OrderType.BATCH_CROSSING) {
             dispatchNextCandidate(order);
         }
 
@@ -401,7 +413,7 @@ public class RescueDispatchService {
         if (offer.getExpiresAt().isBefore(LocalDateTime.now())) {
             offer.setStatus(RescueOfferStatus.EXPIRED);
             rescueOfferRepository.save(offer);
-            throw new BadRequestException("Offer đã hết thời hạn 45 giây phản hồi!");
+            throw new BadRequestException("Offer đã hết thời hạn 2 phút phản hồi!");
         }
 
         if (order.getStatus() != RescueOrderStatus.REQUESTED) {
@@ -474,6 +486,7 @@ public class RescueDispatchService {
 
     private boolean isEligibleForOrder(MechanicStaff staff, RescueOrder order, LocalDateTime heartbeatThreshold) {
         return order.getOrderType() == OrderType.SINGLE_CROSSING
+                || order.getOrderType() == OrderType.BATCH_CROSSING
                 ? eligibilityChecker.isMechanicEligibleForCrossing(staff, heartbeatThreshold)
                 : eligibilityChecker.isMechanicEligibleForRescue(staff, heartbeatThreshold);
     }
@@ -559,12 +572,12 @@ public class RescueDispatchService {
 
         offer.setStatus(RescueOfferStatus.EXPIRED);
         offer.setRespondedAt(LocalDateTime.now());
-        offer.setResponseNote("Offer hết hạn 45 giây không phản hồi (Server timeout)");
+        offer.setResponseNote("Offer hết hạn 2 phút không phản hồi (Server timeout)");
         rescueOfferRepository.save(offer);
 
         log.info("Offer {} for order {} expired. Dispatching next candidate.", offerId, order.getOrderCode());
         recordAudit(order.getId(), RescueOrderStatus.REQUESTED, RescueOrderStatus.REQUESTED,
-                null, "SYSTEM", "Offer thợ " + offer.getMechanicStaff().getUser().getUsername() + " hết hạn 45s. Chuyển ứng viên tiếp theo.");
+                null, "SYSTEM", "Offer thợ " + offer.getMechanicStaff().getUser().getUsername() + " hết hạn 2 phút. Chuyển ứng viên tiếp theo.");
         dispatchNextCandidate(order);
     }
 
@@ -925,6 +938,7 @@ public class RescueDispatchService {
                 .id(o.getId())
                 .orderCode(o.getOrderCode())
                 .orderType(o.getOrderType())
+                .groupVehicleCount(o.getGroupVehicleCount())
                 .status(o.getStatus())
                 .customerId(cust.getId())
                 .customerName(cust.getFullName())
@@ -983,6 +997,17 @@ public class RescueDispatchService {
                 .build();
     }
 
+    private static BigDecimal resolveGroupPrice(ServiceItem serviceItem, int vehicleCount) {
+        return switch (vehicleCount) {
+            case 2 -> serviceItem.getGroupPrice2Vehicles();
+            case 3 -> serviceItem.getGroupPrice3Vehicles();
+            case 4 -> serviceItem.getGroupPrice4Vehicles();
+            case 5 -> serviceItem.getGroupPrice5Vehicles();
+            case 6 -> serviceItem.getGroupPrice6Vehicles();
+            default -> null;
+        };
+    }
+
     public RescueOfferResponse mapToOfferResponse(RescueOffer offer) {
         RescueOrder o = offer.getRescueOrder();
         long secondsRemaining = Math.max(0, Duration.between(LocalDateTime.now(), offer.getExpiresAt()).getSeconds());
@@ -991,6 +1016,7 @@ public class RescueDispatchService {
                 .orderId(o.getId())
                 .orderCode(o.getOrderCode())
                 .orderType(o.getOrderType())
+                .groupVehicleCount(o.getGroupVehicleCount())
                 .status(offer.getStatus())
                 .customerName(o.getCustomer().getFullName())
                 .customerPhone(o.getCustomer().getPhone())

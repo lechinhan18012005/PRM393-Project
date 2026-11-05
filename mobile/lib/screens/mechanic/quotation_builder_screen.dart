@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../features/quotation/quotation_api.dart';
 import '../../features/quotation/quotation_models.dart';
 import 'mechanic_ui.dart';
@@ -33,9 +34,9 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
     'Sấy bugi & xả nước buồng đốt',
     'Thay nhớt Castrol Scooter',
     'Súc rửa lọc gió & xịt khô IC',
-    'Kéo xe về gara xử lý',
+    'Kéo xe về gara và bàn giao',
   ];
-  static const _demoPrices = [50000, 70000, 130000, 40000, 150000];
+  static const _demoPrices = [50000, 70000, 130000, 40000, 120000];
 
   @override
   void initState() {
@@ -190,7 +191,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                             ),
                           ),
                           secondary: Text(
-                            '${item.price.toStringAsFixed(0)} đ',
+                            formatVnd(item.price),
                             style: const TextStyle(
                               color: AppColors.primary,
                               fontWeight: FontWeight.w700,
@@ -389,8 +390,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
     );
   }
 
-  String _money(num value) =>
-      '${value.toStringAsFixed(0).replaceAllMapped(RegExp(r"(\d)(?=(\d{3})+(?!\d))"), (match) => '${match[1]}.')} đ';
+  String _money(num value) => formatVnd(value);
 }
 
 class _ErrorState extends StatelessWidget {

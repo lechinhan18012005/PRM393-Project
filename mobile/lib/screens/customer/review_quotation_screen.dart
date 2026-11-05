@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../core/widgets/rescue_ui.dart';
 import '../../features/quotation/quotation_api.dart';
 import '../../features/quotation/quotation_models.dart';
@@ -153,13 +154,13 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
                       for (var i = 0; i < quotation.items.length; i++) ...[
                         _buildQuoteItem(
                           '${i + 1}. ${quotation.items[i].name}',
-                          '${quotation.items[i].quantity} × ${quotation.items[i].unitPrice.toStringAsFixed(0)} đ',
-                          '${quotation.items[i].subtotal.toStringAsFixed(0)} đ',
+                          '${quotation.items[i].quantity} × ${formatVnd(quotation.items[i].unitPrice)}',
+                          formatVnd(quotation.items[i].subtotal),
                         ),
                         if (i < quotation.items.length - 1) const Divider(),
                       ],
                       const Divider(thickness: 1.5),
-                      _moneyRow('Phí đặt trước', quotation.bookingFee),
+                      _moneyRow('Phí đặt xe', quotation.bookingFee),
                       _moneyRow('Dịch vụ', quotation.subtotal),
                       _moneyRow('Giảm giá', -quotation.discount),
                       _moneyRow(
@@ -315,7 +316,7 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
           style: const TextStyle(color: AppColors.secondary),
         ),
         Text(
-          'Trạng thái: ${quotation.status}',
+          'Trạng thái: ${_quotationStatusLabel(quotation.status)}',
           style: const TextStyle(color: AppColors.secondary),
         ),
       ],
@@ -438,7 +439,7 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
           style: TextStyle(fontWeight: total ? FontWeight.bold : null),
         ),
         Text(
-          '${value.toStringAsFixed(0)} đ',
+          formatVnd(value),
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: total ? 18 : null,
@@ -449,6 +450,14 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
     ),
   );
 }
+
+String _quotationStatusLabel(String status) => switch (status) {
+  'PENDING_APPROVAL' => 'Chờ khách hàng duyệt',
+  'FINALIZED' => 'Đã được duyệt',
+  'REVISION_REQUESTED' => 'Đã yêu cầu chỉnh sửa',
+  'REJECTED' => 'Đã từ chối',
+  _ => 'Đang xử lý',
+};
 
 class _ErrorState extends StatelessWidget {
   const _ErrorState({required this.message, required this.retry});
