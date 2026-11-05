@@ -353,7 +353,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
     const link = document.createElement('a');
     const dateStamp = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.setAttribute('download', `Bao_Cao_Tai_Chinh_RescueOps_${dateStamp}.csv`);
+    link.setAttribute('download', `Bao_Cao_Tai_Chinh_HydroRescue_${dateStamp}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -361,7 +361,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
 
     onShowToast(
       'Đã xuất báo cáo CSV',
-      `Đã tải xuống tệp Bao_Cao_Tai_Chinh_RescueOps_${dateStamp}.csv từ dữ liệu Database.`,
+      `Đã tải xuống tệp Bao_Cao_Tai_Chinh_HydroRescue_${dateStamp}.csv từ dữ liệu Database.`,
       'success'
     );
   };

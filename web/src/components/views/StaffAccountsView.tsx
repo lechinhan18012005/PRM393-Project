@@ -216,7 +216,7 @@ export function StaffAccountsView() {
   function handleCopyCredentials() {
     if (!createdAccount) return;
     const textToCopy = [
-      `Thông tin đăng nhập hệ thống RescueOps (Phân hệ Staff):`,
+      `Thông tin đăng nhập hệ thống HydroRescue:`,
       `- Họ tên: ${createdAccount.fullName}`,
       `- Email đăng nhập: ${createdAccount.email}`,
       `- Tên đăng nhập (Username): ${createdAccount.username}`,
@@ -376,7 +376,7 @@ export function StaffAccountsView() {
               type="email"
               value={emailInput}
               onChange={(e) => setEmailInput(e.target.value)}
-              placeholder="Ví dụ: staff.cskh@rescueops.vn"
+              placeholder="Ví dụ: staff.cskh@hydrorescue.vn"
               className="w-full h-10 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>

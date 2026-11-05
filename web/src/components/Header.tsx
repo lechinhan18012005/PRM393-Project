@@ -4,7 +4,7 @@
 // PHÂN HỆ: Thanh điều hướng cấp cao (Top Application Header)
 // MÔ TẢ NGHIỆP VỤ & KỸ THUẬT:
 //   - Cung cấp thanh Header toàn cục gắn trên đỉnh màn hình của toàn bộ 3 phân hệ.
-//   - Tích hợp Logo thương hiệu RescueOps, Trạng thái kết nối trực tuyến (Healthcheck ping).
+//   - Tích hợp Logo thương hiệu HydroRescue, Trạng thái kết nối trực tuyến (Healthcheck ping).
 //   - Điều hướng nhanh giữa các phân hệ được cấp quyền (Admin / Staff / Gara) theo vai trò (RBAC).
 //   - Ô tìm kiếm nhanh toàn hệ thống (mã đơn cứu hộ, tên gara, thợ).
 //   - Nút Chuông thông báo hiển thị số lượng cảnh báo khẩn cấp chưa đọc.
@@ -173,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="app-header">
-      {/* Logo thương hiệu RescueOps & Nhận diện ứng dụng */}
+      {/* Logo thương hiệu HydroRescue & Nhận diện ứng dụng */}
       <a
         className="app-brand"
         href="#"
@@ -181,10 +181,10 @@ export const Header: React.FC<HeaderProps> = ({
           e.preventDefault();
           onSelectModule(currentModule);
         }}
-        aria-label="RescueOps — Về bảng điều khiển chính"
+        aria-label="HydroRescue — Về bảng điều khiển chính"
       >
         <span className="brand-mark">
-          <img src={logoImg} alt="RescueOps Logo" className="w-8 h-8 rounded-lg object-contain" />
+          <img src={logoImg} alt="HydroRescue Logo" className="w-8 h-8 rounded-lg object-contain" />
         </span>
         <span className="brand-text">
           rescue<span className="text-primary font-bold">ops</span>
