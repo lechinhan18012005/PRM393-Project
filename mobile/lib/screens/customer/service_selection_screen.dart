@@ -476,7 +476,18 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
         ? '$groupNote. Ghi chú thêm: $customNote'
         : groupNote;
 
-    final targetVehicleId = _selectedVehicle?.id ?? widget.vehicleId ?? 1;
+    final targetVehicleId = _selectedVehicle?.id ?? widget.vehicleId;
+    if (targetVehicleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Vui lòng chọn hoặc thêm phương tiện của bạn trước khi gửi yêu cầu cứu hộ!',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
     final rescueProvider = Provider.of<RescueProvider?>(context, listen: false);
     setState(() => _isSubmitting = true);
