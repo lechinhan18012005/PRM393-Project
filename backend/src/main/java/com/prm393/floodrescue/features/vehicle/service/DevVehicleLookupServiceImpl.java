@@ -26,83 +26,30 @@ public class DevVehicleLookupServiceImpl implements VehicleLookupService {
     private final Map<Long, List<VehicleDto>> mockCustomerVehicles = new ConcurrentHashMap<>();
 
     public DevVehicleLookupServiceImpl() {
-        log.info("[DEV/TEST FIXTURE] Initialized VehicleLookupService with verified user vehicle fixtures.");
-    }
-
-    private List<VehicleDto> generateDefaultVehiclesForCustomer(Long customerId) {
-        List<VehicleDto> list = new ArrayList<>();
-        list.add(VehicleDto.builder()
-                .id(customerId * 100 + 1)
-                .customerId(customerId)
-                .licensePlate("59-B1 892.44")
-                .brand("Honda")
-                .model("SH 150i")
-                .vehicleType("SCOOTER")
-                .engineCapacity("150cc")
-                .color("Trắng ánh kim")
-                .isDefault(true)
-                .build());
-
-        list.add(VehicleDto.builder()
-                .id(customerId * 100 + 2)
-                .customerId(customerId)
-                .licensePlate("59-S3 481.09")
-                .brand("Yamaha")
-                .model("Exciter 150")
-                .vehicleType("CLUTCH")
-                .engineCapacity("150cc")
-                .color("Xanh GP")
-                .isDefault(false)
-                .build());
-
-        list.add(VehicleDto.builder()
-                .id(customerId * 100 + 3)
-                .customerId(customerId)
-                .licensePlate("59-X1 204.88")
-                .brand("Honda")
-                .model("Wave Alpha")
-                .vehicleType("MANUAL")
-                .engineCapacity("110cc")
-                .color("Đỏ đô")
-                .isDefault(false)
-                .build());
-
-        return list;
+        log.info("[DEV/TEST FIXTURE] Initialized VehicleLookupService with in-memory storage.");
     }
 
     @Override
     public List<VehicleDto> getVehiclesByCustomer(Long customerId) {
-        return mockCustomerVehicles.computeIfAbsent(customerId, this::generateDefaultVehiclesForCustomer);
+        return mockCustomerVehicles.computeIfAbsent(customerId, k -> new ArrayList<>());
     }
 
     @Override
     public Optional<VehicleDto> getVehicleByIdAndCustomer(Long vehicleId, Long customerId) {
         if (vehicleId == null) {
-            return Optional.of(getDefaultVehicleByCustomer(customerId));
+            return Optional.ofNullable(getDefaultVehicleByCustomer(customerId));
         }
         List<VehicleDto> vehicles = getVehiclesByCustomer(customerId);
-
-        // 1. Khớp chính xác ID tuyệt đối (ví dụ: customerId * 100 + X)
-        Optional<VehicleDto> exactMatch = vehicles.stream()
+        return vehicles.stream()
                 .filter(v -> v.getId().equals(vehicleId))
                 .findFirst();
-        if (exactMatch.isPresent()) {
-            return exactMatch;
-        }
-
-        // 2. Khớp theo index tương đối (1, 2, 3) từ Mobile UI hiện tại
-        if (vehicleId >= 1 && vehicleId <= vehicles.size()) {
-            return Optional.of(vehicles.get((int) (vehicleId - 1)));
-        }
-
-        return Optional.empty();
     }
 
     @Override
     public VehicleDto getDefaultVehicleByCustomer(Long customerId) {
         List<VehicleDto> vehicles = getVehiclesByCustomer(customerId);
         if (vehicles.isEmpty()) {
-            throw new IllegalStateException("Khách hàng chưa đăng ký phương tiện nào");
+            return null;
         }
         return vehicles.stream()
                 .filter(VehicleDto::isDefault)
@@ -123,13 +70,15 @@ public class DevVehicleLookupServiceImpl implements VehicleLookupService {
         VehicleDto newVehicle = VehicleDto.builder()
                 .id(newId)
                 .customerId(customerId)
-                .licensePlate(request.getLicensePlate().trim())
+                .licensePlate(request.getLicensePlate().trim().toUpperCase())
                 .brand(request.getBrand().trim())
                 .model(request.getModel().trim())
                 .vehicleType(request.getVehicleType() != null && !request.getVehicleType().isBlank()
-                        ? request.getVehicleType().trim() : "SCOOTER")
-                .engineCapacity(request.getEngineCapacity() != null ? request.getEngineCapacity().trim() : "150cc")
-                .color(request.getColor() != null ? request.getColor().trim() : "Đen")
+                        ? request.getVehicleType().trim().toUpperCase() : "SCOOTER")
+                .engineCapacity(request.getEngineCapacity() != null && !request.getEngineCapacity().isBlank()
+                        ? request.getEngineCapacity().trim() : null)
+                .color(request.getColor() != null && !request.getColor().isBlank()
+                        ? request.getColor().trim() : null)
                 .isDefault(isDefault)
                 .build();
 

@@ -604,7 +604,7 @@ class _RouteNavigationScreenState extends State<RouteNavigationScreen> {
                 icon: Icons.two_wheeler_outlined,
                 title: 'Xe cần chở',
                 value:
-                    '${order?.vehiclePlate ?? "59-B1 892.44"} · ${order?.vehicleModel ?? "Honda SH"}',
+                    order != null && (order.vehiclePlate.isNotEmpty || (order.vehicleModel != null && order.vehicleModel!.isNotEmpty)) ? '${order.vehiclePlate}${order.vehicleModel != null && order.vehicleModel!.isNotEmpty ? " · ${order.vehicleModel}" : ""}' : 'Chưa có thông tin xe',
               ),
               const Divider(),
               MechanicInfo(

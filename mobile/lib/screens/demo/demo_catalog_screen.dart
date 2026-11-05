@@ -124,7 +124,7 @@ class DemoCatalogScreen extends StatelessWidget {
           _buildScreenTile(
             context,
             'Xe của tôi',
-            'Quản lý nhiều xe (SH, Exciter, Wave)',
+            'Quản lý danh sách phương tiện cá nhân',
             const VehicleProfileScreen(),
           ),
           _buildScreenTile(

@@ -27,68 +27,24 @@ public class DatabaseVehicleLookupServiceImpl implements VehicleLookupService {
     private final UserRepository userRepository;
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<VehicleDto> getVehiclesByCustomer(Long customerId) {
-        List<CustomerVehicle> vehicles = vehicleRepository.findByCustomerIdOrderByIdAsc(customerId);
-        if (vehicles.isEmpty()) {
-            vehicles = seedDefaultVehiclesForCustomer(customerId);
-        }
-        return vehicles.stream().map(this::mapToDto).toList();
-    }
-
-    private List<CustomerVehicle> seedDefaultVehiclesForCustomer(Long customerId) {
-        Optional<User> userOpt = userRepository.findById(customerId);
-        if (userOpt.isEmpty()) {
-            return List.of();
-        }
-        User customer = userOpt.get();
-        log.info("Khởi tạo danh sách xe ban đầu vào Database cho khách hàng ID: {}", customerId);
-
-        List<CustomerVehicle> defaultList = new ArrayList<>();
-        defaultList.add(CustomerVehicle.builder()
-                .customer(customer)
-                .licensePlate("59-B1 892.44")
-                .brand("Honda")
-                .model("SH 150i")
-                .vehicleType("SCOOTER")
-                .engineCapacity("150cc")
-                .color("Trắng ánh kim")
-                .isDefault(true)
-                .build());
-
-        defaultList.add(CustomerVehicle.builder()
-                .customer(customer)
-                .licensePlate("59-X1 204.88")
-                .brand("Honda")
-                .model("Wave Alpha")
-                .vehicleType("MANUAL")
-                .engineCapacity("110cc")
-                .color("Đỏ đô")
-                .isDefault(false)
-                .build());
-
-        return vehicleRepository.saveAll(defaultList);
+        return vehicleRepository.findByCustomerIdOrderByIdAsc(customerId)
+                .stream()
+                .map(this::mapToDto)
+                .toList();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Optional<VehicleDto> getVehicleByIdAndCustomer(Long vehicleId, Long customerId) {
         if (vehicleId == null) {
-            return Optional.of(getDefaultVehicleByCustomer(customerId));
+            VehicleDto defaultVehicle = getDefaultVehicleByCustomer(customerId);
+            return Optional.ofNullable(defaultVehicle);
         }
 
-        // 1. Tìm chính xác ID trong database
-        Optional<CustomerVehicle> vehicleOpt = vehicleRepository.findByIdAndCustomerId(vehicleId, customerId);
-        if (vehicleOpt.isPresent()) {
-            return vehicleOpt.map(this::mapToDto);
-        }
-
-        // 2. Fallback nếu client gửi index 1, 2, 3
-        List<VehicleDto> allVehicles = getVehiclesByCustomer(customerId);
-        if (vehicleId >= 1 && vehicleId <= allVehicles.size()) {
-            return Optional.of(allVehicles.get((int) (vehicleId - 1)));
-        }
-
-        return Optional.empty();
+        return vehicleRepository.findByIdAndCustomerId(vehicleId, customerId)
+                .map(this::mapToDto);
     }
 
     @Override
@@ -100,17 +56,13 @@ public class DatabaseVehicleLookupServiceImpl implements VehicleLookupService {
         }
 
         List<CustomerVehicle> vehicles = vehicleRepository.findByCustomerIdOrderByIdAsc(customerId);
-        if (vehicles.isEmpty()) {
-            vehicles = seedDefaultVehiclesForCustomer(customerId);
-        }
-
         if (!vehicles.isEmpty()) {
             CustomerVehicle first = vehicles.get(0);
             first.setDefault(true);
             return mapToDto(vehicleRepository.save(first));
         }
 
-        throw new IllegalArgumentException("Không tìm thấy phương tiện nào cho khách hàng ID: " + customerId);
+        return null;
     }
 
     @Override
