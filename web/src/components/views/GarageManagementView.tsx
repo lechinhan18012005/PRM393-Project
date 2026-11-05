@@ -306,6 +306,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     isOpen: boolean;
     title: string;
     username: string;
+    email: string;
     fullName: string;
     password: string;
   } | null>(null);
@@ -694,6 +695,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
             isOpen: true,
             title: `Cấp lại mật khẩu thành công: ${mechanic.fullName}`,
             username: mechanic.username || mechanic.email,
+            email: mechanic.email,
             fullName: mechanic.fullName,
             password: tempPass
           });
@@ -787,7 +789,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     }
 
     try {
-      await managementApi.createMechanic({
+      const createdMechanic = await managementApi.createMechanic({
         username,
         fullName,
         phone,
@@ -804,6 +806,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
         isOpen: true,
         title: 'Thêm thợ cứu hộ mới thành công!',
         username,
+        email: createdMechanic.email || email,
         fullName,
         password
       });
@@ -3048,8 +3051,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                 <strong className="text-on-surface">{tempPasswordModal.fullName}</strong>
               </div>
               <div>
-                <span className="text-secondary font-sans font-bold">Tài khoản:</span>{' '}
-                <strong className="text-primary">{tempPasswordModal.username}</strong>
+                <span className="text-secondary font-sans font-bold">Email:</span>{' '}
+                <strong className="text-primary">{tempPasswordModal.email || 'Chưa có email'}</strong>
               </div>
               <div>
                 <span className="text-secondary font-sans font-bold">Mật khẩu tạm thời:</span>{' '}
@@ -3062,14 +3065,19 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const textToCopy = `Thông tin tài khoản thợ cứu hộ:
-Tài khoản: ${tempPasswordModal.username}
+Email: ${tempPasswordModal.email || 'Chưa có email'}
 Mật khẩu: ${tempPasswordModal.password}
 Vui lòng đăng nhập và đổi mật khẩu trên ứng dụng Mobile Cứu Hộ.`;
-                  navigator.clipboard.writeText(textToCopy);
+                  try {
+                    await navigator.clipboard.writeText(textToCopy);
+                  } catch {
+                    notify('Không thể sao chép', 'Vui lòng cho phép truy cập bộ nhớ tạm hoặc sao chép thông tin thủ công.', 'error');
+                    return;
+                  }
                   setCopiedTempPassword(true);
-                  notify('Đã sao chép', 'Đã sao chép thông tin tài khoản và mật khẩu.', 'info');
+                  notify('Đã sao chép', 'Đã sao chép email và mật khẩu.', 'info');
                   setTimeout(() => setCopiedTempPassword(false), 3000);
                 }}
                 className="px-4 py-2 rounded-lg border border-surface-container bg-surface-container-high hover:bg-surface-container text-on-surface font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer"

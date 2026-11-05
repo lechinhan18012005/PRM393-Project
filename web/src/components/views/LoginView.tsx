@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
-import { DEMO_MODE, useAuth } from '../../context/AuthContext';
-import { Role } from '../../types/auth';
+import { useAuth } from '../../context/AuthContext';
 import { formatAuthErrorMessage } from '../../services/authApi';
-import { Shield, Building2, User, AlertCircle, ArrowRight, Loader2, Sparkles, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, ArrowRight, Loader2, Sparkles, Eye, EyeOff } from 'lucide-react';
 import logoImg from '../../assets/logo.png';
 
 interface LoginViewProps {
   onSwitchToRegister: () => void;
-  onActivate: () => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActivate }) => {
-  const { login, demoLogin, isLoading } = useAuth();
+export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister }) => {
+  const { login, isLoading } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -46,18 +44,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActi
       await login({ identifier: normalizedIdentifier, password });
     } catch (err: any) {
       setError(formatAuthErrorMessage(err, 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDemoSelect = async (role: Role) => {
-    setError(null);
-    setSubmitting(true);
-    try {
-      await demoLogin(role);
-    } catch (err: any) {
-      setError(formatAuthErrorMessage(err, 'Lỗi khi đăng nhập tài khoản mẫu.'));
     } finally {
       setSubmitting(false);
     }
@@ -150,54 +136,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActi
           </button>
         </form>
 
-        {/* Quick Demo Logins */}
-        {DEMO_MODE && (
-          <div className="mt-8 pt-6 border-t border-slate-200/80">
-            <p className="text-xs font-medium text-slate-500 text-center mb-3">
-              Đăng nhập nhanh với các tài khoản mẫu (Demo Roles):
-            </p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                onClick={() => handleDemoSelect('ADMIN')}
-                className="p-2.5 rounded-lg bg-slate-50/80 hover:bg-slate-800 border border-slate-200 hover:border-orange-500/40 text-slate-600 hover:text-slate-900 flex items-center gap-2 transition-all text-left"
-              >
-                <Shield className="w-4 h-4 text-orange-600 flex-shrink-0" />
-                <div className="truncate">
-                  <div className="font-semibold text-slate-900">Administrator</div>
-                  <div className="text-[10px] text-slate-500">Quản lý Tài chính</div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleDemoSelect('STAFF')}
-                className="p-2.5 rounded-lg bg-slate-50/80 hover:bg-slate-800 border border-slate-200 hover:border-blue-500/40 text-slate-600 hover:text-slate-900 flex items-center gap-2 transition-all text-left"
-              >
-                <User className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                <div className="truncate">
-                  <div className="font-semibold text-slate-900">Staff Vận hành</div>
-                  <div className="text-[10px] text-slate-500">Duyệt gara & ngập</div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleDemoSelect('GARAGE_OWNER')}
-                className="p-2.5 rounded-lg bg-slate-50/80 hover:bg-slate-800 border border-slate-200 hover:border-emerald-500/40 text-slate-600 hover:text-slate-900 flex items-center gap-2 transition-all text-left"
-              >
-                <Building2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <div className="truncate">
-                  <div className="font-semibold text-slate-900">Chủ Gara</div>
-                  <div className="text-[10px] text-slate-500">Bảng giá & Chi nhánh</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-5 text-center">
-          <button className="text-orange-600 underline" onClick={onActivate}>
-            Kích hoạt tài khoản được mời
-          </button>
-        </div>
         {/* Footer switch to Register */}
         <div className="mt-6 text-center text-xs text-slate-500">
           Bạn là Chủ gara mới?{' '}

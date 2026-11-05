@@ -150,17 +150,22 @@ class DisputeRefundServiceTest {
         assertEquals(1L, res.getId());
         assertEquals(DisputeStatus.STAFF_REVIEW, res.getStatus());
         assertEquals(new BigDecimal("2100000.00"), res.getOriginalAmount());
-        assertEquals(new BigDecimal("600000.00"), res.getRequestedRefundAmount());
+        assertEquals(new BigDecimal("2100000.00"), res.getRequestedRefundAmount());
         assertEquals("Cá»©u Há»™ Nhanh SÃ i GÃ²n", res.getGarageName());
     }
 
     @Test
-    @DisplayName("UC-23 (Validation): Cháº·n gá»­i khiáº¿u náº¡i khi sá»‘ tiá»n yÃªu cáº§u hoÃ n vÆ°á»£t quÃ¡ tá»•ng tiá»n Ä‘Ã£ thanh toÃ¡n")
-    void createDispute_ExceedsPaidAmount_ThrowsBadRequest() {
+    @DisplayName("UC-23: Luôn cố định tiền yêu cầu hoàn theo giao dịch đã thanh toán")
+    void createDispute_TamperedAmount_UsesPaidAmount() {
         when(serviceDisputeRepository.existsByRescueOrderIdAndStatusIn(eq(8790L), anyList())).thenReturn(false);
         when(rescueOrderRepository.findById(8790L)).thenReturn(Optional.of(completedOrder));
         when(paymentTransactionRepository.findByRescueOrderIdOrderByCreatedAtDesc(8790L))
                 .thenReturn(List.of(paidTransaction));
+        when(serviceDisputeRepository.save(any(ServiceDispute.class))).thenAnswer(inv -> {
+            ServiceDispute dispute = inv.getArgument(0);
+            dispute.setId(2L);
+            return dispute;
+        });
 
         CreateDisputeRequest req = CreateDisputeRequest.builder()
                 .rescueOrderId(8790L)
@@ -169,8 +174,9 @@ class DisputeRefundServiceTest {
                 .customerReason("YÃªu cáº§u hoÃ n vÆ°á»£t má»©c")
                 .build();
 
-        assertThrows(BadRequestException.class, () -> disputeRefundService.createDispute(customer, req));
-        verify(serviceDisputeRepository, never()).save(any());
+        DisputeResponse response = disputeRefundService.createDispute(customer, req);
+
+        assertEquals(new BigDecimal("2100000.00"), response.getRequestedRefundAmount());
     }
 
     @Test
@@ -309,7 +315,7 @@ class DisputeRefundServiceTest {
         assertEquals(10L, res.getId());
         assertEquals(DisputeType.DAMAGE, res.getDisputeType());
         assertEquals(DisputeStatus.STAFF_REVIEW, res.getStatus());
-        assertEquals(new BigDecimal("500000.00"), res.getRequestedRefundAmount());
+        assertEquals(new BigDecimal("2100000.00"), res.getRequestedRefundAmount());
     }
 
     @Test
@@ -335,7 +341,7 @@ class DisputeRefundServiceTest {
         DisputeResponse res = disputeRefundService.createDispute(customer, req);
         assertNotNull(res);
         assertEquals(DisputeType.POOR_QUALITY, res.getDisputeType());
-        assertEquals(new BigDecimal("200000.00"), res.getRequestedRefundAmount());
+        assertEquals(new BigDecimal("2100000.00"), res.getRequestedRefundAmount());
     }
 
     @Test

@@ -1,3 +1,4 @@
+import { GarageRatingsView } from './components/views/GarageRatingsView';
 // ============================================================================
 // TỆP ĐIỀU HƯỚNG TRUNG TÂM & QUẢN LÝ BỐ CỤC ỨNG DỤNG WEB PORTAL (APP.TSX)
 // Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Quản trị Tài chính & Hệ thống Admin
@@ -394,7 +395,6 @@ function MainDashboard() {
           element={
             <LoginView
               onSwitchToRegister={() => navigate('/register')}
-              onActivate={() => navigate('/activate')}
             />
           }
         />
@@ -549,6 +549,10 @@ function MainDashboard() {
               element={<GarageAttendanceView onShowToast={showToast} />}
             />
             {/* Doanh thu & Ví Gara */}
+            <Route
+              path="/owner/garage-ratings"
+              element={<GarageRatingsView />}
+            />
             <Route
               path="/owner/garage-finance"
               element={<GarageOperationsView mode="finance" />}

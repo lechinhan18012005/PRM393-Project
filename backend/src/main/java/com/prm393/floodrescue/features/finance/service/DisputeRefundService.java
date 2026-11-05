@@ -111,30 +111,22 @@ public class DisputeRefundService {
             }
         }
 
-        BigDecimal requestedRefund = request.getRequestedRefundAmount();
-        if (requestedRefund == null || requestedRefund.compareTo(BigDecimal.ZERO) <= 0) {
+        BigDecimal requestedAmountFromClient = request.getRequestedRefundAmount();
+        if (requestedAmountFromClient == null || requestedAmountFromClient.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BadRequestException("Số tiền yêu cầu hoàn trả phải lớn hơn 0");
         }
 
         BigDecimal originalAmount;
+        BigDecimal requestedRefund;
         if (tx != null && tx.getAmount() != null) {
             originalAmount = tx.getAmount();
+            requestedRefund = originalAmount;
         } else if (order != null && order.getTotalAmount() != null) {
             originalAmount = order.getTotalAmount();
+            requestedRefund = originalAmount;
         } else {
+            requestedRefund = requestedAmountFromClient;
             originalAmount = requestedRefund.max(new BigDecimal("150000"));
-        }
-
-        if (requestedRefund.compareTo(originalAmount) > 0) {
-            if (tx != null) {
-                throw new BadRequestException(String.format(
-                        "Số tiền yêu cầu hoàn trả (%s VNĐ) không được vượt quá tổng tiền đã thanh toán (%s VNĐ)",
-                        requestedRefund.toPlainString(),
-                        tx.getAmount().toPlainString()
-                ));
-            } else {
-                originalAmount = requestedRefund;
-            }
         }
 
         Garage garage = null;

@@ -20,6 +20,7 @@ export type ScreenId =
   | 'garage-team'
   | 'garage-attendance'
   | 'garage-finance'
+  | 'garage-ratings'
   | 'garage-transport'
   | 'staff-accounts';
 

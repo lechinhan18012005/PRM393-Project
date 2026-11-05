@@ -73,6 +73,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   Timer? _offerPollingTimer;
   Timer? _offerCountdownTimer;
   Timer? _idleGpsTimer;
+  Timer? _activeOrderPollingTimer;
+  bool _isLoadingActiveOrder = false;
 
   bool get _hasActiveOrder =>
       _activeOrder != null &&
@@ -162,8 +164,20 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
     final profile = provider?.myProfile;
     final isOnline = profile?.isOnline == true;
 
+    if (_hasActiveOrder) {
+      _stopOfferTimers();
+      _activeOrderPollingTimer ??= Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _loadActiveOrder(),
+      );
+      return;
+    }
+
+    _activeOrderPollingTimer?.cancel();
+    _activeOrderPollingTimer = null;
+
     // Chỉ poll offer và gửi GPS khi thợ AVAILABLE và chưa có cuốc active
-    if (isOnline && !_hasActiveOrder) {
+    if (isOnline) {
       if (_offerPollingTimer == null || !_offerPollingTimer!.isActive) {
         _offerPollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
           _pollOffersOnce();
@@ -176,17 +190,23 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
         });
       }
     } else {
-      _stopAllTimers();
+      _stopOfferTimers();
     }
   }
 
-  void _stopAllTimers() {
+  void _stopOfferTimers() {
     _offerPollingTimer?.cancel();
     _offerPollingTimer = null;
     _idleGpsTimer?.cancel();
     _idleGpsTimer = null;
     _offerCountdownTimer?.cancel();
     _offerCountdownTimer = null;
+  }
+
+  void _stopAllTimers() {
+    _stopOfferTimers();
+    _activeOrderPollingTimer?.cancel();
+    _activeOrderPollingTimer = null;
   }
 
   int _calculateRemainingSeconds(RescueOfferModel offer) {
@@ -338,6 +358,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   }
 
   Future<void> _loadActiveOrder() async {
+    if (_isLoadingActiveOrder) return;
+    _isLoadingActiveOrder = true;
     try {
       final order = await _rescueService.getActiveOrder();
       String? quotationStatus;
@@ -359,7 +381,10 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
           _syncTimers();
         }
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _isLoadingActiveOrder = false;
+    }
   }
 
   Future<void> _toggleAvailability() async {
@@ -840,6 +865,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
             label: Text(
               _latestQuotationStatus == 'PENDING_APPROVAL'
                   ? 'Đang chờ khách hàng duyệt báo giá'
+                  : _latestQuotationStatus == 'REVISION_REQUESTED'
+                  ? 'Khách yêu cầu chỉnh sửa báo giá'
                   : order.status == 'DISPATCHED'
                   ? 'Tiếp tục di chuyển đến điểm đón'
                   : order.orderType == 'ONSITE_REPAIR' ||

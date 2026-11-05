@@ -20,6 +20,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import com.prm393.floodrescue.features.finance.service.CommissionRateService;
+import com.prm393.floodrescue.features.rescue.entity.OrderType;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,9 +37,7 @@ public class RescuePricingService {
     private final ServiceItemRepository serviceItemRepository;
     private final MechanicStaffRepository mechanicRepository;
     private final MechanicEligibilityChecker eligibilityChecker;
-
-    @Value("${app.rescue.booking-fee:30000}")
-    private long configuredBookingFee;
+    private final CommissionRateService commissionRateService;
 
     @Value("${app.rescue.hotline:1900-6868}")
     private String configuredHotline;
@@ -45,7 +46,8 @@ public class RescuePricingService {
     private int heartbeatValidMinutes;
 
     public BigDecimal getBookingFee() {
-        return BigDecimal.valueOf(configuredBookingFee);
+        // Commission is deducted from garage revenue; no additional customer fee.
+        return BigDecimal.ZERO;
     }
 
     public String getHotline() {
@@ -140,6 +142,10 @@ public class RescuePricingService {
                 BigDecimal basePrice = service.getStandardPrice();
                 BigDecimal bookingFee = getBookingFee();
                 BigDecimal total = basePrice.add(bookingFee);
+                OrderType orderType = serviceType == ServiceType.CROSSING ? OrderType.SINGLE_CROSSING
+                        : serviceType == ServiceType.TOWING ? OrderType.TOWING : OrderType.ONSITE_REPAIR;
+                BigDecimal rate = commissionRateService.resolve(garage, orderType);
+                BigDecimal groupRate = commissionRateService.resolve(garage, OrderType.BATCH_CROSSING);
 
                 options.add(CrossingOptionDto.builder()
                         .garageId(garage.getId())
@@ -155,6 +161,9 @@ public class RescuePricingService {
                         .description(service.getDescription() != null ? service.getDescription() : service.getServiceName())
                         .serviceBasePrice(basePrice)
                         .bookingFee(bookingFee)
+                        .commissionRate(rate)
+                        .groupCommissionRate(groupRate)
+                        .platformFee(basePrice.multiply(rate).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP))
                         .totalAmount(total)
                         .groupPrice2Vehicles(service.getGroupPrice2Vehicles())
                         .groupPrice3Vehicles(service.getGroupPrice3Vehicles())

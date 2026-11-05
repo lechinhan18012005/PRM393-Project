@@ -164,7 +164,7 @@ class DisputeRefundIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.status").value("STAFF_REVIEW"))
                 .andExpect(jsonPath("$.data.originalAmount").value(2100000.00))
-                .andExpect(jsonPath("$.data.requestedRefundAmount").value(600000))
+                .andExpect(jsonPath("$.data.requestedRefundAmount").value(2100000))
                 .andReturn().getResponse().getContentAsString();
 
         JsonNode disputeNode = mapper.readTree(createRes).get("data");

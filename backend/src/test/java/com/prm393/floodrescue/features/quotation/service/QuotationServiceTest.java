@@ -12,6 +12,7 @@ import com.prm393.floodrescue.common.contracts.service.RescueOrderLookup;
 import com.prm393.floodrescue.features.quotation.dto.CreateQuotationItemRequest;
 import com.prm393.floodrescue.features.quotation.dto.CreateQuotationRequest;
 import com.prm393.floodrescue.features.quotation.entity.Quotation;
+import com.prm393.floodrescue.features.quotation.entity.QuotationStatus;
 import com.prm393.floodrescue.features.quotation.repository.QuotationRepository;
 import com.prm393.floodrescue.features.quotation.service.impl.QuotationServiceImpl;
 import com.prm393.floodrescue.common.exception.BadRequestException;
@@ -100,6 +101,50 @@ class QuotationServiceTest {
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("Không thể báo giá đồng thời");
         verify(quotationRepository, never()).save(any());
+    }
+
+    @Test
+    void revisionCreatesNextVersionAndSupersedesPreviousQuotation() {
+        QuotationServiceImpl service = new QuotationServiceImpl(
+                quotationRepository, garageCatalog, orderLookup, orderCommands);
+        User mechanicUser = User.builder().id(7L).role(Role.FIELD_MECHANIC).build();
+        when(orderLookup.getRequiredOrder(10L)).thenReturn(OrderSnapshot.builder()
+                .orderId(10L).mechanicUserId(7L).mechanicStaffId(70L)
+                .garageId(2L).branchId(3L).status("IN_PROGRESS")
+                .bookingFee(new BigDecimal("30000")).build());
+        when(garageCatalog.getRequiredMechanicContext(7L)).thenReturn(MechanicContextSnapshot.builder()
+                .userId(7L).mechanicStaffId(70L).garageId(2L).branchId(3L)
+                .garageApproved(true).branchOpen(true).build());
+        when(garageCatalog.getRequiredActiveService(5L, 2L)).thenReturn(serviceItem(
+                5L, "Sấy bugi", ServiceType.REPAIR_ONSITE, "80000"));
+
+        Quotation previous = Quotation.builder()
+                .id(88L).orderId(10L).mechanicId(70L).version(1)
+                .status(QuotationStatus.REVISION_REQUESTED).latest(true)
+                .diagnosis("Chẩn đoán V1").bookingFee(new BigDecimal("30000"))
+                .subtotalAmount(new BigDecimal("80000")).discountAmount(BigDecimal.ZERO)
+                .totalAmount(new BigDecimal("110000")).build();
+        when(quotationRepository.findFirstByOrderIdAndLatestTrue(10L))
+                .thenReturn(Optional.of(previous));
+        when(quotationRepository.save(any())).thenAnswer(invocation -> {
+            Quotation quotation = invocation.getArgument(0);
+            quotation.setId(99L);
+            return quotation;
+        });
+
+        CreateQuotationRequest request = new CreateQuotationRequest();
+        request.setDiagnosis("Chẩn đoán đã chỉnh sửa");
+        request.setDiscountAmount(new BigDecimal("10000"));
+        request.setItems(List.of(quotationItem(5L)));
+
+        var result = service.create(10L, mechanicUser, request);
+
+        assertThat(previous.isLatest()).isFalse();
+        assertThat(previous.getStatus()).isEqualTo(QuotationStatus.SUPERSEDED);
+        assertThat(result.getVersion()).isEqualTo(2);
+        assertThat(result.getParentQuotationId()).isEqualTo(88L);
+        assertThat(result.getStatus()).isEqualTo(QuotationStatus.PENDING_APPROVAL);
+        verify(orderCommands).markWaitingForQuotationApproval(10L, 99L, new BigDecimal("100000"));
     }
 
     private GarageServiceSnapshot serviceItem(

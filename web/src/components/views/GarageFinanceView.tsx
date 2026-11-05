@@ -12,7 +12,7 @@ const serviceNames: Record<string, string> = {
 };
 const statuses: Record<string, string> = { PENDING: 'Chờ duyệt', APPROVED: 'Đã duyệt, chờ chuyển khoản', TRANSFERRED: 'Đã chuyển khoản', REJECTED: 'Từ chối' };
 const transactionNames: Record<string, string> = {
-  ORDER_INCOME: 'Thu từ đơn hàng', COMMISSION_DEDUCT: 'Khấu trừ phí sàn', PAYOUT_WITHDRAW: 'Rút tiền',
+  ORDER_INCOME: 'Thu từ đơn hàng', COMMISSION_DEDUCT: 'Khấu trừ phí chiết khấu của nền tảng', PAYOUT_WITHDRAW: 'Rút tiền',
   DISPUTE_REFUND_DEDUCT: 'Hoàn tiền khiếu nại', MANUAL_ADJUSTMENT: 'Điều chỉnh số dư'
 };
 
@@ -21,7 +21,7 @@ export function GarageRevenueStats({ revenue }: { revenue: GarageWalletBackend['
   return <div className="garage-stat-grid three">
     <GarageStat label={month ? `Thực nhận · Tháng ${month}` : 'Thực nhận'} value={money(revenue?.netRevenue)} detail={revenue ? 'Từ giao dịch thanh toán thành công' : 'Chưa có dữ liệu doanh thu'} icon={<Receipt size={18} />} />
     <GarageStat label="Đơn đã thanh toán" value={typeof revenue?.paidOrderCount === 'number' && Number.isFinite(revenue.paidOrderCount) ? String(revenue.paidOrderCount) : '---'} detail={month ? `Trong tháng ${month}` : 'Chưa có dữ liệu doanh thu'} icon={<Truck size={18} />} accent="teal" />
-    <GarageStat label="Phí sàn" value={money(revenue?.platformFee)} detail={revenue ? 'Theo phí thực tế của từng giao dịch' : 'Chưa có dữ liệu doanh thu'} icon={<Wallet size={18} />} accent="blue" />
+    <GarageStat label="Phí chiết khấu của nền tảng" value={money(revenue?.platformFee)} detail={revenue ? 'Theo phí thực tế của từng giao dịch' : 'Chưa có dữ liệu doanh thu'} icon={<Wallet size={18} />} accent="blue" />
   </div>;
 }
 
@@ -151,7 +151,8 @@ export function GarageFinanceView() {
       {showPayout && wallet && <GarageModal title="Yêu cầu rút tiền" description={`Số dư khả dụng: ${money(wallet?.availableBalance)}`} onClose={() => { if (!submittingRef.current) setShowPayout(false); }}>
         <form className="garage-form" onSubmit={submitPayout}>
           <GarageError message={payoutError} />
-          <label>Số tiền (VNĐ)<input type="number" min="50000" max={wallet.availableBalance} step="1" required disabled={submitting} value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></label>
+          <label>Số tiền (VNĐ)<input type="text" inputMode="numeric" required disabled={submitting} value={form.amount ? Number(form.amount).toLocaleString('vi-VN') : ''} onChange={e => setForm({ ...form, amount: e.target.value.replace(/\D/g, '').replace(/^0+/, '') })} /></label>
+          {form.amount && Number(form.amount) > wallet.availableBalance && <p style={{ color: '#dc2626', fontSize: 13, margin: '-4px 0 0' }}>Số tiền nhập vào ({Number(form.amount).toLocaleString('vi-VN')}đ) lớn hơn số dư khả dụng của gara ({wallet.availableBalance.toLocaleString('vi-VN')}đ).</p>}
           <label>Mã ngân hàng<input required maxLength={30} placeholder="VD: VCB" disabled={submitting} value={form.bankCode} onChange={e => setForm({ ...form, bankCode: e.target.value })} /></label>
           <label>Tên ngân hàng<input maxLength={120} disabled={submitting} value={form.bankName} onChange={e => setForm({ ...form, bankName: e.target.value })} /></label>
           <label>Số tài khoản<input required maxLength={60} inputMode="numeric" disabled={submitting} value={form.accountNumber} onChange={e => setForm({ ...form, accountNumber: e.target.value })} /></label>

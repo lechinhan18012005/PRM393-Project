@@ -458,11 +458,9 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen>
         widget.amount ??
         widget.rescueOrder?.totalAmount ??
         150000.0;
-    final commissionRate = _transaction?.commissionRate ?? 10.0;
-    final platformFee =
-        _transaction?.platformFee ?? (displayAmount * commissionRate / 100);
-    final netGarageAmount =
-        _transaction?.netGarageAmount ?? (displayAmount - platformFee);
+    final commissionRate = _transaction?.commissionRate;
+    final platformFee = _transaction?.platformFee;
+    final netGarageAmount = _transaction?.netGarageAmount;
     final bankName = _transaction?.bankName ?? 'MB Bank (Quân Đội)';
     final accountNumber = _transaction?.accountNumber ?? '038299482910';
     final accountHolder =
@@ -719,11 +717,11 @@ class _VietQRPaymentScreenState extends State<VietQRPaymentScreen>
                   _buildBankRow('Số tài khoản', accountNumber),
                   _buildBankRow('Chủ tài khoản', accountHolder),
                   _buildBankRow('Nội dung chuyển khoản', paymentContent),
-                  _buildBankRow(
-                    'Phí điều phối (${commissionRate.toStringAsFixed(1)}%)',
+                  if (commissionRate != null && platformFee != null) _buildBankRow(
+                    'Phí chiết khấu của nền tảng (${commissionRate.toStringAsFixed(1)}%)',
                     _formatVnd(platformFee),
                   ),
-                  _buildBankRow('Thực nhận Gara', _formatVnd(netGarageAmount)),
+                  if (netGarageAmount != null) _buildBankRow('Thực nhận Gara', _formatVnd(netGarageAmount)),
                 ],
               ),
             ),

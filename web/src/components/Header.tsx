@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // TẬP TIN: Header.tsx
 // TÁC GIẢ / PHỤ TRÁCH: Nguyễn Hoàng Long - Quản trị Tài chính & Hệ thống Admin
 // PHÂN HỆ: Thanh điều hướng cấp cao (Top Application Header)
@@ -12,7 +12,7 @@
 // ============================================================================
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Bell, ChevronDown, LogOut, Search, X } from 'lucide-react';
+import { Bell, ChevronDown, LogOut } from 'lucide-react';
 import { ModuleType, ScreenId } from '../types';
 import { User } from '../types/auth';
 import { roleModules } from '../permissions';
@@ -207,31 +207,6 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           ))}
       </nav>
-
-      {/* Ô tìm kiếm nhanh toàn hệ thống */}
-      {onSearchChange && (
-        <div className="header-search" role="search">
-          <Search size={15} className="header-search-icon" aria-hidden="true" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Tìm mã đơn, đối tác, thợ..."
-            aria-label="Tìm kiếm toàn hệ thống"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              className="header-search-clear"
-              onClick={() => onSearchChange('')}
-              aria-label="Xóa tìm kiếm"
-              title="Xóa nội dung tìm kiếm"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Khu vực tiện ích hệ thống bên phải (Status, Thông báo, Hồ sơ người dùng) */}
       <div className="header-utilities">

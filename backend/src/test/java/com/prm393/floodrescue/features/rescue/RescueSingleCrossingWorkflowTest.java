@@ -75,8 +75,7 @@ class RescueSingleCrossingWorkflowTest {
     @BeforeEach
     void setUp() {
         eligibilityChecker = new MechanicEligibilityChecker(rescueOrderRepository);
-        pricingService = new RescuePricingService(garageRepository, branchRepository, serviceItemRepository, mechanicRepository, eligibilityChecker);
-        ReflectionTestUtils.setField(pricingService, "configuredBookingFee", 30000L);
+        pricingService = new RescuePricingService(garageRepository, branchRepository, serviceItemRepository, mechanicRepository, eligibilityChecker, new com.prm393.floodrescue.features.finance.service.CommissionRateService(mock(com.prm393.floodrescue.features.finance.repository.CommissionConfigRepository.class)));
         ReflectionTestUtils.setField(pricingService, "configuredHotline", "1900-6868");
         ReflectionTestUtils.setField(pricingService, "heartbeatValidMinutes", 5);
 
@@ -132,9 +131,29 @@ class RescueSingleCrossingWorkflowTest {
     @DisplayName("Giá dịch vụ snapshot = serviceBasePrice + bookingFee đúng chuẩn BigDecimal")
     void pricingService_Calculation() {
         BigDecimal total = pricingService.calculateTotalAmount(new BigDecimal("120000"));
-        assertEquals(new BigDecimal("150000"), total);
-        assertEquals(new BigDecimal("30000"), pricingService.getBookingFee());
+        assertEquals(new BigDecimal("120000"), total);
+        assertEquals(BigDecimal.ZERO, pricingService.getBookingFee());
         assertEquals("1900-6868", pricingService.getHotline());
+    }
+
+    @Test
+    void garageOptions_IncludeCommissionWithoutAddingToCustomerTotal() {
+        sampleGarage.setCommissionRate(new BigDecimal("12.50"));
+        when(garageRepository.findAll()).thenReturn(List.of(sampleGarage));
+        when(serviceItemRepository.findByGarageIdAndActiveTrueAndDeletedFalseOrderByCreatedAtAsc(1L))
+                .thenReturn(List.of(sampleCrossingService));
+        when(branchRepository.findByGarageIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(sampleBranch));
+        when(mechanicRepository.findByGarageIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(sampleMechanic));
+
+        var options = pricingService.getEligibleCrossingGarages();
+
+        assertEquals(1, options.size());
+        var option = options.get(0);
+        assertEquals(new BigDecimal("120000"), option.getTotalAmount());
+        assertEquals(BigDecimal.ZERO, option.getBookingFee());
+        assertEquals(new BigDecimal("12.50"), option.getCommissionRate());
+        assertEquals(new BigDecimal("12.50"), option.getGroupCommissionRate());
+        assertEquals(new BigDecimal("15000.00"), option.getPlatformFee());
     }
 
     @Test
@@ -225,8 +244,8 @@ class RescueSingleCrossingWorkflowTest {
         assertNotNull(response);
         assertEquals(RescueOrderStatus.REQUESTED, response.getStatus());
         assertEquals(new BigDecimal("120000"), response.getServiceBasePrice());
-        assertEquals(new BigDecimal("30000"), response.getBookingFee());
-        assertEquals(new BigDecimal("150000"), response.getTotalAmount());
+        assertEquals(BigDecimal.ZERO, response.getBookingFee());
+        assertEquals(new BigDecimal("120000"), response.getTotalAmount());
         assertEquals("59-B1 892.44", response.getVehiclePlate());
     }
 
@@ -264,7 +283,7 @@ class RescueSingleCrossingWorkflowTest {
         RescueOrderResponse response = dispatchService.createSingleCrossingOrder(sampleCustomer, request);
 
         assertEquals(OrderType.ONSITE_REPAIR, response.getOrderType());
-        assertEquals(new BigDecimal("110000"), response.getTotalAmount());
+        assertEquals(new BigDecimal("80000"), response.getTotalAmount());
         verify(rescueOfferRepository).save(any(RescueOffer.class));
     }
 

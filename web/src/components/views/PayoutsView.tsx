@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // MÀN HÌNH QUẢN LÝ & PHÊ DUYỆT YÊU CẦU RÚT TIỀN VÍ GARA (PAYOUTS VIEW - UC-26)
 // Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Quản trị Tài chính & Hệ thống Admin
 // Mục đích (Yêu cầu #6):
@@ -96,7 +96,6 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
 
   // State cho biểu mẫu xử lý của Admin trên khung bên phải
   const [adminNotesInput, setAdminNotesInput] = useState<string>('');
-  const [txReferenceInput, setTxReferenceInput] = useState<string>('');
 
   // Trạng thái đang tải dữ liệu và đang gửi quyết định phê duyệt/từ chối
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -224,10 +223,8 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
     if (selectedPayout) {
       const f = extractPayoutFields(selectedPayout);
       setAdminNotesInput(f.adminNotes || '');
-      setTxReferenceInput(selectedPayout.transactionReference || '');
     } else {
       setAdminNotesInput('');
-      setTxReferenceInput('');
     }
   }, [selectedPayout]);
 
@@ -253,7 +250,7 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
       const updated = await financeApi.processPayout(selectedPayout.id, {
         approve,
         adminNotes: adminNotesInput.trim() || defaultNote,
-        transactionReference: txReferenceInput.trim() || undefined
+        transactionReference: undefined
       });
 
       // Cập nhật trực tiếp bản ghi trong state `payoutList`
@@ -533,18 +530,6 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
                   {/* Khu vực nhập ghi chú & nút Phê duyệt / Từ chối */}
                   {isActionable ? (
                     <div className="space-y-3 pt-1">
-                      <div>
-                        <label className="block text-xs font-bold uppercase text-secondary mb-1">
-                          Mã tham chiếu giao dịch ngân hàng
-                        </label>
-                        <input
-                          type="text"
-                          value={txReferenceInput}
-                          onChange={(e) => setTxReferenceInput(e.target.value)}
-                          placeholder="Ví dụ: FT261105882910..."
-                          className="w-full h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low font-mono text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
-                        />
-                      </div>
 
                       <div>
                         <label className="block text-xs font-bold uppercase text-secondary mb-1">
