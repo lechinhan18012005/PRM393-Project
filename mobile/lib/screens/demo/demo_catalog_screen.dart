@@ -76,7 +76,7 @@ class DemoCatalogScreen extends StatelessWidget {
           _buildScreenTile(
             context,
             'Theo dõi cứu hộ',
-            'Bản đồ di chuyển và ETA đến hiện trường',
+            'Bản đồ di chuyển đến hiện trường',
             const LiveTrackingScreen(),
           ),
           _buildScreenTile(
@@ -141,7 +141,7 @@ class DemoCatalogScreen extends StatelessWidget {
           _buildScreenTile(
             context,
             'Nhận yêu cầu cứu hộ',
-            'Bộ đếm ngược 45s và chi tiết cứu hộ',
+            'Bộ đếm ngược 2 phút và chi tiết cứu hộ',
             const IncomingDispatchScreen(),
           ),
           _buildScreenTile(

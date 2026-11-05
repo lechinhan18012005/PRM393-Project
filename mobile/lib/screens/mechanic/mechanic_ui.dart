@@ -26,10 +26,12 @@ class MechanicPage extends StatelessWidget {
     required this.title,
     required this.children,
     this.bottom,
+    this.showDemoNotice = true,
   });
   final String title;
   final List<Widget> children;
   final Widget? bottom;
+  final bool showDemoNotice;
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppColors.background,
@@ -44,7 +46,10 @@ class MechanicPage extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 680),
         child: ListView(
           padding: const EdgeInsets.all(16),
-          children: [const MechanicDemoNotice(), ...children],
+          children: [
+            if (showDemoNotice) const MechanicDemoNotice(),
+            ...children,
+          ],
         ),
       ),
     ),

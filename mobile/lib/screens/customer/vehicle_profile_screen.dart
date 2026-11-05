@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/models/vehicle_model.dart';
-import '../../core/widgets/logout_dialog.dart';
 import '../../core/widgets/rescue_ui.dart';
 import '../../providers/vehicle_provider.dart';
 
@@ -74,20 +73,29 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
     }
     final clean = value.trim().toUpperCase();
     // Chấp nhận các dạng: 59-B1 892.44, 29A1-123.45, 43D1 12345, 60-B8-8888, v.v.
-    final plateRegex = RegExp(r'^[0-9]{2}[-\s]?[A-Z0-9]{1,2}[-\s]?[0-9]{3,5}(\.[0-9]{2})?$');
+    final plateRegex = RegExp(
+      r'^[0-9]{2}[-\s]?[A-Z0-9]{1,2}[-\s]?[0-9]{3,5}(\.[0-9]{2})?$',
+    );
     if (!plateRegex.hasMatch(clean)) {
       return 'Biển số chưa đúng định dạng (Ví dụ: 59-B1 892.44)';
     }
     return null;
   }
 
-  Future<void> _showVehicleFormModal(BuildContext context, {VehicleModel? existing}) async {
+  Future<void> _showVehicleFormModal(
+    BuildContext context, {
+    VehicleModel? existing,
+  }) async {
     final isEdit = existing != null;
     final formKey = GlobalKey<FormState>();
-    final plateController = TextEditingController(text: existing?.licensePlate ?? '');
+    final plateController = TextEditingController(
+      text: existing?.licensePlate ?? '',
+    );
     final brandController = TextEditingController(text: existing?.brand ?? '');
     final modelController = TextEditingController(text: existing?.model ?? '');
-    final engineController = TextEditingController(text: existing?.engineCapacity ?? '');
+    final engineController = TextEditingController(
+      text: existing?.engineCapacity ?? '',
+    );
     final colorController = TextEditingController(text: existing?.color ?? '');
     String selectedType = existing?.vehicleType ?? 'SCOOTER';
     bool isDefault = existing?.isDefault ?? false;
@@ -130,7 +138,9 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            isEdit ? 'Chỉnh sửa phương tiện' : 'Thêm phương tiện mới',
+                            isEdit
+                                ? 'Chỉnh sửa phương tiện'
+                                : 'Thêm phương tiện mới',
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
@@ -138,7 +148,9 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.close),
-                            onPressed: isSubmitting ? null : () => Navigator.pop(bottomSheetCtx),
+                            onPressed: isSubmitting
+                                ? null
+                                : () => Navigator.pop(bottomSheetCtx),
                           ),
                         ],
                       ),
@@ -156,12 +168,19 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                              const Icon(
+                                Icons.error_outline,
+                                color: AppColors.error,
+                                size: 20,
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   formError!,
-                                  style: const TextStyle(color: AppColors.error, fontSize: 13),
+                                  style: const TextStyle(
+                                    color: AppColors.error,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
                             ],
@@ -191,11 +210,14 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Hãng xe *',
                                 hintText: 'Honda, Yamaha...',
-                                prefixIcon: Icon(Icons.branding_watermark_outlined),
+                                prefixIcon: Icon(
+                                  Icons.branding_watermark_outlined,
+                                ),
                                 border: OutlineInputBorder(),
                               ),
-                              validator: (v) =>
-                                  (v == null || v.trim().isEmpty) ? 'Nhập hãng xe' : null,
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'Nhập hãng xe'
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -209,8 +231,9 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                 prefixIcon: Icon(Icons.two_wheeler),
                                 border: OutlineInputBorder(),
                               ),
-                              validator: (v) =>
-                                  (v == null || v.trim().isEmpty) ? 'Nhập dòng xe' : null,
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'Nhập dòng xe'
+                                  : null,
                             ),
                           ),
                         ],
@@ -224,7 +247,10 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                         children: _popularBrands.map((b) {
                           return ActionChip(
                             visualDensity: VisualDensity.compact,
-                            label: Text(b, style: const TextStyle(fontSize: 11)),
+                            label: Text(
+                              b,
+                              style: const TextStyle(fontSize: 11),
+                            ),
                             onPressed: () {
                               setModalState(() {
                                 brandController.text = b;
@@ -243,10 +269,22 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                           border: OutlineInputBorder(),
                         ),
                         items: const [
-                          DropdownMenuItem(value: 'SCOOTER', child: Text('Xe tay ga')),
-                          DropdownMenuItem(value: 'MANUAL', child: Text('Xe số')),
-                          DropdownMenuItem(value: 'CLUTCH', child: Text('Xe côn tay')),
-                          DropdownMenuItem(value: 'ELECTRIC', child: Text('Xe máy điện')),
+                          DropdownMenuItem(
+                            value: 'SCOOTER',
+                            child: Text('Xe tay ga'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'MANUAL',
+                            child: Text('Xe số'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'CLUTCH',
+                            child: Text('Xe côn tay'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'ELECTRIC',
+                            child: Text('Xe máy điện'),
+                          ),
                         ],
                         onChanged: (val) {
                           if (val != null) {
@@ -292,7 +330,10 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                         children: _popularCapacities.map((cap) {
                           return ActionChip(
                             visualDensity: VisualDensity.compact,
-                            label: Text(cap, style: const TextStyle(fontSize: 11)),
+                            label: Text(
+                              cap,
+                              style: const TextStyle(fontSize: 11),
+                            ),
                             onPressed: () {
                               setModalState(() {
                                 engineController.text = cap;
@@ -308,7 +349,10 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                         title: const Text('Đặt làm xe mặc định ưu tiên'),
                         subtitle: const Text(
                           'Tự động chọn khi bạn đặt cứu hộ vượt ngập',
-                          style: TextStyle(fontSize: 11, color: AppColors.secondary),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.secondary,
+                          ),
                         ),
                         value: isDefault,
                         onChanged: isSubmitting
@@ -337,27 +381,43 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                   final success = isEdit
                                       ? await provider.updateVehicle(
                                           existing.id,
-                                          licensePlate: plateController.text.trim().toUpperCase(),
+                                          licensePlate: plateController.text
+                                              .trim()
+                                              .toUpperCase(),
                                           brand: brandController.text.trim(),
                                           model: modelController.text.trim(),
                                           vehicleType: selectedType,
-                                          engineCapacity: engineController.text.trim().isNotEmpty
+                                          engineCapacity:
+                                              engineController.text
+                                                  .trim()
+                                                  .isNotEmpty
                                               ? engineController.text.trim()
                                               : null,
-                                          color: colorController.text.trim().isNotEmpty
+                                          color:
+                                              colorController.text
+                                                  .trim()
+                                                  .isNotEmpty
                                               ? colorController.text.trim()
                                               : null,
                                           isDefault: isDefault,
                                         )
                                       : await provider.addVehicle(
-                                          licensePlate: plateController.text.trim().toUpperCase(),
+                                          licensePlate: plateController.text
+                                              .trim()
+                                              .toUpperCase(),
                                           brand: brandController.text.trim(),
                                           model: modelController.text.trim(),
                                           vehicleType: selectedType,
-                                          engineCapacity: engineController.text.trim().isNotEmpty
+                                          engineCapacity:
+                                              engineController.text
+                                                  .trim()
+                                                  .isNotEmpty
                                               ? engineController.text.trim()
                                               : null,
-                                          color: colorController.text.trim().isNotEmpty
+                                          color:
+                                              colorController.text
+                                                  .trim()
+                                                  .isNotEmpty
                                               ? colorController.text.trim()
                                               : null,
                                           isDefault: isDefault,
@@ -378,8 +438,7 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                   } else {
                                     setModalState(() {
                                       isSubmitting = false;
-                                      formError = provider?.errorMessage ??
-                                          'Không thể lưu phương tiện. Vui lòng kiểm tra lại!';
+                                      formError = provider?.errorMessage ?? 'Không thể lưu phương tiện. Vui lòng kiểm tra lại!';
                                     });
                                   }
                                 },
@@ -398,7 +457,9 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                     const Icon(Icons.check, size: 20),
                                     const SizedBox(width: 8),
                                     Text(
-                                      isEdit ? 'Cập nhật phương tiện' : 'Lưu phương tiện',
+                                      isEdit
+                                          ? 'Cập nhật phương tiện'
+                                          : 'Lưu phương tiện',
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
@@ -430,7 +491,9 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Xóa phương tiện'),
-        content: Text('Bạn có chắc chắn muốn xóa xe "${v.displayName}" (${v.licensePlate})?'),
+        content: Text(
+          'Bạn có chắc chắn muốn xóa xe "${v.displayName}" (${v.licensePlate})?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -486,12 +549,6 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
               icon: const Icon(Icons.refresh),
               onPressed: () => vehicleProvider?.fetchVehicles(),
             ),
-          IconButton(
-            key: const Key('vehicle-profile-logout-btn'),
-            icon: const Icon(Icons.logout, color: AppColors.error),
-            tooltip: 'Đăng xuất',
-            onPressed: () => showLogoutConfirmationDialog(context),
-          ),
         ],
       ),
       body: Center(
@@ -510,8 +567,7 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                   RescueIntro(
                     eyebrow: 'PHƯƠNG TIỆN CỦA BẠN',
                     title: 'Sẵn sàng cho hành trình',
-                    description:
-                        'Quản lý thông tin xe máy để tự động tính toán mức chịu ngập và cứu hộ nhanh chóng.',
+                    description: 'Quản lý thông tin xe máy để tự động tính toán mức chịu ngập và cứu hộ nhanh chóng.',
                     trailing: RescueLabel(
                       '$count xe',
                       color: const Color(0xFFB9CEDB),
@@ -539,12 +595,19 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                       child: RescuePanel(
                         child: Column(
                           children: [
-                            const Icon(Icons.error_outline, color: AppColors.error, size: 36),
+                            const Icon(
+                              Icons.error_outline,
+                              color: AppColors.error,
+                              size: 36,
+                            ),
                             const SizedBox(height: 8),
                             Text(
                               'Không thể tải danh sách phương tiện: $errorMessage',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 13, color: AppColors.error),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.error,
+                              ),
                             ),
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
@@ -581,7 +644,10 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                               const Text(
                                 'Thêm xe máy để hệ thống tự động tính toán mức ngập và hỗ trợ điều phối cứu hộ kịp thời.',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 13, color: AppColors.secondary),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.secondary,
+                                ),
                               ),
                               const SizedBox(height: 16),
                               FilledButton.icon(
@@ -599,7 +665,8 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                     ...vehicles.indexed.map((entry) {
                       final index = entry.$1;
                       final v = entry.$2;
-                      final isSelected = vehicleProvider?.selectedVehicle?.id == v.id;
+                      final isSelected =
+                          vehicleProvider?.selectedVehicle?.id == v.id;
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -613,7 +680,9 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: isSelected ? AppColors.primary : Colors.transparent,
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : Colors.transparent,
                                 width: 1.5,
                               ),
                             ),
@@ -622,7 +691,8 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Container(
                                         padding: const EdgeInsets.all(12),
@@ -630,7 +700,9 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                           color: isSelected
                                               ? AppColors.primaryContainer
                                               : AppColors.surfaceContainerLow,
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                         ),
                                         child: Icon(
                                           _getVehicleIcon(v.vehicleType),
@@ -643,7 +715,8 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               v.displayName,
@@ -664,14 +737,26 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                         ),
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.edit_outlined, color: Colors.black45, size: 20),
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          color: Colors.black45,
+                                          size: 20,
+                                        ),
                                         tooltip: 'Chỉnh sửa xe',
-                                        onPressed: () => _showVehicleFormModal(context, existing: v),
+                                        onPressed: () => _showVehicleFormModal(
+                                          context,
+                                          existing: v,
+                                        ),
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.delete_outline, color: Colors.black45, size: 20),
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          color: Colors.black45,
+                                          size: 20,
+                                        ),
                                         tooltip: 'Xóa xe này',
-                                        onPressed: () => _confirmDelete(context, v),
+                                        onPressed: () =>
+                                            _confirmDelete(context, v),
                                       ),
                                     ],
                                   ),
@@ -680,11 +765,20 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                     spacing: 8,
                                     runSpacing: 8,
                                     children: [
-                                      RescueLabel(v.licensePlate, color: AppColors.secondary),
+                                      RescueLabel(
+                                        v.licensePlate,
+                                        color: AppColors.secondary,
+                                      ),
                                       if (v.isDefault)
-                                        const RescueLabel('Xe mặc định', color: Colors.blueAccent),
+                                        const RescueLabel(
+                                          'Xe mặc định',
+                                          color: Colors.blueAccent,
+                                        ),
                                       if (isSelected)
-                                        const RescueLabel('Đang chọn', color: AppColors.primary),
+                                        const RescueLabel(
+                                          'Đang chọn',
+                                          color: AppColors.primary,
+                                        ),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
@@ -700,12 +794,17 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                     children: [
                                       Expanded(
                                         child: OutlinedButton.icon(
-                                          key: ValueKey('select-vehicle-$index'),
+                                          key: ValueKey(
+                                            'select-vehicle-$index',
+                                          ),
                                           onPressed: isSelected
                                               ? null
                                               : () {
-                                                  vehicleProvider?.selectVehicle(v);
-                                                  widget.onSelectVehicle?.call(index);
+                                                  vehicleProvider
+                                                      ?.selectVehicle(v);
+                                                  widget.onSelectVehicle?.call(
+                                                    index,
+                                                  );
                                                 },
                                           icon: Icon(
                                             isSelected
@@ -714,7 +813,9 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                             size: 16,
                                           ),
                                           label: Text(
-                                            isSelected ? 'Xe đang chọn' : 'Dùng xe này',
+                                            isSelected
+                                                ? 'Xe đang chọn'
+                                                : 'Dùng xe này',
                                           ),
                                         ),
                                       ),
@@ -722,14 +823,21 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                                         const SizedBox(width: 8),
                                         IconButton.outlined(
                                           tooltip: 'Đặt làm xe mặc định',
-                                          icon: const Icon(Icons.star_border, size: 18),
+                                          icon: const Icon(
+                                            Icons.star_border,
+                                            size: 18,
+                                          ),
                                           onPressed: () async {
-                                            final scaffoldMessenger = ScaffoldMessenger.of(context);
-                                            final ok = await vehicleProvider?.setDefaultVehicle(v.id);
+                                            final scaffoldMessenger =
+                                                ScaffoldMessenger.of(context);
+                                            final ok = await vehicleProvider
+                                                ?.setDefaultVehicle(v.id);
                                             if (ok == true) {
                                               scaffoldMessenger.showSnackBar(
                                                 const SnackBar(
-                                                  content: Text('Đã cập nhật xe mặc định thành công!'),
+                                                  content: Text(
+                                                    'Đã cập nhật xe mặc định thành công!',
+                                                  ),
                                                 ),
                                               );
                                             }
@@ -753,53 +861,6 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                       icon: Icons.cloud_done_outlined,
                       title: 'Đồng bộ đám mây',
                       value: 'Dữ liệu phương tiện được lưu trữ bảo mật và đồng bộ trên tài khoản của bạn, tự động điền khi tạo yêu cầu cứu hộ.',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Mục Đăng xuất tài khoản được thiết kế gọn gàng và trang nhã
-                  RescuePanel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.shield_outlined, size: 18, color: AppColors.secondary),
-                            SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'Phiên đăng nhập & Bảo mật',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Đăng xuất phiên làm việc hiện tại trên thiết bị. Dữ liệu phương tiện của bạn vẫn được lưu trữ an toàn trên tài khoản đám mây.',
-                          style: TextStyle(fontSize: 12, color: AppColors.secondary),
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton.tonalIcon(
-                          key: const Key('logout-button-vehicle-profile'),
-                          onPressed: () => showLogoutConfirmationDialog(context),
-                          icon: const Icon(Icons.logout, color: AppColors.error),
-                          label: const Text(
-                            'Đăng xuất tài khoản',
-                            style: TextStyle(
-                              color: AppColors.error,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.error.withValues(alpha: 0.1),
-                            minimumSize: const Size.fromHeight(44),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],

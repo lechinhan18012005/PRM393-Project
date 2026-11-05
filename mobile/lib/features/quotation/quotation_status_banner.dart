@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/utils/currency_formatter.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../screens/customer/review_quotation_screen.dart';
 import 'quotation_api.dart';
@@ -97,7 +99,7 @@ class _QuotationStatusBannerState extends State<QuotationStatusBanner> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${quotation.total.toStringAsFixed(0)} đ${pending ? ' · Chạm để xem chi tiết' : ''}',
+                        '${formatVnd(quotation.total)}${pending ? ' · Chạm để xem chi tiết' : ''}',
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.secondary,

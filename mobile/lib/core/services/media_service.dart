@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -40,15 +41,17 @@ class DeviceMediaService implements MediaService {
     try {
       final xFile = await _picker.pickImage(
         source: ImageSource.camera,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 72,
       );
       if (xFile == null) return null;
       final bytes = await xFile.readAsBytes();
       return PickedMediaFile(
         bytes: bytes,
-        filename: xFile.name.isNotEmpty ? xFile.name : 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        filename: xFile.name.isNotEmpty
+            ? xFile.name
+            : 'camera_${DateTime.now().millisecondsSinceEpoch}.jpg',
         path: xFile.path,
       );
     } catch (_) {
@@ -61,15 +64,17 @@ class DeviceMediaService implements MediaService {
     try {
       final xFile = await _picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 72,
       );
       if (xFile == null) return null;
       final bytes = await xFile.readAsBytes();
       return PickedMediaFile(
         bytes: bytes,
-        filename: xFile.name.isNotEmpty ? xFile.name : 'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        filename: xFile.name.isNotEmpty
+            ? xFile.name
+            : 'gallery_${DateTime.now().millisecondsSinceEpoch}.jpg',
         path: xFile.path,
       );
     } catch (_) {
@@ -86,12 +91,79 @@ class MockMediaService implements MediaService {
     if (mockedFile != null) return mockedFile;
     // Default valid JPEG bytes for testing
     final sampleBytes = Uint8List.fromList([
-      0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-      0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-      0x00, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01,
-      0x11, 0x00, 0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
-      0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0x37, 0xFF, 0xD9,
+      0xFF,
+      0xD8,
+      0xFF,
+      0xE0,
+      0x00,
+      0x10,
+      0x4A,
+      0x46,
+      0x49,
+      0x46,
+      0x00,
+      0x01,
+      0x01,
+      0x01,
+      0x00,
+      0x48,
+      0x00,
+      0x48,
+      0x00,
+      0x00,
+      0xFF,
+      0xDB,
+      0x00,
+      0x43,
+      0x00,
+      0xFF,
+      0xC0,
+      0x00,
+      0x0B,
+      0x08,
+      0x00,
+      0x01,
+      0x00,
+      0x01,
+      0x01,
+      0x01,
+      0x11,
+      0x00,
+      0xFF,
+      0xC4,
+      0x00,
+      0x14,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x03,
+      0xFF,
+      0xDA,
+      0x00,
+      0x08,
+      0x01,
+      0x01,
+      0x00,
+      0x00,
+      0x3F,
+      0x00,
+      0x37,
+      0xFF,
+      0xD9,
     ]);
     return PickedMediaFile(
       bytes: sampleBytes,

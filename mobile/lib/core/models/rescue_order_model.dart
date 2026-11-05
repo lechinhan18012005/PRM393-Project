@@ -13,6 +13,7 @@ class CrossingOptionModel {
   final double serviceBasePrice;
   final double bookingFee;
   final double totalAmount;
+  final Map<int, double> groupPrices;
   final String currency;
   final int estimatedTimeMin;
   final int availableMechanicCount;
@@ -32,6 +33,7 @@ class CrossingOptionModel {
     required this.serviceBasePrice,
     required this.bookingFee,
     required this.totalAmount,
+    this.groupPrices = const {},
     required this.currency,
     required this.estimatedTimeMin,
     required this.availableMechanicCount,
@@ -50,9 +52,15 @@ class CrossingOptionModel {
       serviceItemId: json['serviceItemId'] as int,
       serviceName: json['serviceName'] as String? ?? 'Chở xe qua ngập',
       description: json['description'] as String?,
-      serviceBasePrice: (json['serviceBasePrice'] as num?)?.toDouble() ?? 120000.0,
+      serviceBasePrice:
+          (json['serviceBasePrice'] as num?)?.toDouble() ?? 120000.0,
       bookingFee: (json['bookingFee'] as num?)?.toDouble() ?? 30000.0,
       totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 150000.0,
+      groupPrices: {
+        for (final count in [2, 3, 4, 5, 6])
+          if (json['groupPrice${count}Vehicles'] is num)
+            count: (json['groupPrice${count}Vehicles'] as num).toDouble(),
+      },
       currency: json['currency'] as String? ?? 'VND',
       estimatedTimeMin: json['estimatedTimeMin'] as int? ?? 20,
       availableMechanicCount: json['availableMechanicCount'] as int? ?? 1,
@@ -64,6 +72,7 @@ class RescueOrderModel {
   final int id;
   final String orderCode;
   final String orderType;
+  final int? groupVehicleCount;
   final String status;
 
   // Khách hàng
@@ -147,6 +156,7 @@ class RescueOrderModel {
     required this.id,
     required this.orderCode,
     required this.orderType,
+    this.groupVehicleCount,
     required this.status,
     required this.customerId,
     required this.customerName,
@@ -209,6 +219,7 @@ class RescueOrderModel {
       id: json['id'] as int,
       orderCode: json['orderCode'] as String? ?? 'SOS-UNKNOWN',
       orderType: json['orderType'] as String? ?? 'SINGLE_CROSSING',
+      groupVehicleCount: json['groupVehicleCount'] as int?,
       status: json['status'] as String? ?? 'REQUESTED',
       customerId: json['customerId'] as int,
       customerName: json['customerName'] as String? ?? 'Khách hàng',
@@ -221,8 +232,10 @@ class RescueOrderModel {
       mechanicAvatar: json['mechanicAvatar'] as String?,
       mechanicRating: (json['mechanicRating'] as num?)?.toDouble(),
       mechanicSpeciality: json['mechanicSpeciality'] as String?,
-      mechanicCurrentLatitude: (json['mechanicCurrentLatitude'] as num?)?.toDouble(),
-      mechanicCurrentLongitude: (json['mechanicCurrentLongitude'] as num?)?.toDouble(),
+      mechanicCurrentLatitude: (json['mechanicCurrentLatitude'] as num?)
+          ?.toDouble(),
+      mechanicCurrentLongitude: (json['mechanicCurrentLongitude'] as num?)
+          ?.toDouble(),
       garageId: json['garageId'] as int,
       garageName: json['garageName'] as String? ?? 'Gara cứu hộ',
       garagePhone: json['garagePhone'] as String?,
@@ -241,7 +254,8 @@ class RescueOrderModel {
       dropoffAddress: json['dropoffAddress'] as String? ?? '',
       dropoffLatitude: (json['dropoffLatitude'] as num?)?.toDouble() ?? 0.0,
       dropoffLongitude: (json['dropoffLongitude'] as num?)?.toDouble() ?? 0.0,
-      serviceBasePrice: (json['serviceBasePrice'] as num?)?.toDouble() ?? 120000.0,
+      serviceBasePrice:
+          (json['serviceBasePrice'] as num?)?.toDouble() ?? 120000.0,
       bookingFee: (json['bookingFee'] as num?)?.toDouble() ?? 30000.0,
       totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 150000.0,
       currency: json['currency'] as String? ?? 'VND',
@@ -353,7 +367,8 @@ class TrackingSnapshotModel {
       mechanicLatitude: (json['mechanicLatitude'] as num?)?.toDouble(),
       mechanicLongitude: (json['mechanicLongitude'] as num?)?.toDouble(),
       mechanicBearing: (json['mechanicBearing'] as num?)?.toDouble(),
-      distanceToTargetMeters: (json['distanceToTargetMeters'] as num?)?.toDouble(),
+      distanceToTargetMeters: (json['distanceToTargetMeters'] as num?)
+          ?.toDouble(),
       estimatedMinutes: json['estimatedMinutes'] as int?,
       targetType: json['targetType'] as String? ?? 'PICKUP',
       targetAddress: json['targetAddress'] as String? ?? '',
@@ -371,6 +386,7 @@ class RescueOfferModel {
   final int orderId;
   final String orderCode;
   final String orderType;
+  final int? groupVehicleCount;
   final String status;
   final String customerName;
   final String? customerPhone;
@@ -396,6 +412,7 @@ class RescueOfferModel {
     required this.orderId,
     required this.orderCode,
     required this.orderType,
+    this.groupVehicleCount,
     required this.status,
     required this.customerName,
     this.customerPhone,
@@ -423,6 +440,7 @@ class RescueOfferModel {
       orderId: json['orderId'] as int,
       orderCode: json['orderCode'] as String? ?? '',
       orderType: json['orderType'] as String? ?? 'SINGLE_CROSSING',
+      groupVehicleCount: json['groupVehicleCount'] as int?,
       status: json['status'] as String? ?? 'PENDING',
       customerName: json['customerName'] as String? ?? 'Khách hàng',
       customerPhone: json['customerPhone'] as String?,
@@ -441,7 +459,7 @@ class RescueOfferModel {
       distanceMeters: (json['distanceMeters'] as num?)?.toDouble() ?? 0.0,
       offeredAt: json['offeredAt'] as String?,
       expiresAt: json['expiresAt'] as String?,
-      secondsRemaining: json['secondsRemaining'] as int? ?? 45,
+      secondsRemaining: json['secondsRemaining'] as int? ?? 120,
     );
   }
 }

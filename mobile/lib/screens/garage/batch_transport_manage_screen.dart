@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../core/models/mechanic_staff_model.dart';
 import '../../core/services/mechanic_service.dart';
 import '../../core/services/media_service.dart';
@@ -148,7 +149,7 @@ class _TripCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '${trip.currentVehicleCount}/${trip.capacity} xe · '
-              '${trip.fare.toStringAsFixed(0)} đ/xe',
+              '${formatVnd(trip.fare)}/xe',
             ),
             const SizedBox(height: 6),
             LinearProgressIndicator(
@@ -234,7 +235,29 @@ class _BatchTripOperationScreenState extends State<_BatchTripOperationScreen> {
   }
 
   Future<void> _deliver(BatchOrderModel order) async {
-    final file = await MediaService.instance.pickImageFromCamera();
+    final fromCamera = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Chụp ảnh bằng Camera'),
+              onTap: () => Navigator.of(sheet).pop(true),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Chọn ảnh từ Thư viện'),
+              onTap: () => Navigator.of(sheet).pop(false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (fromCamera == null) return;
+    final file = fromCamera
+        ? await MediaService.instance.pickImageFromCamera()
+        : await MediaService.instance.pickImageFromGallery();
     if (file == null) return;
     setState(() => _busy = true);
     try {
@@ -281,7 +304,9 @@ class _BatchTripOperationScreenState extends State<_BatchTripOperationScreen> {
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         Text('${order.customerName} · ${order.pickupAddress}'),
-                        Text('Trạng thái: ${order.transportStage}'),
+                        Text(
+                          'Trạng thái: ${_transportStageLabel(order.transportStage)}',
+                        ),
                         const SizedBox(height: 8),
                         if (_trip.status == 'PICKING_UP')
                           OutlinedButton.icon(
@@ -379,6 +404,15 @@ class _BatchTripOperationScreenState extends State<_BatchTripOperationScreen> {
           ),
   );
 }
+
+String _transportStageLabel(String stage) => switch (stage) {
+  'VEHICLE_RECEIVED' => 'Đã tiếp nhận xe',
+  'SECURED' => 'Đã cố định xe an toàn',
+  'IN_TRANSIT' => 'Đang chở xe',
+  'ARRIVED_DROPOFF' => 'Đã đến điểm bàn giao',
+  'HANDED_OVER' => 'Đã bàn giao xe',
+  _ => 'Chưa bắt đầu',
+};
 
 class _CreateTripSheet extends StatefulWidget {
   const _CreateTripSheet({

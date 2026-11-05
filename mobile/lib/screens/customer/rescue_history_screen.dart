@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/services/rescue_service.dart';
 import '../../core/widgets/rescue_ui.dart';
@@ -68,14 +69,20 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
     if (order.isRequested) {
       _openScreen(RadarDispatchScreen(orderId: order.id));
     } else if (order.status == 'PAYMENT_PENDING') {
-      _openScreen(VietQRPaymentScreen(
-        orderId: order.id,
-        garageId: order.garageId,
-        amount: order.totalAmount,
-        orderCode: order.orderCode,
-        rescueOrder: order,
-      ));
-    } else if (['DISPATCHED', 'ARRIVED', 'IN_PROGRESS'].contains(order.status)) {
+      _openScreen(
+        VietQRPaymentScreen(
+          orderId: order.id,
+          garageId: order.garageId,
+          amount: order.totalAmount,
+          orderCode: order.orderCode,
+          rescueOrder: order,
+        ),
+      );
+    } else if ([
+      'DISPATCHED',
+      'ARRIVED',
+      'IN_PROGRESS',
+    ].contains(order.status)) {
       _openScreen(LiveTrackingScreen(orderId: order.id));
     } else {
       _showRealOrderDetail(order);
@@ -95,9 +102,7 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
             children: [
               Text(
                 'Chi tiết đơn #${o.orderCode}',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
+                style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
@@ -118,11 +123,12 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
                 title: 'Điểm đón',
                 value: o.pickupAddress,
               ),
-              RescueInfo(
-                icon: Icons.wb_sunny_outlined,
-                title: 'Điểm trả',
-                value: o.dropoffAddress,
-              ),
+              if (o.orderType != 'ONSITE_REPAIR' && o.orderType != 'TOWING')
+                RescueInfo(
+                  icon: Icons.wb_sunny_outlined,
+                  title: 'Điểm trả',
+                  value: o.dropoffAddress,
+                ),
               RescueInfo(
                 icon: Icons.storefront_outlined,
                 title: 'Gara hỗ trợ',
@@ -136,7 +142,7 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
               RescueInfo(
                 icon: Icons.payments_outlined,
                 title: 'Tổng chi phí',
-                value: '${o.totalAmount.toStringAsFixed(0)} ₫',
+                value: formatVnd(o.totalAmount),
               ),
               if (o.status == 'COMPLETED') ...[
                 const SizedBox(height: 16),
@@ -166,7 +172,9 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
                     _openScreen(ElectronicInvoiceScreen(order: o));
                   },
                   icon: const Icon(Icons.receipt_long_outlined),
-                  label: const Text('Xem biên nhận & Gửi khiếu nại / Hoàn tiền'),
+                  label: const Text(
+                    'Xem biên nhận & Gửi khiếu nại / Hoàn tiền',
+                  ),
                 ),
               ],
             ],
@@ -221,11 +229,18 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Colors.amber.shade100,
-                      child: Icon(Icons.gavel_outlined, color: Colors.amber.shade900, size: 20),
+                      child: Icon(
+                        Icons.gavel_outlined,
+                        color: Colors.amber.shade900,
+                        size: 20,
+                      ),
                     ),
                     title: const Text(
                       'Theo dõi Khiếu nại & Bồi hoàn',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                     subtitle: const Text(
                       'Xem biên bản Staff thẩm định & hoàn tiền từ Admin',
@@ -413,7 +428,7 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${o.totalAmount.toStringAsFixed(0)} ₫',
+                  formatVnd(o.totalAmount),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,

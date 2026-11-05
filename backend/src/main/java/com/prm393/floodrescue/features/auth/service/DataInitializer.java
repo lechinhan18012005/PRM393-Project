@@ -213,7 +213,21 @@ public class DataInitializer implements CommandLineRunner {
             // 5. Seed service catalog for garage 1
             g1CrossingService = seedServiceItemIfNotExists(garage1, "Chở xe qua ngập (Chuyến riêng)", ServiceType.CROSSING, new BigDecimal("120000"), "Chở riêng 1 xe máy và khách qua đoạn đường ngập sâu bằng phương tiện chuyên dụng đến nơi khô ráo");
             g1RepairService = seedServiceItemIfNotExists(garage1, "Sấy bugi & Xả nước buồng đốt", ServiceType.REPAIR_ONSITE, new BigDecimal("80000"), "Khắc phục xe chết máy do ngập nước tại chỗ");
-            seedServiceItemIfNotExists(garage1, "Kéo xe ngập nước về gara", ServiceType.TOWING, new BigDecimal("150000"), "Kéo xe không thể sửa tại chỗ về gara để kiểm tra và khắc phục");
+            ServiceItem towingService = seedServiceItemIfNotExists(
+                    garage1,
+                    "Kéo xe ngập nước về gara",
+                    ServiceType.TOWING,
+                    new BigDecimal("120000"),
+                    "Kéo xe ngập nước về chi nhánh gara và bàn giao; không bao gồm sửa chữa"
+            );
+            BigDecimal towingPrice = new BigDecimal("120000");
+            if (towingService.getStandardPrice() == null
+                    || towingService.getStandardPrice().compareTo(towingPrice) != 0) {
+                towingService.setStandardPrice(towingPrice);
+                towingService.setMinPrice(towingPrice.multiply(BigDecimal.valueOf(0.9)));
+                towingService.setMaxPrice(towingPrice.multiply(BigDecimal.valueOf(1.2)));
+                serviceItemRepository.save(towingService);
+            }
             seedServiceItemIfNotExists(garage1, "Cứu hộ xe ngập nước tận nơi 24/7", ServiceType.REPAIR_ONSITE, new BigDecimal("180000"), "Combo hút nước ống xả, vệ sinh họng ga, thay bugi chống ẩm tại hiện trường");
         }
 

@@ -83,20 +83,50 @@ class ExecutionServiceTest {
                 .thenReturn(List.of(
                         executionRecord(ExecutionAction.VEHICLE_PICKED_UP),
                         executionRecord(ExecutionAction.TRANSFER_TO_GARAGE)));
-        when(garageCatalog.getRequiredBranch(5L, 2L)).thenReturn(
-                GarageBranchSnapshot.builder().branchId(5L).branchName("Chi nhánh 1").open(true).build());
+        when(garageCatalog.getRequiredBranch(3L, 2L)).thenReturn(
+                GarageBranchSnapshot.builder().branchId(3L).branchName("Chi nhánh 1").open(true).build());
         when(executionRecordRepository.save(any(ServiceExecutionRecord.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThatThrownBy(() -> service.transfer(10L, 5L, mechanic))
+        assertThatThrownBy(() -> service.transfer(10L, mechanic))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("nhận xe");
 
-        service.transfer(10L, 5L, mechanic);
+        service.transfer(10L, mechanic);
         service.markDelivered(10L, "https://example.test/handover.jpg", mechanic);
 
-        verify(orderCommands).transferToGarage(10L, 5L);
+        verify(orderCommands).transferToGarage(10L, 3L);
         verify(orderCommands).markVehicleDelivered(10L, "https://example.test/handover.jpg");
+    }
+
+    @Test
+    void towingProgressIsDrivenByWorkflowInsteadOfFreeText() {
+        ExecutionServiceImpl service = new ExecutionServiceImpl(
+                orderLookup, orderCommands, quoteApprovalLookup, garageCatalog, executionRecordRepository);
+        User mechanic = assignedMechanic("TOWING");
+
+        assertThatThrownBy(() -> service.updateProgress(10L, "Đang chạy về gara", null, mechanic))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("tự động");
+        verify(executionRecordRepository, never()).save(any());
+    }
+
+    @Test
+    void onsiteProgressOnlyAcceptsStructuredChecklistSteps() {
+        ExecutionServiceImpl service = new ExecutionServiceImpl(
+                orderLookup, orderCommands, quoteApprovalLookup, garageCatalog, executionRecordRepository);
+        User mechanic = assignedMechanic("ONSITE_REPAIR");
+        when(executionRecordRepository.save(any(ServiceExecutionRecord.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.updateProgress(10L, "CHECKLIST_STEP:0", null, mechanic);
+
+        verify(executionRecordRepository).save(argThat(record ->
+                record.getAction() == ExecutionAction.PROGRESS_UPDATED
+                        && "CHECKLIST_STEP:0".equals(record.getNote())));
+        assertThatThrownBy(() -> service.updateProgress(10L, "Đã thay nhớt", null, mechanic))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("checklist");
     }
 
     private User assignedMechanic(String rescueType) {
@@ -106,7 +136,7 @@ class ExecutionServiceTest {
                 .garageId(2L).branchId(3L).status("IN_PROGRESS")
                 .rescueType(rescueType).build());
         when(garageCatalog.getRequiredMechanicContext(7L)).thenReturn(MechanicContextSnapshot.builder()
-                .userId(7L).mechanicStaffId(70L).branchId(3L).build());
+                .userId(7L).mechanicStaffId(70L).garageId(2L).branchId(3L).build());
         return mechanic;
     }
 

@@ -157,7 +157,7 @@ void main() {
       'Ca trực',
       'Công cụ',
       'Tài khoản',
-      'Tổng quan',
+      'Trang chủ',
     ]) {
       await tester.tap(
         find.descendant(
@@ -189,6 +189,28 @@ void main() {
     expect(p.calls, 1);
     expect(find.text('Đã chuyển sang trạng thái tạm nghỉ.'), findsOneWidget);
   });
+  testWidgets('Mechanic tools expose real rescue order history', (
+    tester,
+  ) async {
+    await _show(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Công cụ'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Lịch sử đơn cứu hộ'), findsOneWidget);
+    expect(
+      find.text('Xem lại các đơn đã được phân công và trạng thái xử lý'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Mô phỏng'), findsNothing);
+    expect(find.text('Vận hành chuyến gom'), findsNothing);
+    expect(find.text('Thanh toán VietQR'), findsNothing);
+    expect(find.text('Lập báo giá'), findsNothing);
+    expect(find.text('Thực hiện sửa chữa'), findsNothing);
+  });
   testWidgets('Failed availability does not report success', (tester) async {
     final p = _Mechanic(fail: true);
     await _show(tester, mechanic: p);
@@ -212,7 +234,7 @@ void main() {
       find.byKey(const Key('quotation-total')),
       200,
     );
-    expect(find.text('290.000 đ'), findsOneWidget);
+    expect(find.text('290.000 ₫'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Sấy bugi & xả nước buồng đốt'),
       -200,
@@ -223,7 +245,7 @@ void main() {
       find.byKey(const Key('quotation-total')),
       200,
     );
-    expect(find.text('220.000 đ'), findsOneWidget);
+    expect(find.text('220.000 ₫'), findsOneWidget);
   });
   testWidgets('Repair requires completing checklist before handover', (
     tester,
@@ -233,12 +255,65 @@ void main() {
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
       isNull,
     );
-    await tester.ensureVisible(find.text('Khởi động và kiểm tra vận hành'));
-    await tester.tap(find.text('Khởi động và kiểm tra vận hành'));
-    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+          .every((tile) => tile.value == false),
+      isTrue,
+    );
+    expect(find.text('Cập nhật tiến độ'), findsNothing);
+    expect(find.text('Nội dung sửa chữa vừa thực hiện'), findsNothing);
+    expect(find.text('Xe không thể sửa tại chỗ?'), findsNothing);
+    for (final step in [
+      'Tháo bugi, sấy khô và chống ẩm',
+      'Xả sạch nước trong buồng đốt',
+      'Thay nhớt cũ bị nhiễm nước',
+      'Kiểm tra lọc gió và dây điện',
+      'Khởi động và kiểm tra vận hành',
+    ]) {
+      await tester.ensureVisible(find.text(step));
+      await tester.tap(find.text(step));
+      await tester.pumpAndSettle();
+    }
     expect(
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
       isNotNull,
+    );
+  });
+  testWidgets('Repair evidence supports both camera and gallery', (
+    tester,
+  ) async {
+    await _show(tester, screen: const RepairExecutionScreen(orderId: 1));
+    await tester.scrollUntilVisible(
+      find.text('Thêm ảnh nghiệm thu sửa chữa'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final evidenceButton = find.widgetWithText(
+      OutlinedButton,
+      'Thêm ảnh nghiệm thu sửa chữa',
+    );
+    await tester.ensureVisible(evidenceButton);
+    await tester.pumpAndSettle();
+    await tester.tap(evidenceButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Chụp ảnh bằng Camera'), findsOneWidget);
+    expect(find.text('Chọn ảnh từ Thư viện'), findsOneWidget);
+  });
+  testWidgets('Towing destination is automatic and has no free-text progress', (
+    tester,
+  ) async {
+    await _show(
+      tester,
+      screen: const RepairExecutionScreen(orderId: 1, orderType: 'TOWING'),
+    );
+    expect(find.text('Chi nhánh garage đích'), findsOneWidget);
+    expect(find.text('ID chi nhánh garage đích'), findsNothing);
+    expect(find.text('Cập nhật tiến độ'), findsNothing);
+    expect(find.text('Tình trạng vận chuyển'), findsNothing);
+    expect(
+      find.text('MÔ PHỎNG • Chưa xử lý đơn hoặc thanh toán thật'),
+      findsNothing,
     );
   });
   testWidgets('Mechanic tabs fit narrow screen with larger text', (
@@ -250,7 +325,7 @@ void main() {
       'Ca trực',
       'Công cụ',
       'Tài khoản',
-      'Tổng quan',
+      'Trang chủ',
     ]) {
       await tester.tap(
         find.descendant(

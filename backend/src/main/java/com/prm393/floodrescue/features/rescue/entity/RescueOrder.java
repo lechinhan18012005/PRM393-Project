@@ -61,6 +61,9 @@ public class RescueOrder {
     @Builder.Default
     private OrderType orderType = OrderType.SINGLE_CROSSING;
 
+    @Column(name = "group_vehicle_count")
+    private Integer groupVehicleCount;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     @Builder.Default

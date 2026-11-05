@@ -17,18 +17,33 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActi
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const phonePattern = /^(?:0|\+84)[35789]\d{8}$/;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!identifier.trim() || !password) {
-      setError('Vui lòng nhập đầy đủ tài khoản và mật khẩu');
+    const normalizedIdentifier = identifier.trim();
+    if (!normalizedIdentifier) {
+      setError('Vui lòng nhập số điện thoại hoặc email');
+      return;
+    }
+    if (normalizedIdentifier.length > 254 || (!emailPattern.test(normalizedIdentifier) && !phonePattern.test(normalizedIdentifier))) {
+      setError('Số điện thoại hoặc email không hợp lệ');
+      return;
+    }
+    if (!password) {
+      setError('Vui lòng nhập mật khẩu');
+      return;
+    }
+    if (password.length < 6 || password.length > 128) {
+      setError('Mật khẩu phải từ 6 đến 128 ký tự');
       return;
     }
 
     setSubmitting(true);
     try {
-      await login({ identifier: identifier.trim(), password });
+      await login({ identifier: normalizedIdentifier, password });
     } catch (err: any) {
       setError(formatAuthErrorMessage(err, 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'));
     } finally {
@@ -85,7 +100,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSwitchToRegister, onActi
               type="text"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="Nhập email hoặc số điện thoại"
               className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
             />
           </div>

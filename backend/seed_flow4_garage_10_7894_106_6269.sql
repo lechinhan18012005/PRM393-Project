@@ -1,5 +1,6 @@
 -- PostgreSQL / DATABASE TEST - LUONG 4
--- Chay toan bo file trong pgAdmin hoac DBeaver sau khi backend da tao schema.
+-- Chay TOAN BO file trong pgAdmin hoac DBeaver sau khi backend da tao cac bang co ban.
+-- DBeaver: khong boi den rieng mot doan; dung Execute SQL Script (Alt+X), khong dung Ctrl+Enter.
 -- Fixture dung namespace flow4_107894_* rieng, khong sua tai khoan/gara cua thanh vien khac.
 -- Mat khau chung cho cac tai khoan moi: Password@123
 -- Toa do chi nhanh va tho: (10.7894, 106.6269)
@@ -8,7 +9,18 @@
 BEGIN;
 SET LOCAL TIME ZONE 'Asia/Ho_Chi_Minh';
 
-DO $$
+-- Dam bao file seed co the chay tren database cu chua duoc Hibernate cap nhat schema.
+ALTER TABLE garage_service_catalog
+    ADD COLUMN IF NOT EXISTS group_price_2_vehicles NUMERIC(12, 2),
+    ADD COLUMN IF NOT EXISTS group_price_3_vehicles NUMERIC(12, 2),
+    ADD COLUMN IF NOT EXISTS group_price_4_vehicles NUMERIC(12, 2),
+    ADD COLUMN IF NOT EXISTS group_price_5_vehicles NUMERIC(12, 2),
+    ADD COLUMN IF NOT EXISTS group_price_6_vehicles NUMERIC(12, 2);
+
+ALTER TABLE rescue_orders
+    ADD COLUMN IF NOT EXISTS group_vehicle_count INTEGER;
+
+DO $seed$
 DECLARE
     v_now TIMESTAMP := clock_timestamp()::TIMESTAMP;
     v_owner_id BIGINT;
@@ -95,13 +107,14 @@ BEGIN
     END IF;
 
     INSERT INTO garage_service_catalog
-        (garage_id, service_name, category, service_type, standard_price,
+        (garage_id, service_name, category, service_type,
+         item_category_type, applicable_vehicle_type, standard_price,
          min_price, max_price, unit, estimated_time_min, description,
-         is_active, warranty_days, created_at, updated_at)
+         is_active, is_deleted, warranty_days, created_at, updated_at)
     SELECT v_garage_id, 'Sua xe ngap tai cho TEST 107894', 'SUA TAI CHO',
-           'REPAIR_ONSITE', 80000, 70000, 200000, 'luot', 20,
+           'REPAIR_ONSITE', 'LABOR', 'ALL', 80000, 70000, 200000, 'luot', 20,
            'Kiem tra bugi, loc gio, dau nhot va xu ly xe ngap tai cho.',
-           TRUE, 7, v_now, v_now
+           TRUE, FALSE, 7, v_now, v_now
     WHERE NOT EXISTS (
         SELECT 1 FROM garage_service_catalog
         WHERE garage_id = v_garage_id
@@ -109,13 +122,14 @@ BEGIN
     );
 
     INSERT INTO garage_service_catalog
-        (garage_id, service_name, category, service_type, standard_price,
+        (garage_id, service_name, category, service_type,
+         item_category_type, applicable_vehicle_type, standard_price,
          min_price, max_price, unit, estimated_time_min, description,
-         is_active, warranty_days, created_at, updated_at)
+         is_active, is_deleted, warranty_days, created_at, updated_at)
     SELECT v_garage_id, 'Keo xe ve gara TEST 107894', 'KEO XE',
-           'TOWING', 150000, 120000, 300000, 'luot', 30,
-           'Keo xe khong the sua tai cho ve chi nhanh gara de xu ly.',
-           TRUE, 3, v_now, v_now
+           'TOWING', 'LABOR', 'ALL', 120000, 120000, 120000, 'luot', 30,
+           'Keo xe ngap nuoc ve chi nhanh gara va ban giao; khong bao gom sua chua.',
+           TRUE, FALSE, 0, v_now, v_now
     WHERE NOT EXISTS (
         SELECT 1 FROM garage_service_catalog
         WHERE garage_id = v_garage_id
@@ -123,13 +137,18 @@ BEGIN
     );
 
     INSERT INTO garage_service_catalog
-        (garage_id, service_name, category, service_type, standard_price,
+        (garage_id, service_name, category, service_type,
+         item_category_type, applicable_vehicle_type, standard_price,
+         group_price_2_vehicles, group_price_3_vehicles, group_price_4_vehicles,
+         group_price_5_vehicles, group_price_6_vehicles,
          min_price, max_price, unit, estimated_time_min, description,
-         is_active, warranty_days, created_at, updated_at)
+         is_active, is_deleted, warranty_days, created_at, updated_at)
     SELECT v_garage_id, 'Cho xe vuot ngap TEST 107894', 'CHO XE VUOT NGAP',
-           'CROSSING', 120000, 100000, 150000, 'luot', 15,
+           'CROSSING', 'LABOR', 'ALL', 120000,
+           210000, 300000, 380000, 450000, 510000,
+           100000, 150000, 'luot', 15,
            'Dich vu TEST cho xe va nguoi qua diem ngap, ho tro chuyen rieng va gom chuyen.',
-           TRUE, 0, v_now, v_now
+           TRUE, FALSE, 0, v_now, v_now
     WHERE NOT EXISTS (
         SELECT 1 FROM garage_service_catalog
         WHERE garage_id = v_garage_id
@@ -137,9 +156,33 @@ BEGIN
     );
 
     UPDATE garage_service_catalog
-    SET is_active = TRUE, updated_at = v_now
+    SET item_category_type = COALESCE(item_category_type, 'LABOR'),
+        applicable_vehicle_type = COALESCE(applicable_vehicle_type, 'ALL'),
+        is_active = TRUE,
+        is_deleted = FALSE,
+        updated_at = v_now
     WHERE garage_id = v_garage_id
       AND service_type IN ('REPAIR_ONSITE', 'TOWING', 'CROSSING');
+
+    UPDATE garage_service_catalog
+    SET standard_price = 120000,
+        min_price = 120000,
+        max_price = 120000,
+        description = 'Keo xe ngap nuoc ve chi nhanh gara va ban giao; khong bao gom sua chua.',
+        warranty_days = 0,
+        updated_at = v_now
+    WHERE garage_id = v_garage_id
+      AND service_type = 'TOWING';
+
+    UPDATE garage_service_catalog
+    SET group_price_2_vehicles = 210000,
+        group_price_3_vehicles = 300000,
+        group_price_4_vehicles = 380000,
+        group_price_5_vehicles = 450000,
+        group_price_6_vehicles = 510000,
+        updated_at = v_now
+    WHERE garage_id = v_garage_id
+      AND service_type = 'CROSSING';
 
     SELECT id INTO v_mechanic_id
     FROM mechanic_staffs WHERE user_id = v_mechanic_user_id;
@@ -161,13 +204,14 @@ BEGIN
         INSERT INTO mechanic_staffs
             (user_id, garage_id, branch_id, current_latitude, current_longitude,
              working_status, shift_name, rating_avg, speciality,
-             has_crossing_capability, last_heartbeat_at, last_gps_updated_at,
+             has_crossing_capability, is_manual_override,
+             last_heartbeat_at, last_gps_updated_at,
              created_at, updated_at)
         VALUES
             (v_mechanic_user_id, v_garage_id, v_branch_id, 10.7894, 106.6269,
              'AVAILABLE', 'Ca TEST Luong 4', 5.0,
              'Sua xe ngap, keo xe va cho xe vuot ngap', TRUE,
-             v_now, v_now, v_now, v_now)
+             FALSE, v_now, v_now, v_now, v_now)
         RETURNING id INTO v_mechanic_id;
     ELSE
         UPDATE mechanic_staffs
@@ -184,7 +228,7 @@ BEGIN
         WHERE id = v_mechanic_id;
     END IF;
 END;
-$$;
+$seed$;
 
 COMMIT;
 
@@ -200,6 +244,11 @@ SELECT
     sc.service_type,
     sc.service_name,
     sc.standard_price,
+    sc.group_price_2_vehicles,
+    sc.group_price_3_vehicles,
+    sc.group_price_4_vehicles,
+    sc.group_price_5_vehicles,
+    sc.group_price_6_vehicles,
     u.username AS mechanic_username,
     ms.working_status,
     ms.has_crossing_capability,

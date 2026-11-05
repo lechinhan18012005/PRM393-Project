@@ -55,6 +55,27 @@ class AuthSecurityIntegrationTest {
     }
 
     @Test
+    void loginOnlyAcceptsEmailOrVietnamesePhoneAndValidPasswordLength() throws Exception {
+        mvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"identifier":"plain_username","password":"Password@123"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.identifier")
+                        .value("Số điện thoại hoặc email không hợp lệ"));
+
+        mvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"identifier":"customer@example.com","password":"12345"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validationErrors.password")
+                        .value("Mật khẩu phải từ 6 đến 128 ký tự"));
+    }
+
+    @Test
     void customerRegistrationAndTokenTypesAreEnforced() throws Exception {
         String body = mvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
