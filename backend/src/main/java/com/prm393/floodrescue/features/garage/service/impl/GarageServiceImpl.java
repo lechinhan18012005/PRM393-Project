@@ -223,7 +223,23 @@ public class GarageServiceImpl implements GarageService {
 
         garage.setStatus(GarageStatus.PENDING);
         garage.setRejectionReason(null);
-        return mapToResponse(garageRepository.save(garage));
+        Garage saved = garageRepository.save(garage);
+        if (notificationService != null) {
+            try {
+                notificationService.sendToRole(
+                        Role.STAFF,
+                        "Hồ sơ đối tác Gara nộp lại eKYC: " + saved.getGarageName(),
+                        "Chủ Gara " + user.getFullName() + " vừa nộp lại hồ sơ đối tác. Vui lòng thẩm định eKYC.",
+                        NotificationType.KYC_SUBMITTED,
+                        NotificationLevel.INFO,
+                        "kyc",
+                        saved.getId()
+                );
+            } catch (Exception e) {
+                // Ignore auxiliary notification failure
+            }
+        }
+        return mapToResponse(saved);
     }
 
     @Override
@@ -257,21 +273,7 @@ public class GarageServiceImpl implements GarageService {
             garage = garageRepository.save(garage);
         }
 
-        if (notificationService != null) {
-            try {
-                notificationService.sendToRole(
-                        Role.STAFF,
-                        "Hồ sơ đối tác Gara mới nộp eKYC: " + garage.getGarageName(),
-                        "Chủ Gara " + user.getFullName() + " vừa nộp hồ sơ đăng ký đối tác. Vui lòng thẩm định eKYC.",
-                        NotificationType.KYC_SUBMITTED,
-                        NotificationLevel.INFO,
-                        "kyc",
-                        garage.getId()
-                );
-            } catch (Exception e) {
-                // Ignore auxiliary notification failure
-            }
-        }
+        // Tuyệt đối không gửi notification trong phương thức GET getCurrentGarage
         return mapToResponse(garage);
     }
 

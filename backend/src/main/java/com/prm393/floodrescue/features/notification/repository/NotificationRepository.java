@@ -39,4 +39,8 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Modifying
     @Query("DELETE FROM Notification n WHERE n.id = :id AND (n.recipientUser.id = :userId OR n.recipientRole = :role)")
     int deleteByIdAndRecipient(@Param("id") Long id, @Param("userId") Long userId, @Param("role") Role role);
+
+    Optional<Notification> findFirstByRecipientRoleAndTypeAndTargetIdAndReadFalse(Role recipientRole, com.prm393.floodrescue.features.notification.entity.NotificationType type, Long targetId);
+
+    Optional<Notification> findFirstByRecipientUserIdAndTypeAndTargetIdAndReadFalse(Long recipientUserId, com.prm393.floodrescue.features.notification.entity.NotificationType type, Long targetId);
 }

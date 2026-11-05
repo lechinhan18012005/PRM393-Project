@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -48,6 +49,23 @@ public class NotificationServiceImpl implements NotificationService {
     ) {
         User recipient = userRepository.findById(recipientUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng nhận thông báo: " + recipientUserId));
+
+        // Kiểm tra và cập nhật nếu đã có thông báo cùng loại chưa đọc
+        if (targetId != null) {
+            Optional<Notification> existing = notificationRepository.findFirstByRecipientUserIdAndTypeAndTargetIdAndReadFalse(recipientUserId, type, targetId);
+            if (existing.isPresent()) {
+                Notification notif = existing.get();
+                notif.setTitle(title);
+                notif.setMessage(message);
+                notif.setLevel(level != null ? level : NotificationLevel.INFO);
+                notif.setCreatedAt(LocalDateTime.now());
+                Notification saved = notificationRepository.save(notif);
+                NotificationResponse response = NotificationResponse.fromEntity(saved);
+                broadcastWebSocket("/topic/notifications/user/" + recipientUserId, response);
+                log.info("Cập nhật lại thông báo User đang chờ xử lý thay vì tạo trùng: User={}, Type={}, TargetId={}", recipientUserId, type, targetId);
+                return response;
+            }
+        }
 
         Notification notification = Notification.builder()
                 .recipientUser(recipient)
@@ -85,6 +103,24 @@ public class NotificationServiceImpl implements NotificationService {
             String targetScreen,
             Long targetId
     ) {
+        // Kiểm tra và cập nhật nếu đã có thông báo cùng loại chưa đọc
+        if (targetId != null) {
+            Optional<Notification> existing = notificationRepository.findFirstByRecipientRoleAndTypeAndTargetIdAndReadFalse(recipientRole, type, targetId);
+            if (existing.isPresent()) {
+                Notification notif = existing.get();
+                notif.setTitle(title);
+                notif.setMessage(message);
+                notif.setLevel(level != null ? level : NotificationLevel.INFO);
+                notif.setCreatedAt(LocalDateTime.now());
+                Notification saved = notificationRepository.save(notif);
+                NotificationResponse response = NotificationResponse.fromEntity(saved);
+                broadcastWebSocket("/topic/notifications/role/" + recipientRole.name(), response);
+                broadcastWebSocket("/topic/notifications", response);
+                log.info("Cập nhật lại thông báo Role đang chờ xử lý thay vì tạo trùng: Role={}, Type={}, TargetId={}", recipientRole, type, targetId);
+                return response;
+            }
+        }
+
         Notification notification = Notification.builder()
                 .recipientUser(null)
                 .recipientRole(recipientRole)
