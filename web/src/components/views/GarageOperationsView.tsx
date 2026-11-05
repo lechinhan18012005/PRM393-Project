@@ -8,9 +8,9 @@
 // ============================================================================
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { DEMO_MODE } from '../../context/AuthContext';
-import { Wallet, Truck, Receipt, CheckCircle, Clock } from 'lucide-react';
-import { GarageHeading, GarageStat, GaragePanel, GarageEmpty } from '../garage/GarageUI';
+import { GarageFinanceView } from './GarageFinanceView';
+import { Truck, Receipt, CheckCircle, Clock } from 'lucide-react';
+import { GarageHeading, GarageStat, GaragePanel } from '../garage/GarageUI';
 import { rescueApi, RescueOrderWebResponse } from '../../services/rescueApi';
 
 /**
@@ -45,100 +45,22 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
    * Tự động tải danh sách đơn cứu hộ khi mở màn hình và thiết lập bộ đếm thời gian (polling 10 giây/lần).
    */
   useEffect(() => {
+    if (mode !== 'transport') return;
     void fetchOrders();
     const interval = setInterval(fetchOrders, 10000);
     return () => clearInterval(interval);
-  }, [fetchOrders]);
+  }, [fetchOrders, mode]);
 
-  // Nếu không ở chế độ Demo và đang mở tab tài chính của Gara
-  if (!DEMO_MODE && mode === 'finance') {
-    return (
-      <section className="garage-portal">
-        <GarageHeading
-          title="Doanh thu & ví gara"
-          description="Theo dõi doanh thu, đối soát và dòng tiền của gara."
-        />
-        <GarageEmpty
-          title="Chưa kết nối dữ liệu doanh thu & ví"
-          description="Vui lòng chuyển sang mục Đối soát PayOS hoặc Yêu cầu rút tiền để theo dõi doanh thu và ví gara."
-        />
-      </section>
-    );
-  }
+  if (mode === 'finance') return <GarageFinanceView />;
 
   return (
     <section className="garage-portal">
       <GarageHeading
-        title={mode === 'finance' ? 'Doanh thu & ví gara' : 'Điều phối chuyến chở xe vượt ngập'}
-        description={
-          mode === 'finance'
-            ? 'Theo dõi doanh thu, đối soát và dòng tiền của gara.'
-            : 'Quản lý các chuyến chở xe máy qua ngập đơn lẻ (SINGLE_CROSSING) của gara.'
-        }
+        title="Điều phối chuyến chở xe vượt ngập"
+        description="Quản lý các chuyến chở xe máy qua ngập đơn lẻ (SINGLE_CROSSING) của gara."
       />
 
-      {mode === 'finance' ? (
-        <>
-          <div className="garage-note">DỮ LIỆU MẪU · Chưa kết nối giao dịch hoặc ví tài chính thật.</div>
-          <div className="garage-stat-grid three">
-            <GarageStat
-              label="Thực nhận · Tháng 10/2026"
-              value={money(34785000)}
-              detail="Số liệu minh họa"
-              icon={<Receipt size={18} />}
-            />
-            <GarageStat
-              label="Đơn hoàn thành"
-              value="142"
-              detail="Đơn cứu hộ mẫu trong tháng"
-              icon={<Truck size={18} />}
-              accent="teal"
-            />
-            <GarageStat
-              label="Hoa hồng sàn (10%)"
-              value={money(3865000)}
-              detail="Số liệu minh họa"
-              icon={<Wallet size={18} />}
-              accent="blue"
-            />
-          </div>
-          <div className="garage-columns">
-            <GaragePanel title="Cơ cấu doanh thu mẫu" description="Tháng 10/2026 · Theo nhóm dịch vụ">
-              <div className="garage-revenue-list">
-                {[
-                  ['Sửa chữa tại chỗ', 22500000, 100],
-                  ['Vận chuyển về gara', 8700000, 39],
-                  ['Dịch vụ khác', 3585000, 16]
-                ].map(([name, value, width]) => (
-                  <div key={String(name)}>
-                    <div>
-                      <span>{name}</span>
-                      <strong>{money(Number(value))}</strong>
-                    </div>
-                    <div className="garage-revenue-track">
-                      <i style={{ width: `${width}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </GaragePanel>
-            <GaragePanel title="Ví gara · Dữ liệu mẫu">
-              <div className="garage-wallet">
-                <small>SỐ DƯ KHẢ DỤNG MẪU</small>
-                <strong>{money(24850000)}</strong>
-                <small>Đang giữ đối soát: {money(1200000)}</small>
-              </div>
-              <div style={{ padding: 20 }}>
-                <p className="garage-muted">Chưa hỗ trợ rút tiền thật.</p>
-                <button className="garage-button" disabled>
-                  Rút tiền — chưa khả dụng
-                </button>
-              </div>
-            </GaragePanel>
-          </div>
-        </>
-      ) : (
-        <>
+      <>
           {garageOrders.length > 0 ? (
             <>
               <div className="garage-stat-grid three">
@@ -316,8 +238,7 @@ export function GarageOperationsView({ mode }: { mode: 'finance' | 'transport' }
                 : 'Chưa có đơn chở xe SINGLE_CROSSING nào được tạo cho gara này.'}
             </div>
           )}
-        </>
-      )}
+      </>
     </section>
   );
 }

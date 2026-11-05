@@ -27,6 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -416,8 +420,30 @@ public class FinanceAdminService {
                 .map(p -> mapToPayoutResponse(p, finalAvailable))
                 .collect(Collectors.toList());
 
+        YearMonth month = YearMonth.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        List<PaymentTransaction> monthlyPayments = paymentTransactionRepository
+                .findByGarageIdOrderByCreatedAtDesc(garage.getId()).stream()
+                .filter(tx -> tx.getStatus() == PaymentStatus.SUCCESS && tx.getPaidAt() != null)
+                .filter(tx -> YearMonth.from(tx.getPaidAt()).equals(month))
+                .toList();
+        Map<String, BigDecimal> byService = new LinkedHashMap<>();
+        for (PaymentTransaction tx : monthlyPayments) {
+            byService.merge(tx.getOrderType() != null ? tx.getOrderType() : "OTHER",
+                    tx.getNetGarageAmount(), BigDecimal::add);
+        }
+        GarageRevenueDto revenue = GarageRevenueDto.builder()
+                .month(month.toString())
+                .paidOrderCount(monthlyPayments.stream().map(PaymentTransaction::getRescueOrderId).distinct().count())
+                .netRevenue(monthlyPayments.stream().map(PaymentTransaction::getNetGarageAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .platformFee(monthlyPayments.stream().map(PaymentTransaction::getPlatformFee)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .revenueByService(byService)
+                .build();
+
         // Bước 8: Đóng gói và trả về kết quả tổng hợp ví Gara
         return GarageWalletDto.builder()
+                .revenue(revenue)
                 .garageId(garage.getId())
                 .garageName(garage.getGarageName())
                 .walletBalance(walletBalance)

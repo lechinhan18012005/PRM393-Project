@@ -13,6 +13,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class GarageWalletDto {
+    private GarageRevenueDto revenue;
     private Long garageId;
     private String garageName;
     private BigDecimal walletBalance;
