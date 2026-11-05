@@ -3,7 +3,7 @@ package com.prm393.floodrescue.features.payment.service;
 import com.prm393.floodrescue.common.exception.*;
 import com.prm393.floodrescue.config.PayOSConfig;
 import com.prm393.floodrescue.features.auth.entity.*;
-import com.prm393.floodrescue.features.finance.service.FinanceAdminService;
+import com.prm393.floodrescue.features.finance.service.CommissionRateService;
 import com.prm393.floodrescue.features.garage.entity.Garage;
 import com.prm393.floodrescue.features.payment.dto.*;
 import com.prm393.floodrescue.features.payment.entity.*;
@@ -67,7 +67,7 @@ public class PaymentAttemptService {
     /**
      * Service quản trị tài chính dùng để lấy cấu hình tỷ lệ hoa hồng nền tảng đang có hiệu lực (UC-24).
      */
-    private final FinanceAdminService financeAdminService;
+    private final CommissionRateService commissionRateService;
 
     /**
      * Cấu hình kết nối và thuật toán ký số HMAC-SHA256 của cổng thanh toán PayOS.
@@ -181,19 +181,7 @@ public class PaymentAttemptService {
         // Bước 8: Tích hợp UC-24: Xác định tỷ lệ hoa hồng áp dụng cho giao dịch
         // Ưu tiên 1: Nếu Gara có tỷ lệ chiết khấu riêng do Admin thiết lập (garage.getCommissionRate() != null) thì ưu tiên áp dụng
         // Ưu tiên 2: Nếu Gara chưa có mức riêng (null), lấy từ cấu hình CommissionConfig toàn sàn theo loại hình cứu hộ
-        BigDecimal commissionRate;
-        if (garage.getCommissionRate() != null) {
-            commissionRate = garage.getCommissionRate();
-        } else {
-            var cfg = financeAdminService.getActiveCommissionConfig();
-            if (cfg != null && (cfg.getGlobalRate() != null || cfg.getSingleCrossingRate() != null)) {
-                commissionRate = order.getOrderType() == OrderType.SINGLE_CROSSING
-                        ? (cfg.getSingleCrossingRate() != null ? cfg.getSingleCrossingRate() : cfg.getGlobalRate())
-                        : (cfg.getWaterloggedRepairRate() != null ? cfg.getWaterloggedRepairRate() : cfg.getGlobalRate());
-            } else {
-                commissionRate = BigDecimal.ZERO;
-            }
-        }
+        BigDecimal commissionRate = commissionRateService.resolve(garage, order.getOrderType());
 
         // Công thức tính phí hoa hồng nền tảng: platformFee = ROUND(amount * commissionRate / 100, 2)
         BigDecimal platformFee = amount.multiply(commissionRate)

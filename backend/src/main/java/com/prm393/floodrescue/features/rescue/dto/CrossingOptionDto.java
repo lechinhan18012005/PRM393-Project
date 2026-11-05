@@ -25,6 +25,9 @@ public class CrossingOptionDto {
     private String description;
     private BigDecimal serviceBasePrice;
     private BigDecimal bookingFee;
+    private BigDecimal commissionRate;
+    private BigDecimal groupCommissionRate;
+    private BigDecimal platformFee;
     private BigDecimal totalAmount;
     private BigDecimal groupPrice2Vehicles;
     private BigDecimal groupPrice3Vehicles;

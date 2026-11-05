@@ -501,10 +501,9 @@ class ElectronicInvoiceScreen extends StatelessWidget {
     final code = transaction?.rescueCode ?? order?.orderCode ?? '#RC-DEMO-8924';
     final total = transaction?.amount ?? order?.totalAmount ?? 150000.0;
     // Bóc tách giá dịch vụ cơ bản và phí đặt đơn khẩn cấp / điều phối
-    final basePrice = order?.serviceBasePrice ?? (total - 30000.0);
-    final bookingFee = order?.bookingFee ?? 30000.0;
-    final garageName =
-        transaction?.garageName ??
+    final basePrice = order?.serviceBasePrice ?? total;
+    final bookingFee = order?.bookingFee ?? 0;
+    final garageName = transaction?.garageName ??
         order?.garageName ??
         'Trung tâm cứu hộ liên kết';
     final customerName =
@@ -671,10 +670,13 @@ class ElectronicInvoiceScreen extends StatelessWidget {
 
                   // Phần Bảng kê chi tiết từng hạng mục chi phí dịch vụ
                   _buildDetailRow(serviceName, _formatVnd(basePrice)),
-                  _buildDetailRow(
-                    'Phí dịch vụ khẩn cấp & điều phối',
-                    _formatVnd(bookingFee),
-                  ),
+                  if (bookingFee > 0)
+                    _buildDetailRow('Phí đặt xe (đơn cũ)', _formatVnd(bookingFee)),
+                  if (transaction?.platformFee != null)
+                    _buildDetailRow(
+                      'Phí chiết khấu của nền tảng (đã gồm trong giá)',
+                      _formatVnd(transaction!.platformFee!),
+                    ),
                   _buildDetailRow('Phương thức thanh toán', methodStr),
 
                   const Divider(height: 24),

@@ -189,7 +189,8 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
                         if (i < quotation.items.length - 1) const Divider(),
                       ],
                       const Divider(thickness: 1.5),
-                      _moneyRow('Phí đặt xe', quotation.bookingFee),
+                      if (quotation.bookingFee > 0)
+                        _moneyRow('Phí đặt xe (đơn cũ)', quotation.bookingFee),
                       _moneyRow('Dịch vụ', quotation.subtotal),
                       _moneyRow('Giảm giá', -quotation.discount),
                       _moneyRow(

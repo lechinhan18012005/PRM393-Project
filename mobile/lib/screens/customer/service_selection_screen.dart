@@ -885,9 +885,13 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                         ),
                         const SizedBox(height: 4),
                         _priceRow(
-                          'Phí đặt xe (nền tảng)',
-                          _formatPrice(_selectedOption!.bookingFee),
+                          'Phí chiết khấu của nền tảng (${_isGroupTrip ? _selectedOption!.groupCommissionRate : _selectedOption!.commissionRate}%)',
+                          _formatPrice(
+                            ((_isGroupTrip ? _selectedOption!.groupPrices[_groupVehicleCount] : _selectedOption!.serviceBasePrice) ?? 0) *
+                            (_isGroupTrip ? _selectedOption!.groupCommissionRate : _selectedOption!.commissionRate) / 100,
+                          ),
                         ),
+                        const Text('Đã nằm trong giá dịch vụ, khấu trừ từ doanh thu gara.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                         const Divider(height: 16),
                         _priceRow(
                           'Tổng thanh toán dự kiến',

@@ -17,7 +17,8 @@ import {
   Wrench,
   LifeBuoy,
   Truck,
-  Users
+  Users,
+  Star
 } from 'lucide-react';
 const navigation = {
   admin: [
@@ -40,6 +41,7 @@ const navigation = {
     { id: 'owner-dashboard', label: 'Quản lý gara', icon: Store },
     { id: 'garage-team', label: 'Chi nhánh & đội thợ', icon: Users },
     { id: 'garage-finance', label: 'Doanh thu & ví', icon: Wallet },
+    { id: 'garage-ratings', label: 'Đánh giá khách hàng', icon: Star },
     { id: 'garage-transport', label: 'Chuyến chở xe', icon: Truck },
     { id: 'services', label: 'Dịch vụ & bảng giá', icon: Wrench }
   ]
