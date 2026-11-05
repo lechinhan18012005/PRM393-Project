@@ -1,816 +1,708 @@
-import { ViewGuide } from '../ViewGuide';
-import React, { useEffect, useState } from 'react';
-import { CommissionConfigBackend, financeApi } from '../../services/financeApi';
+// ============================================================================
+// MÀN HÌNH CẤU HÌNH PHÍ CHIẾT KHẤU THEO TỪNG GARA ĐỐI TÁC (COMMISSION SETTINGS VIEW - UC-24)
+// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Quản trị Tài chính & Hệ thống Admin
+// Mục đích:
+// 1. Phân quyền nghiêm ngặt (Yêu cầu #4):
+//    - Chỉ duy nhất Quản trị viên (ROLE_ADMIN) mới có quyền xem và điều chỉnh tỷ lệ phí chiết khấu.
+//    - Hiển thị huy hiệu (Badge) rõ ràng: "Quyền hạn: Chỉ Quản trị viên (ADMIN) mới được phép điều chỉnh tỷ lệ chiết khấu".
+// 2. Dữ liệu 100% từ Cơ sở dữ liệu (Database):
+//    - Tải danh sách chiết khấu và dịch vụ của từng Gara đối tác từ `financeApi.getGarageCommissions()`.
+//    - Tải cấu hình tỷ lệ chiết khấu mặc định hệ thống từ `financeApi.getActiveCommission()` và
+//      lịch sử thay đổi chiết khấu từ `financeApi.getCommissionHistory()`.
+//    - Loại bỏ hoàn toàn mọi công thức giả lập cứng (`K_FLOOD`, giảm giá bậc thang `Batch Tier Discount`,
+//      hay các dòng lịch sử giả lập năm 2023).
+// 3. Giao diện trực quan, đơn giản, sát thực tế vận hành:
+//    - 4 Thẻ chỉ số KPI tổng hợp tự động từ DB: Tổng số Gara đối tác, Tỷ lệ chiết khấu mặc định hệ thống,
+//      Chiết khấu trung bình của các Gara, Tổng số dịch vụ cứu hộ đang cung cấp.
+//    - Bảng cấu hình chiết khấu theo từng Gara có Tìm kiếm, Lọc trạng thái, hiển thị danh mục dịch vụ
+//      thực tế (`services`) kèm giá gốc (`basePrice`), số dư ví hiện tại (`walletBalance`), và ô nhập
+//      chỉnh sửa trực tiếp tỷ lệ chiết khấu (`0 - 100%`) + nút "Lưu chiết khấu" gọi `financeApi.updateGarageCommission`.
+//    - Khu vực cấu hình tỷ lệ chiết khấu mặc định cho Gara mới đăng ký (`financeApi.updateCommission`)
+//      và Bảng lịch sử thay đổi chiết khấu lấy 100% từ Database.
+// ============================================================================
 
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  CommissionConfigBackend,
+  financeApi,
+  GarageCommissionDto
+} from '../../services/financeApi';
+
+/**
+ * Giao diện Props truyền vào CommissionSettingsView.
+ */
 interface CommissionSettingsViewProps {
-  onShowToast: (title: string, msg: string) => void;
+  onShowToast: (title: string, msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ onShowToast }) => {
-  const [globalRate, setGlobalRate] = useState<number>(12.5);
-  const [rateSingle, setRateSingle] = useState<number>(12.5);
-  const [rateBatch, setRateBatch] = useState<number>(10.0);
-  const [rateRepair, setRateRepair] = useState<number>(15.0);
-  const [rateSurge, setRateSurge] = useState<number>(8.0);
+  // ==========================================================================
+  // KHAI BÁO CÁC BIẾN TRẠNG THÁI (REACT STATE)
+  // ==========================================================================
 
-  const [subsidyRate, setSubsidyRate] = useState<number>(15);
-  const [baseFee, setBaseFee] = useState<string>('25.000');
-  const [perKmFee, setPerKmFee] = useState<string>('10.000');
-  const [versionCode, setVersionCode] = useState<string>('v2.4');
-  const [isSaving, setIsSaving] = useState<boolean>(false);
+  // Danh sách các Gara đối tác kèm thông tin chiết khấu, số dư ví và dịch vụ lấy từ Database
+  const [garages, setGarages] = useState<GarageCommissionDto[]>([]);
+
+  // Bản đồ lưu giá trị chiết khấu đang chỉnh sửa tạm thời trên từng dòng Gara: { [garageId]: commissionRate }
+  const [draftRates, setDraftRates] = useState<Record<number, string>>({});
+
+  // Bản đồ lưu ghi chú chỉnh sửa chiết khấu cho từng Gara: { [garageId]: notes }
+  const [draftNotes, setDraftNotes] = useState<Record<number, string>>({});
+
+  // ID của Gara đang trong quá trình gửi API lưu chiết khấu (để khóa nút bấm tương ứng)
+  const [savingGarageId, setSavingGarageId] = useState<number | null>(null);
+
+  // Cấu hình tỷ lệ chiết khấu mặc định hệ thống (áp dụng cho Gara mới được phê duyệt)
+  const [globalRate, setGlobalRate] = useState<number>(12.5);
+  const [versionCode, setVersionCode] = useState<string>('v1.0');
+  const [changeReason, setChangeReason] = useState<string>('');
+  const [isSavingGlobal, setIsSavingGlobal] = useState<boolean>(false);
+
+  // Danh sách lịch sử thay đổi cấu hình chiết khấu lấy từ Database
   const [auditLogs, setAuditLogs] = useState<CommissionConfigBackend[]>([]);
 
-  // Simulation calculator
-  const [simOrderAmount, setSimOrderAmount] = useState<number>(350000);
+  // Trạng thái tải dữ liệu và thông báo lỗi
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string>('');
 
-  useEffect(() => {
-    const loadCommissionData = async () => {
-      try {
-        const [activeCfg, historyList] = await Promise.all([
-          financeApi.getActiveCommission(),
-          financeApi.getCommissionHistory()
-        ]);
-        if (activeCfg) {
-          setGlobalRate(Number(activeCfg.globalRate));
-          setRateSingle(Number(activeCfg.singleCrossingRate));
-          setRateBatch(Number(activeCfg.batchCrossingRate));
-          setRateRepair(Number(activeCfg.waterloggedRepairRate));
-          setRateSurge(Number(activeCfg.surgeHoursRate));
-          setSubsidyRate(Number(activeCfg.subsidyRate));
-          setBaseFee(Number(activeCfg.baseFee).toLocaleString('vi-VN'));
-          setPerKmFee(Number(activeCfg.perKmFee).toLocaleString('vi-VN'));
-          if (activeCfg.versionCode) setVersionCode(activeCfg.versionCode);
-        }
-        if (historyList && historyList.length > 0) {
-          setAuditLogs(historyList);
-        }
-      } catch {
-        // Fallback to local state when backend is unavailable in pure UI demo mode
+  // State phục vụ Tìm kiếm (Search) và Lọc trạng thái Gara (Filter)
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // ==========================================================================
+  // HÀM TẢI DỮ LIỆU TỪ DATABASE
+  // ==========================================================================
+
+  /**
+   * Hàm gọi song song 3 API từ Backend để nạp toàn bộ dữ liệu chiết khấu thực tế từ Database:
+   * 1. `financeApi.getGarageCommissions()`: Danh sách Gara + Dịch vụ + Tỷ lệ chiết khấu từng Gara.
+   * 2. `financeApi.getActiveCommission()`: Tỷ lệ chiết khấu mặc định toàn hệ thống.
+   * 3. `financeApi.getCommissionHistory()`: Lịch sử kiểm toán các lần thay đổi chiết khấu.
+   */
+  const loadAllCommissionData = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const [garageListRes, activeCfgRes, historyRes] = await Promise.allSettled([
+        financeApi.getGarageCommissions(),
+        financeApi.getActiveCommission(),
+        financeApi.getCommissionHistory()
+      ]);
+
+      // Xử lý danh sách Gara đối tác trả về từ DB
+      if (garageListRes.status === 'fulfilled' && Array.isArray(garageListRes.value)) {
+        const list = garageListRes.value;
+        setGarages(list);
+
+        // Khởi tạo giá trị nháp (draft) cho ô input chiết khấu của từng Gara bằng đúng tỷ lệ trong DB
+        const initialDrafts: Record<number, string> = {};
+        list.forEach((g) => {
+          initialDrafts[g.garageId] = String(Number(g.commissionRate ?? 10));
+        });
+        setDraftRates(initialDrafts);
+      } else if (garageListRes.status === 'rejected') {
+        setErrorMsg(
+          garageListRes.reason?.message || 'Không thể tải danh sách chiết khấu Gara từ Database.'
+        );
       }
-    };
-    loadCommissionData();
+
+      // Xử lý cấu hình chiết khấu mặc định hệ thống
+      if (activeCfgRes.status === 'fulfilled' && activeCfgRes.value) {
+        setGlobalRate(Number(activeCfgRes.value.globalRate ?? 12.5));
+        if (activeCfgRes.value.versionCode) {
+          setVersionCode(activeCfgRes.value.versionCode);
+        }
+      }
+
+      // Xử lý danh sách lịch sử thay đổi chiết khấu
+      if (historyRes.status === 'fulfilled' && Array.isArray(historyRes.value)) {
+        setAuditLogs(historyRes.value);
+      }
+    } catch (err) {
+      setErrorMsg((err as Error).message || 'Lỗi kết nối máy chủ khi tải dữ liệu chiết khấu.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  // Math for simulation
-  const subsidyAmount = Math.round((simOrderAmount * subsidyRate) / 100);
-  const customerPays = simOrderAmount - subsidyAmount;
-  const platformFee = Math.round((simOrderAmount * globalRate) / 100);
-  const garageFinal = simOrderAmount - platformFee;
-  const garagePercent = (100 - globalRate).toFixed(1);
+  /**
+   * Hook `useEffect` tự động tải dữ liệu khi mở màn hình.
+   */
+  useEffect(() => {
+    void loadAllCommissionData();
+  }, [loadAllCommissionData]);
 
-  const handleGlobalRateChange = (val: number) => {
-    setGlobalRate(val);
-    setRateSingle(val);
-  };
+  // ==========================================================================
+  // TÍNH TOÁN 4 CHỈ SỐ KPI VÀ BỘ LỌC BẢNG GARA BẰNG useMemo
+  // ==========================================================================
 
-  const parseFeeNumber = (val: string, fallback: number): number => {
-    const cleaned = val.replace(/\./g, '').replace(/,/g, '').trim();
-    const num = Number(cleaned);
-    return Number.isFinite(num) && num >= 0 ? num : fallback;
-  };
+  /**
+   * Tính toán 4 chỉ số KPI tổng hợp trực tiếp từ danh sách Gara trong Database:
+   * 1. Tổng số Gara đối tác (`totalGarages`)
+   * 2. Tỷ lệ chiết khấu mặc định hệ thống (`globalRate`%)
+   * 3. Chiết khấu trung bình của các Gara (`avgCommissionRate`%)
+   * 4. Tổng số dịch vụ cứu hộ các Gara đang cung cấp (`totalServices`)
+   */
+  const kpiMetrics = useMemo(() => {
+    const totalGarages = garages.length;
+    const avgCommissionRate =
+      totalGarages > 0
+        ? (
+            garages.reduce((sum, g) => sum + Number(g.commissionRate ?? 0), 0) / totalGarages
+          ).toFixed(1)
+        : globalRate.toFixed(1);
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const updated = await financeApi.updateCommission({
-        globalRate,
-        singleCrossingRate: rateSingle,
-        batchCrossingRate: rateBatch,
-        waterloggedRepairRate: rateRepair,
-        surgeHoursRate: rateSurge,
-        subsidyRate,
-        baseFee: parseFeeNumber(baseFee, 25000),
-        perKmFee: parseFeeNumber(perKmFee, 10000),
-        changeSummary: `Cập nhật hoa hồng chuẩn ${globalRate}% • Ghép xe ${rateBatch}% • Sửa chữa ${rateRepair}%`,
-        approvalReason: 'Cập nhật trực tiếp từ Bảng điều khiển Admin Tài chính'
-      });
-      if (updated.versionCode) setVersionCode(updated.versionCode);
-      const historyList = await financeApi.getCommissionHistory();
-      if (historyList.length > 0) setAuditLogs(historyList);
+    const totalServices = garages.reduce(
+      (sum, g) => sum + Number(g.serviceCount ?? (g.services ? g.services.length : 0)),
+      0
+    );
+
+    return {
+      totalGarages,
+      avgCommissionRate,
+      totalServices
+    };
+  }, [garages, globalRate]);
+
+  /**
+   * Lọc danh sách Gara theo từ khóa tìm kiếm (Tên Gara, Số điện thoại, Địa chỉ)
+   * và theo trạng thái hoạt động của Gara.
+   */
+  const filteredGarages = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+
+    return garages.filter((g) => {
+      // Lọc theo trạng thái Gara nếu Admin chọn khác 'ALL'
+      if (statusFilter !== 'ALL' && g.status !== statusFilter) {
+        return false;
+      }
+
+      // Nếu không có từ khóa tìm kiếm thì hiển thị
+      if (!q) return true;
+
+      const matchName = (g.garageName || '').toLowerCase().includes(q);
+      const matchPhone = (g.phone || '').toLowerCase().includes(q);
+      const matchAddress = (g.address || '').toLowerCase().includes(q);
+      const matchId = String(g.garageId).includes(q);
+
+      return matchName || matchPhone || matchAddress || matchId;
+    });
+  }, [garages, searchTerm, statusFilter]);
+
+  // ==========================================================================
+  // XỬ LÝ LƯU TỶ LỆ CHIẾT KHẤU CHO TỪNG GARA CỤ THỂ (UC-24)
+  // ==========================================================================
+
+  /**
+   * Hàm lưu tỷ lệ phí chiết khấu mới cho một Gara cụ thể xuống Database
+   * thông qua API `PATCH /api/v1/finance/garages/{garageId}/commission`.
+   */
+  const handleSaveGarageCommission = async (garage: GarageCommissionDto) => {
+    const rawValue = draftRates[garage.garageId] ?? String(garage.commissionRate);
+    const parsedRate = Number(rawValue);
+
+    // Kiểm tra tính hợp lệ của tỷ lệ phần trăm chiết khấu (0% - 100%)
+    if (!Number.isFinite(parsedRate) || parsedRate < 0 || parsedRate > 100) {
       onShowToast(
-        'Lưu Cấu Hình Thành Công!',
-        `Đã lưu vào Database: Hoa hồng ${globalRate}% và mức trợ cấp ${subsidyRate}% (${updated.versionCode}).`
+        'Tỷ lệ không hợp lệ',
+        'Vui lòng nhập tỷ lệ chiết khấu hợp lệ trong khoảng từ 0% đến 100%.',
+        'error'
       );
-    } catch {
+      return;
+    }
+
+    setSavingGarageId(garage.garageId);
+    try {
+      const notes =
+        draftNotes[garage.garageId]?.trim() ||
+        `Admin cập nhật chiết khấu Gara ${garage.garageName} thành ${parsedRate}%`;
+
+      // Gọi API cập nhật chiết khấu riêng cho Gara trong Database
+      const updatedGarage = await financeApi.updateGarageCommission(garage.garageId, {
+        commissionRate: parsedRate,
+        notes
+      });
+
+      // Cập nhật lại dòng Gara tương ứng trong state `garages`
+      setGarages((prev) =>
+        prev.map((item) =>
+          item.garageId === garage.garageId ? { ...item, ...updatedGarage } : item
+        )
+      );
+
+      // Tải lại lịch sử thay đổi chiết khấu để hiển thị bản ghi kiểm toán mới nhất
+      const updatedHistory = await financeApi.getCommissionHistory();
+      setAuditLogs(updatedHistory);
+
       onShowToast(
-        'Lưu Cấu Hình Thành Công!',
-        `Tỷ lệ hoa hồng ${globalRate}% và mức trợ cấp ${subsidyRate}% đã được đồng bộ hóa tới toàn bộ 48 Gara và trạm điều phối.`
+        'Đã lưu chiết khấu Gara',
+        `Đã cập nhật tỷ lệ chiết khấu của "${garage.garageName}" thành ${parsedRate}% trong Database.`,
+        'success'
+      );
+    } catch (err) {
+      onShowToast(
+        'Lỗi cập nhật chiết khấu',
+        (err as Error).message || 'Không thể lưu tỷ lệ chiết khấu cho Gara này.',
+        'error'
       );
     } finally {
-      setIsSaving(false);
+      setSavingGarageId(null);
     }
   };
 
-  const handleReset = () => {
-    setGlobalRate(12.5);
-    setRateSingle(12.5);
-    setRateBatch(10.0);
-    setRateRepair(15.0);
-    setRateSurge(8.0);
-    setSubsidyRate(15);
-    setBaseFee('25.000');
-    setPerKmFee('10.000');
-    setSimOrderAmount(350000);
-    onShowToast('Đã Khôi Phục', 'Toàn bộ tham số đã được đặt về giá trị mặc định của SLA Engine.');
+  // ==========================================================================
+  // XỬ LÝ LƯU TỶ LỆ CHIẾT KHẤU MẶC ĐỊNH HỆ THỐNG CHO GARA MỚI
+  // ==========================================================================
+
+  /**
+   * Hàm lưu tỷ lệ chiết khấu mặc định của hệ thống (`PUT /api/v1/finance/commission`).
+   */
+  const handleSaveGlobalCommission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!Number.isFinite(globalRate) || globalRate < 0 || globalRate > 100) {
+      onShowToast('Dữ liệu không hợp lệ', 'Tỷ lệ chiết khấu mặc định phải từ 0% đến 100%.', 'error');
+      return;
+    }
+
+    setIsSavingGlobal(true);
+    try {
+      const updated = await financeApi.updateCommission({
+        globalRate,
+        changeSummary: `Cập nhật tỷ lệ chiết khấu mặc định hệ thống: ${globalRate}%`,
+        approvalReason:
+          changeReason.trim() || 'Admin điều chỉnh mức chiết khấu mặc định áp dụng cho Gara mới'
+      });
+
+      if (updated.versionCode) {
+        setVersionCode(updated.versionCode);
+      }
+      setChangeReason('');
+
+      const historyList = await financeApi.getCommissionHistory();
+      setAuditLogs(historyList);
+
+      onShowToast(
+        'Đã lưu cấu hình mặc định',
+        `Tỷ lệ chiết khấu mặc định hệ thống (${globalRate}%) đã được lưu vào Database.`,
+        'success'
+      );
+    } catch (err) {
+      onShowToast(
+        'Lỗi lưu cấu hình',
+        (err as Error).message || 'Không thể lưu tỷ lệ chiết khấu mặc định.',
+        'error'
+      );
+    } finally {
+      setIsSavingGlobal(false);
+    }
   };
 
-  return (
-    <div className="flex flex-col w-full space-y-space-md">
-      {/* Command Header */}
-      <div className="bg-surface-container-lowest p-space-lg rounded shadow-sm flex flex-col xl:flex-row xl:items-center xl:justify-between gap-space-md border border-surface-container">
-        <div className="flex flex-col space-y-space-xs">
+  // ==========================================================================
+  // HIỂN THỊ GIAO DIỆN NGƯỜI DÙNG (JSX RENDERING)
+  // ==========================================================================
 
-          <div className="flex flex-wrap items-center gap-space-sm pt-0.5">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">Phí & chiết khấu</h1>
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-low text-tertiary font-data-mono text-data-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-tertiary-container animate-pulse"></span>
-              <span>Đang hiệu lực</span>
-            </div>
-            <span className="px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm uppercase font-semibold">
-              Quy tắc {versionCode}
+  return (
+    <div className="flex flex-col w-full space-y-6">
+      {/* Header & Huy hiệu khẳng định quyền hạn duy nhất của ADMIN */}
+      <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-on-surface">
+              Quản lý Phí Chiết Khấu Gara Đối Tác
+            </h1>
+            <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold border border-primary/20">
+              Quyền hạn: Chỉ Quản trị viên (ADMIN) mới được phép điều chỉnh tỷ lệ chiết khấu
             </span>
+          </div>
+          <p className="text-sm text-secondary">
+            Toàn bộ thông tin Gara, danh mục dịch vụ niêm yết và tỷ lệ phần trăm chiết khấu dưới đây được truy xuất trực tiếp từ Cơ sở dữ liệu (Database). Khi giao dịch cứu hộ hoàn tất, hệ thống tự động khấu trừ theo đúng tỷ lệ chiết khấu của từng Gara.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={() => void loadAllCommissionData()}
+          className="self-start lg:self-auto px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-sm font-semibold text-on-surface transition-colors cursor-pointer"
+        >
+          {isLoading ? 'Đang đồng bộ DB...' : 'Làm mới dữ liệu từ DB'}
+        </button>
+      </div>
+
+      {/* Thông báo lỗi nếu có */}
+      {errorMsg && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+          {errorMsg}
+        </div>
+      )}
+
+      {/* 4 Thẻ KPI tổng hợp trực tiếp từ Database */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
+          <div className="text-xs font-bold uppercase text-secondary">Tổng số Gara đối tác (DB)</div>
+          <div className="text-2xl font-bold font-mono text-on-surface mt-1">
+            {kpiMetrics.totalGarages} Gara
+          </div>
+          <div className="text-xs text-secondary mt-1">
+            Đang trực tuyến: {garages.filter((g) => g.isOnline).length} Gara
           </div>
         </div>
 
-        {/* Action Bar */}
-        <div className="flex items-center gap-space-sm self-start xl:self-auto">
-          <button
-            onClick={handleReset}
-            className="px-space-md py-2 rounded bg-surface-container text-on-surface hover:bg-surface-container-high font-label-lg text-label-lg transition-colors flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-            Khôi phục mặc định
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-space-lg py-2 rounded bg-primary text-on-primary hover:bg-primary-container font-headline-sm text-headline-sm transition-all flex items-center gap-2 shadow-sm active:scale-95 cursor-pointer font-bold disabled:opacity-60"
-          >
-            <span className="material-symbols-outlined text-[18px]">verified_user</span>
-            {isSaving ? 'Đang lưu...' : 'Lưu & Kích Hoạt Cấu Hình'}
-          </button>
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
+          <div className="text-xs font-bold uppercase text-secondary">
+            Chiết khấu mặc định hệ thống
+          </div>
+          <div className="text-2xl font-bold font-mono text-primary mt-1">
+            {globalRate.toFixed(1)}%
+          </div>
+          <div className="text-xs text-secondary mt-1">
+            Áp dụng mặc định cho Gara mới ({versionCode})
+          </div>
+        </div>
+
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
+          <div className="text-xs font-bold uppercase text-secondary">
+            Chiết khấu trung bình các Gara
+          </div>
+          <div className="text-2xl font-bold font-mono text-tertiary mt-1">
+            {kpiMetrics.avgCommissionRate}%
+          </div>
+          <div className="text-xs text-secondary mt-1">
+            Tính trung bình cộng từ {kpiMetrics.totalGarages} Gara trong DB
+          </div>
+        </div>
+
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
+          <div className="text-xs font-bold uppercase text-secondary">
+            Tổng số dịch vụ đang cung cấp
+          </div>
+          <div className="text-2xl font-bold font-mono text-on-surface mt-1">
+            {kpiMetrics.totalServices} dịch vụ
+          </div>
+          <div className="text-xs text-secondary mt-1">
+            Tổng hợp từ bảng dịch vụ của các Gara
+          </div>
         </div>
       </div>
 
-      {/* Grid: 7 Cols Left + 5 Cols Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-md items-start">
-        {/* LEFT COLUMN: CONFIGURATION ENGINE (7 COLS) */}
-        <div className="lg:col-span-7 flex flex-col space-y-space-md">
-          {/* SECTION 1: PLATFORM COMMISSION RATE */}
-          <div className="bg-surface-container-lowest p-space-lg rounded shadow-sm flex flex-col space-y-space-md border border-surface-container">
-            <div className="flex items-center justify-between pb-space-xs border-b border-surface-container">
-              <div className="flex items-center gap-space-xs">
-                <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
-                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">
-                  Hoa hồng nền tảng
-                </h2>
-              </div>
-              <span className="font-data-mono text-data-mono text-secondary">MOD_CODE: COM-PLT-2024</span>
-            </div>
-            <ViewGuide><p className="font-body-md text-body-md text-on-surface-variant">
-              Khấu trừ trực tiếp trên ví Escrow của đơn vị Gara cứu hộ sau khi dịch vụ hoàn tất. Đã bảo hộ rủi ro bão lũ đô thị và hạ tầng GPS trực tuyến.
-            </p></ViewGuide>
-
-            {/* Master Global Commission Slider */}
-            <div className="bg-surface-container-low p-space-md rounded flex flex-col space-y-space-xs">
-              <div className="flex justify-between items-center">
-                <label className="font-label-lg text-label-lg text-on-surface flex items-center gap-1.5 font-semibold">
-                  <span>Mức trích sàn chuẩn trung bình</span>
-                  <span className="material-symbols-outlined text-secondary text-[14px]">info</span>
-                </label>
-                <div className="flex items-center gap-1 bg-surface-container-lowest px-2 py-1 rounded shadow-sm">
-                  <span className="font-data-mono text-headline-sm text-primary font-bold">{globalRate.toFixed(1)}</span>
-                  <span className="font-data-mono text-data-mono text-secondary">%</span>
-                </div>
-              </div>
-              <input
-                className="w-full accent-primary h-1.5 bg-surface-variant rounded-lg cursor-pointer"
-                max="25"
-                min="5"
-                step="0.5"
-                type="range"
-                value={globalRate}
-                onChange={(e) => handleGlobalRateChange(parseFloat(e.target.value))}
-              />
-              <div className="flex justify-between text-secondary font-data-mono text-label-sm">
-                <span>5.0% (Trợ giá tối đa)</span>
-                <span>15.0% (Định chuẩn)</span>
-                <span>25.0% (Trần kiểm soát)</span>
-              </div>
-            </div>
-
-            {/* Breakdown by Sub-services */}
-            <div className="flex flex-col space-y-space-sm pt-1">
-              <span className="font-label-sm text-label-sm text-secondary uppercase font-bold tracking-wider">
-                Phân Bổ Theo Danh Mục Tác Nghiệp Khẩn Cấp
-              </span>
-
-              {/* Item 1 */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-space-sm rounded bg-surface-container hover:bg-surface-container-high transition-colors gap-space-xs">
-                <div className="flex items-center gap-space-sm">
-                  <div className="w-8 h-8 rounded bg-surface-container-lowest flex items-center justify-center text-primary shadow-sm">
-                    <span className="material-symbols-outlined text-[18px]">two_wheeler</span>
-                  </div>
-                  <div>
-                    <div className="font-headline-sm text-headline-sm text-on-surface font-semibold">Cứu hộ kéo xe máy ngập đơn lẻ</div>
-                    <div className="font-body-sm text-body-sm text-secondary">Đơn kéo cứu hộ 1:1, điều xe kích nổ trực tiếp</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                  <div className="relative w-24">
-                    <input
-                      className="w-full h-8 pl-3 pr-7 bg-surface-container-lowest text-on-surface font-data-mono text-data-mono rounded text-right focus:outline-none focus:ring-1 focus:ring-primary shadow-sm border-0 font-bold"
-                      step="0.5"
-                      type="number"
-                      value={rateSingle}
-                      onChange={(e) => setRateSingle(parseFloat(e.target.value) || 0)}
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-secondary font-data-mono text-data-mono">%</span>
-                  </div>
-                  <span className="w-2 h-2 rounded-full bg-tertiary" title="Cân bằng động"></span>
-                </div>
-              </div>
-
-              {/* Item 2 */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-space-sm rounded bg-surface-container hover:bg-surface-container-high transition-colors gap-space-xs">
-                <div className="flex items-center gap-space-sm">
-                  <div className="w-8 h-8 rounded bg-surface-container-lowest flex items-center justify-center text-tertiary shadow-sm">
-                    <span className="material-symbols-outlined text-[18px]">local_shipping</span>
-                  </div>
-                  <div>
-                    <div className="font-headline-sm text-headline-sm text-on-surface font-semibold">Xe tải / Ba gác chở vượt ngập ghép đoàn</div>
-                    <div className="font-body-sm text-body-sm text-secondary">Vận chuyển gom nhiều xe từ vùng ngập sâu về Gara</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                  <div className="relative w-24">
-                    <input
-                      className="w-full h-8 pl-3 pr-7 bg-surface-container-lowest text-on-surface font-data-mono text-data-mono rounded text-right focus:outline-none focus:ring-1 focus:ring-primary shadow-sm border-0 font-bold"
-                      step="0.5"
-                      type="number"
-                      value={rateBatch}
-                      onChange={(e) => setRateBatch(parseFloat(e.target.value) || 0)}
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-secondary font-data-mono text-data-mono">%</span>
-                  </div>
-                  <span className="w-2 h-2 rounded-full bg-tertiary" title="Ưu đãi gom đơn"></span>
-                </div>
-              </div>
-
-              {/* Item 3 */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-space-sm rounded bg-surface-container hover:bg-surface-container-high transition-colors gap-space-xs">
-                <div className="flex items-center gap-space-sm">
-                  <div className="w-8 h-8 rounded bg-surface-container-lowest flex items-center justify-center text-secondary shadow-sm">
-                    <span className="material-symbols-outlined text-[18px]">build</span>
-                  </div>
-                  <div>
-                    <div className="font-headline-sm text-headline-sm text-on-surface font-semibold">Sửa chữa, hút nước & thay nhớt tại Gara</div>
-                    <div className="font-body-sm text-body-sm text-secondary">Súc rửa khoang máy, lọc gió, xử lý thủy kích cố định</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                  <div className="relative w-24">
-                    <input
-                      className="w-full h-8 pl-3 pr-7 bg-surface-container-lowest text-on-surface font-data-mono text-data-mono rounded text-right focus:outline-none focus:ring-1 focus:ring-primary shadow-sm border-0 font-bold"
-                      step="0.5"
-                      type="number"
-                      value={rateRepair}
-                      onChange={(e) => setRateRepair(parseFloat(e.target.value) || 0)}
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-secondary font-data-mono text-data-mono">%</span>
-                  </div>
-                  <span className="w-2 h-2 rounded-full bg-secondary" title="Dịch vụ xưởng"></span>
-                </div>
-              </div>
-
-              {/* Item 4 */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-space-sm rounded bg-error-container text-on-error-container transition-colors gap-space-xs">
-                <div className="flex items-center gap-space-sm">
-                  <div className="w-8 h-8 rounded bg-surface-container-lowest flex items-center justify-center text-error shadow-sm">
-                    <span className="material-symbols-outlined text-[18px] animate-pulse">thunderstorm</span>
-                  </div>
-                  <div>
-                    <div className="font-headline-sm text-headline-sm text-on-error-container flex items-center gap-1.5 font-bold">
-                      <span>Cứu hộ khẩn đêm / Triều cường đỉnh (Surge Hours)</span>
-                      <span className="px-1.5 py-0.2 rounded bg-error text-on-error font-label-sm text-label-sm uppercase font-bold">Ưu đãi kích cầu</span>
-                    </div>
-                    <div className="font-body-sm text-body-sm text-on-error-container opacity-90">
-                      Giảm phí thu sàn để khuyến khích Gara và thợ sẵn sàng tác chiến ngập đêm
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                  <div className="relative w-24">
-                    <input
-                      className="w-full h-8 pl-3 pr-7 bg-surface-container-lowest text-on-surface font-data-mono text-data-mono font-bold rounded text-right focus:outline-none focus:ring-1 focus:ring-error shadow-sm border-0"
-                      step="0.5"
-                      type="number"
-                      value={rateSurge}
-                      onChange={(e) => setRateSurge(parseFloat(e.target.value) || 0)}
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-secondary font-data-mono text-data-mono">%</span>
-                  </div>
-                  <span className="w-2 h-2 rounded-full bg-error" title="Cơ chế khẩn cấp"></span>
-                </div>
-              </div>
-            </div>
+      {/* Bảng chính: Cấu hình tỷ lệ phí chiết khấu theo từng Gara đối tác */}
+      <div className="bg-surface-container-lowest rounded-xl border border-surface-container shadow-xs overflow-hidden">
+        <div className="p-5 border-b border-surface-container flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-on-surface">
+              Bảng Cấu Hình Chiết Khấu &amp; Danh Mục Dịch Vụ Theo Từng Gara
+            </h2>
+            <p className="text-xs text-secondary mt-0.5">
+              Admin điều chỉnh trực tiếp tỷ lệ phần trăm chiết khấu của từng Gara và nhấn <strong>Lưu chiết khấu</strong> để cập nhật vào Database.
+            </p>
           </div>
 
-          {/* SECTION 2: BATCH TRANSPORT DISCOUNT & SUBSIDY */}
-          <div className="bg-surface-container-lowest p-space-lg rounded shadow-sm flex flex-col space-y-space-md border border-surface-container">
-            <div className="flex items-center justify-between pb-space-xs border-b border-surface-container">
-              <div className="flex items-center gap-space-xs">
-                <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
-                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">
-                  Chi phí đi ghép & trợ cấp
-                </h2>
-              </div>
-              <span className="px-2 py-0.5 rounded bg-surface-container text-tertiary font-label-sm text-label-sm uppercase font-bold">
-                Thuật toán Dynamic Dispatch
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
-              {/* Dynamic Formula Explainer */}
-              <div className="bg-surface-container-low p-space-md rounded flex flex-col justify-between space-y-space-sm">
-                <span className="font-label-sm text-label-sm text-secondary uppercase font-bold tracking-wider">
-                  Cơ Chế Định Giá Cước Động
-                </span>
-                <div className="p-2.5 bg-surface-container-lowest rounded shadow-sm font-data-mono text-data-mono text-on-surface flex flex-col gap-1">
-                  <div className="text-tertiary font-bold">FARE = BASE_FEE + (DIST_KM * RATE_KM) * K_FLOOD</div>
-                  <div className="text-secondary text-[11px]">// K_FLOOD: Hệ số ngập sâu theo vệ tinh / Cảm biến mực nước</div>
-                </div>
-                <div className="flex items-center justify-between text-body-sm text-secondary">
-                  <span>Trạng thái định tuyến:</span>
-                  <span className="text-tertiary font-semibold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-ping"></span> Real-time Connected
-                  </span>
-                </div>
-              </div>
-
-              {/* Subsidy Box */}
-              <div className="bg-surface-container-low p-space-md rounded flex flex-col justify-between space-y-space-sm">
-                <div className="flex justify-between items-start">
-                  <div className="flex flex-col">
-                    <span className="font-label-lg text-label-lg text-on-surface font-bold">Trợ Cấp Nền Tảng (Platform Subsidy)</span>
-                    <span className="font-body-sm text-body-sm text-secondary">Trích từ Quỹ Ứng Phó Thiên Tai Đô Thị</span>
-                  </div>
-                  <span className="material-symbols-outlined text-primary text-[20px]">volunteer_activism</span>
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="font-body-md text-body-md text-on-surface-variant font-medium">Tỷ lệ trợ cấp trực tiếp:</span>
-                  <div className="relative w-28">
-                    <input
-                      className="w-full h-8 pl-3 pr-7 bg-surface-container-lowest text-on-surface font-data-mono text-headline-sm font-bold rounded text-right focus:outline-none focus:ring-1 focus:ring-primary shadow-sm border-0"
-                      step="1"
-                      type="number"
-                      value={subsidyRate}
-                      onChange={(e) => setSubsidyRate(parseFloat(e.target.value) || 0)}
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-secondary font-data-mono text-data-mono">%</span>
-                  </div>
-                </div>
-                <div className="font-body-sm text-body-sm text-secondary">
-                  Giảm trực tiếp vào hoá đơn cho cư dân tại tâm điểm ngập úng.
-                </div>
-              </div>
-            </div>
-
-            {/* Tiered Batch Discount Scale */}
-            <div className="flex flex-col space-y-space-xs pt-1">
-              <div className="flex items-center justify-between">
-                <span className="font-label-sm text-label-sm text-secondary uppercase font-bold tracking-wider">
-                  Hạn Mức Giảm Giá Ghép Đội Xe (Batch Tier Discounts)
-                </span>
-                <span className="font-label-sm text-label-sm text-secondary">Áp dụng cho xe thùng & xà lan cứu hộ</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-sm">
-                <div className="bg-surface-container p-space-sm rounded flex flex-col space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-label-md text-label-md text-secondary font-semibold">Ghép 2 - 3 xe</span>
-                    <span className="material-symbols-outlined text-tertiary text-[16px]">groups</span>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="font-data-mono text-headline-md text-tertiary font-bold">20.0</span>
-                    <span className="font-data-mono text-data-mono text-secondary">%</span>
-                  </div>
-                  <span className="font-body-sm text-body-sm text-secondary">Giảm tổng cước kéo</span>
-                </div>
-
-                <div className="bg-surface-container p-space-sm rounded flex flex-col space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-label-md text-label-md text-secondary font-semibold">Ghép 4 - 6 xe</span>
-                    <span className="material-symbols-outlined text-primary text-[16px]">group_add</span>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="font-data-mono text-headline-md text-primary font-bold">35.0</span>
-                    <span className="font-data-mono text-data-mono text-secondary">%</span>
-                  </div>
-                  <span className="font-body-sm text-body-sm text-secondary">Tiết kiệm chi phí đoàn</span>
-                </div>
-
-                <div className="bg-surface-container p-space-sm rounded flex flex-col space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-label-md text-label-md text-secondary font-semibold">Từ 7 xe trở lên</span>
-                    <span className="material-symbols-outlined text-primary-container text-[16px]">hub</span>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="font-data-mono text-headline-md text-primary font-bold">50.0</span>
-                    <span className="font-data-mono text-data-mono text-secondary">%</span>
-                  </div>
-                  <span className="font-body-sm text-body-sm text-secondary">Tối ưu chuyến chuyên dụng</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 3: BASE FEE & FLOOD MULTIPLIER K */}
-          <div className="bg-surface-container-lowest p-space-lg rounded shadow-sm flex flex-col space-y-space-md border border-surface-container">
-            <div className="flex items-center justify-between pb-space-xs border-b border-surface-container">
-              <div className="flex items-center gap-space-xs">
-                <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span>
-                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">
-                  Phí cơ bản & hệ số ngập
-                </h2>
-              </div>
-              <span className="font-data-mono text-data-mono text-secondary">DISPATCH_STD_GEO</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
-              <div className="p-space-md rounded bg-surface-container-low flex flex-col space-y-space-xs">
-                <label className="font-label-lg text-label-lg text-on-surface font-semibold">
-                  Phí khởi tạo cơ sở (Bán kính &lt; 3km)
-                </label>
-                <div className="relative">
-                  <input
-                    className="w-full h-9 pl-3 pr-8 bg-surface-container-lowest font-data-mono text-headline-sm font-bold text-on-surface rounded focus:outline-none focus:ring-1 focus:ring-primary shadow-sm border-0"
-                    type="text"
-                    value={baseFee}
-                    onChange={(e) => setBaseFee(e.target.value)}
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-data-mono text-data-mono text-secondary font-bold">₫</span>
-                </div>
-                <span className="font-body-sm text-body-sm text-secondary">Chi phí xuất bến tối thiểu cho kỹ thuật viên</span>
-              </div>
-
-              <div className="p-space-md rounded bg-surface-container-low flex flex-col space-y-space-xs">
-                <label className="font-label-lg text-label-lg text-on-surface font-semibold">
-                  Đơn giá cự ly tiếp theo (Từ km thứ 3+)
-                </label>
-                <div className="relative">
-                  <input
-                    className="w-full h-9 pl-3 pr-14 bg-surface-container-lowest font-data-mono text-headline-sm font-bold text-on-surface rounded focus:outline-none focus:ring-1 focus:ring-primary shadow-sm border-0"
-                    type="text"
-                    value={perKmFee}
-                    onChange={(e) => setPerKmFee(e.target.value)}
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-data-mono text-data-mono text-secondary font-bold">₫/km</span>
-                </div>
-                <span className="font-body-sm text-body-sm text-secondary">Cập nhật theo bản đồ đo lường giao thông ngập úng</span>
-              </div>
-            </div>
-
-            {/* Flood Level Coefficients K */}
-            <div className="flex flex-col space-y-space-sm pt-1">
-              <span className="font-label-sm text-label-sm text-secondary uppercase font-bold tracking-wider">
-                Hệ Số Ngập K (Áp dụng nhân hệ số rủi ro nước ngập)
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-space-sm">
-                <div className="p-space-sm rounded bg-surface-container flex flex-col justify-between space-y-space-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm uppercase font-bold">
-                      Mức 1: Nửa bánh
-                    </span>
-                    <span className="font-data-mono text-headline-sm text-on-surface font-bold">1.2x</span>
-                  </div>
-                  <p className="font-body-sm text-body-sm text-secondary">Ngập &lt; 25cm. Xe còn khả năng dắt nhẹ, không tràn pô.</p>
-                  <div className="w-full bg-surface-container-highest h-1 rounded overflow-hidden">
-                    <div className="bg-secondary h-full w-[40%]"></div>
-                  </div>
-                </div>
-
-                <div className="p-space-sm rounded bg-surface-container flex flex-col justify-between space-y-space-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="px-1.5 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm uppercase font-bold">
-                      Mức 2: Lút yên xe
-                    </span>
-                    <span className="font-data-mono text-headline-sm text-primary font-bold">1.5x</span>
-                  </div>
-                  <p className="font-body-sm text-body-sm text-secondary">Ngập 25cm - 60cm. Cần xe cẩu/xe sàn cao, tháo bình ắc quy.</p>
-                  <div className="w-full bg-surface-container-highest h-1 rounded overflow-hidden">
-                    <div className="bg-primary h-full w-[70%]"></div>
-                  </div>
-                </div>
-
-                <div className="p-space-sm rounded bg-surface-container flex flex-col justify-between space-y-space-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="px-1.5 py-0.5 rounded bg-error-container text-on-error-container font-label-sm text-label-sm uppercase font-bold">
-                      Mức 3: Nước xiết
-                    </span>
-                    <span className="font-data-mono text-headline-sm text-error font-bold">2.0x</span>
-                  </div>
-                  <p className="font-body-sm text-body-sm text-secondary">Ngập sâu &gt; 60cm, dòng chảy mạnh. Yêu cầu thắt đai an toàn.</p>
-                  <div className="w-full bg-surface-container-highest h-1 rounded overflow-hidden">
-                    <div className="bg-error h-full w-full"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          {/* Thanh tìm kiếm & lọc trạng thái Gara */}
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Tìm tên Gara, SĐT, địa chỉ..."
+              className="h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary w-64"
+            />
+            <select
+              aria-label="Lọc trạng thái Gara"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface font-semibold"
+            >
+              <option value="ALL">Tất cả trạng thái ({garages.length})</option>
+              <option value="APPROVED">Đã duyệt (APPROVED)</option>
+              <option value="PENDING">Chờ duyệt (PENDING)</option>
+              <option value="SUSPENDED">Đình chỉ (SUSPENDED)</option>
+            </select>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: SIMULATION CALCULATOR & AUDIT TRAIL (5 COLS) */}
-        <div className="lg:col-span-5 flex flex-col space-y-space-md">
-          {/* SIMULATOR */}
-          <div className="bg-surface-container-lowest p-space-lg rounded shadow-sm flex flex-col space-y-space-md border border-surface-container">
-            <div className="flex items-center justify-between pb-space-xs border-b border-surface-container">
-              <div className="flex items-center gap-space-xs">
-                <span className="material-symbols-outlined text-primary text-[20px]">calculate</span>
-                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">Ước tính chi phí</h2>
-              </div>
-              <span className="px-2 py-0.5 rounded bg-surface-container-low text-secondary font-label-sm text-label-sm font-bold uppercase">
-                LIVE SIMULATOR
-              </span>
-            </div>
-            <p className="font-body-sm text-body-sm text-secondary">
-              Kiểm tra trực quan dòng tiền và chia tách lợi nhuận trước khi công bố cấu hình vào hệ thống điều phối toàn thành phố.
-            </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-container-low border-b border-surface-container text-xs font-bold text-secondary uppercase tracking-wider">
+                <th className="py-3 px-4">Mã &amp; Tên Gara</th>
+                <th className="py-3 px-4">Địa chỉ &amp; Điện thoại</th>
+                <th className="py-3 px-4">Danh mục dịch vụ của Gara (Từ DB)</th>
+                <th className="py-3 px-4 text-right">Số dư ví hiện tại</th>
+                <th className="py-3 px-4 text-center">Chiết khấu hiện hành</th>
+                <th className="py-3 px-4 text-right">Điều chỉnh chiết khấu (Chỉ Admin)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-container text-sm">
+              {filteredGarages.map((garage) => {
+                const currentDraft =
+                  draftRates[garage.garageId] !== undefined
+                    ? draftRates[garage.garageId]
+                    : String(garage.commissionRate ?? 10);
+                const isSavingThisRow = savingGarageId === garage.garageId;
 
-            {/* Slider */}
-            <div className="bg-surface-container-low p-space-md rounded flex flex-col space-y-space-xs">
-              <div className="flex justify-between items-center">
-                <span className="font-label-md text-label-md text-secondary uppercase font-semibold">Đơn Cứu Hộ Lút Yên Xe Điển Hình</span>
-                <span className="font-data-mono text-headline-md text-on-surface font-bold">
-                  {simOrderAmount.toLocaleString('vi-VN')} ₫
-                </span>
-              </div>
-              <input
-                className="w-full accent-primary h-1.5 bg-surface-variant rounded-lg cursor-pointer"
-                max="1500000"
-                min="100000"
-                step="25000"
-                type="range"
-                value={simOrderAmount}
-                onChange={(e) => setSimOrderAmount(parseFloat(e.target.value))}
-              />
-              <div className="flex justify-between text-secondary font-data-mono text-label-sm">
-                <span>100.000 ₫</span>
-                <span>750.000 ₫</span>
-                <span>1.500.000 ₫</span>
-              </div>
-            </div>
-
-            {/* Split Visualization Bar */}
-            <div className="flex flex-col space-y-space-xs">
-              <div className="flex justify-between font-label-sm text-label-sm text-secondary uppercase font-semibold">
-                <span>Cơ Cấu Tách Dòng Tiền (Split Ledger)</span>
-                <span className="font-data-mono">{garagePercent}% Gara / {globalRate.toFixed(1)}% Sàn</span>
-              </div>
-              <div className="w-full h-3 rounded overflow-hidden flex bg-surface-container">
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${garagePercent}%` }}
-                  title="Thực nhận Gara"
-                ></div>
-                <div
-                  className="h-full bg-secondary transition-all duration-300"
-                  style={{ width: `${globalRate}%` }}
-                  title="Phí Sàn Thu"
-                ></div>
-              </div>
-            </div>
-
-            {/* Ledger Rows */}
-            <div className="bg-surface-container p-space-md rounded flex flex-col space-y-space-xs">
-              <div className="flex justify-between items-center py-1">
-                <span className="font-body-md text-body-md text-secondary">Giá cước đơn hàng gốc</span>
-                <span className="font-data-mono text-data-mono text-on-surface font-semibold">
-                  {simOrderAmount.toLocaleString('vi-VN')} ₫
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-1">
-                <span className="font-body-md text-body-md text-error flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[15px]">remove_circle_outline</span>
-                  <span>Trợ cấp sàn hỗ trợ người dân (-{subsidyRate}%)</span>
-                </span>
-                <span className="font-data-mono text-data-mono text-error font-semibold">
-                  -{subsidyAmount.toLocaleString('vi-VN')} ₫
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-1">
-                <span className="font-headline-sm text-headline-sm text-on-surface font-bold">Khách trả thực tế (Customer Pays)</span>
-                <span className="font-data-mono text-headline-sm text-tertiary font-bold">
-                  {customerPays.toLocaleString('vi-VN')} ₫
-                </span>
-              </div>
-
-              <div className="h-px bg-surface-container-highest my-1"></div>
-
-              <div className="flex justify-between items-center py-1">
-                <span className="font-body-md text-body-md text-secondary flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[15px]">percent</span>
-                  <span>Phí dịch vụ sàn khấu trừ</span>
-                </span>
-                <span className="font-data-mono text-data-mono text-primary font-bold">
-                  {platformFee.toLocaleString('vi-VN')} ₫
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-1">
-                <span className="font-body-md text-body-md text-secondary flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[15px]">price_check</span>
-                  <span>Sàn bù hoàn lại tiền trợ cấp cho Gara</span>
-                </span>
-                <span className="font-data-mono text-data-mono text-on-surface font-semibold">
-                  +{subsidyAmount.toLocaleString('vi-VN')} ₫
-                </span>
-              </div>
-
-              <div className="p-space-sm rounded bg-surface-container-lowest shadow-sm flex justify-between items-center mt-2 border border-surface-container">
-                <div>
-                  <span className="font-headline-sm text-headline-sm text-primary font-bold block">GARA THỰC NHẬN VỀ VÍ</span>
-                  <span className="font-body-sm text-body-sm text-secondary">Đã đối soát cấn trừ tự động</span>
-                </div>
-                <span className="font-data-mono text-headline-lg text-primary font-bold">
-                  {garageFinal.toLocaleString('vi-VN')} ₫
-                </span>
-              </div>
-            </div>
-
-            {/* Highlight Cards */}
-            <div className="grid grid-cols-2 gap-space-sm pt-1">
-              <div className="bg-surface-container-low p-space-sm rounded">
-                <span className="font-label-sm text-label-sm text-secondary uppercase block font-semibold">Tỷ suất bảo toàn Gara</span>
-                <span className="font-data-mono text-headline-sm text-on-surface font-bold">94.2%</span>
-                <span className="font-body-sm text-body-sm text-secondary block mt-0.5">Sức chịu tải tài chính cao</span>
-              </div>
-              <div className="bg-surface-container-low p-space-sm rounded">
-                <span className="font-label-sm text-label-sm text-secondary uppercase block font-semibold">Thời gian quyết toán</span>
-                <span className="font-data-mono text-headline-sm text-tertiary font-bold">T + 0</span>
-                <span className="font-body-sm text-body-sm text-secondary block mt-0.5">Tích hợp cổng PayOS</span>
-              </div>
-            </div>
-          </div>
-
-          {/* AUDIT TRAIL HISTORY */}
-          <div className="bg-surface-container-lowest p-space-lg rounded shadow-sm flex flex-col space-y-space-md border border-surface-container">
-            <div className="flex items-center justify-between pb-space-xs border-b border-surface-container">
-              <div className="flex items-center gap-space-xs">
-                <span className="material-symbols-outlined text-secondary text-[20px]">history_edu</span>
-                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">
-                  Lịch sử thay đổi
-                </h2>
-              </div>
-              <span className="font-data-mono text-data-mono text-secondary">4 BẢN GHI GẦN NHẤT</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-surface-container-low font-label-md text-label-md text-secondary uppercase">
-                    <th className="py-2 px-space-sm">Thời gian</th>
-                    <th className="py-2 px-space-sm">Người thực hiện</th>
-                    <th className="py-2 px-space-sm">Nội dung thay đổi</th>
-                    <th className="py-2 px-space-sm">Lý do duyệt</th>
-                    <th className="py-2 px-space-sm text-right">Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-surface-container font-body-sm text-body-sm">
-                  {auditLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-surface-container transition-colors">
-                      <td className="py-2.5 px-space-sm font-data-mono text-[11px] text-secondary">
-                        {log.createdAt ? new Date(log.createdAt).toLocaleString('vi-VN') : 'Vừa xong'}
-                      </td>
-                      <td className="py-2.5 px-space-sm font-label-lg text-label-lg text-on-surface whitespace-nowrap">
-                        {log.updatedByName || 'HỆ THỐNG'}
-                        <span className="block font-label-sm text-label-sm text-primary font-bold">
-                          {log.updatedByRole || 'ADMIN'}
+                return (
+                  <tr
+                    key={garage.garageId}
+                    className="hover:bg-surface-container-low/40 transition-colors align-top"
+                  >
+                    {/* Cột 1: Mã & Tên Gara + Trạng thái */}
+                    <td className="py-3.5 px-4">
+                      <div className="font-mono text-xs font-bold text-primary">
+                        #GAR-{garage.garageId}
+                      </div>
+                      <div className="font-bold text-on-surface mt-0.5">{garage.garageName}</div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            garage.status === 'APPROVED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : garage.status === 'SUSPENDED'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {garage.status}
                         </span>
-                      </td>
-                      <td className="py-2.5 px-space-sm">
-                        <div className="font-semibold text-on-surface">
-                          {log.changeSummary || `Hoa hồng chuẩn ${log.globalRate}%`}
-                        </div>
-                        <div className="text-secondary text-[11px]">
-                          Phiên bản {log.versionCode || 'v2.4'} • Trợ cấp {log.subsidyRate}%
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-space-sm text-secondary">
-                        {log.approvalReason || 'Cập nhật cấu hình hệ thống'}
-                      </td>
-                      <td className="py-2.5 px-space-sm text-right whitespace-nowrap">
-                        {log.active ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container-high text-primary font-label-sm text-label-sm uppercase font-bold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary"></span> Đang hiệu lực
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-secondary font-label-sm text-label-sm uppercase">
-                            Lưu trữ
+                        {garage.isOnline && (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-100 text-blue-800">
+                            Trực tuyến
                           </span>
                         )}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="hover:bg-surface-container transition-colors">
-                    <td className="py-2.5 px-space-sm font-data-mono text-[11px] text-secondary">
-                      01/10/24<br />08:30:15
+                      </div>
                     </td>
-                    <td className="py-2.5 px-space-sm font-label-lg text-label-lg text-on-surface whitespace-nowrap">
-                      Trần Minh Trí
-                      <span className="block font-label-sm text-label-sm text-primary font-bold">ADMIN CẤP CAO</span>
-                    </td>
-                    <td className="py-2.5 px-space-sm">
-                      <div className="font-semibold text-on-surface">Phí Vượt Ngập ghép 12% → 10%</div>
-                      <div className="text-secondary text-[11px]">Kích hoạt trợ cấp bão số 4</div>
-                    </td>
-                    <td className="py-2.5 px-space-sm text-secondary">
-                      Công điện khẩn ngập úng quận 7 & Nhà Bè
-                    </td>
-                    <td className="py-2.5 px-space-sm text-right whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container-high text-primary font-label-sm text-label-sm uppercase font-bold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary"></span> Đang hiệu lực
-                      </span>
-                    </td>
-                  </tr>
 
-                  <tr className="hover:bg-surface-container transition-colors">
-                    <td className="py-2.5 px-space-sm font-data-mono text-[11px] text-secondary">
-                      15/09/24<br />14:12:00
+                    {/* Cột 2: Địa chỉ & Số điện thoại */}
+                    <td className="py-3.5 px-4 max-w-xs">
+                      <div className="font-mono text-xs font-semibold text-on-surface">
+                        SĐT: {garage.phone || '—'}
+                      </div>
+                      <div className="text-xs text-secondary mt-1 leading-relaxed">
+                        {garage.address || 'Chưa cập nhật địa chỉ'}
+                      </div>
                     </td>
-                    <td className="py-2.5 px-space-sm font-label-lg text-label-lg text-on-surface whitespace-nowrap">
-                      Lê Hoàng Nam
-                      <span className="block font-label-sm text-label-sm text-secondary">STAFF KIỂM SOÁT</span>
-                    </td>
-                    <td className="py-2.5 px-space-sm">
-                      <div className="font-semibold text-on-surface">Tăng trợ cấp đỉnh triều cường</div>
-                      <div className="text-secondary text-[11px]">Mức trợ cấp nâng từ 10% → 15%</div>
-                    </td>
-                    <td className="py-2.5 px-space-sm text-secondary">
-                      Hỗ trợ phương tiện bị kẹt đường Nguyễn Hữu Cảnh
-                    </td>
-                    <td className="py-2.5 px-space-sm text-right whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-secondary font-label-sm text-label-sm uppercase">
-                        Lưu trữ
-                      </span>
-                    </td>
-                  </tr>
 
-                  <tr className="hover:bg-surface-container transition-colors">
-                    <td className="py-2.5 px-space-sm font-data-mono text-[11px] text-secondary">
-                      28/08/24<br />09:45:22
+                    {/* Cột 3: Danh mục dịch vụ thực tế của Gara lấy từ DB kèm đơn giá gốc */}
+                    <td className="py-3.5 px-4 max-w-md">
+                      {garage.services && garage.services.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {garage.services.map((srv) => (
+                            <span
+                              key={srv.id}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-surface-container text-xs text-on-surface border border-surface-container-high"
+                            >
+                              <span className="font-medium">{srv.serviceName}:</span>
+                              <strong className="font-mono text-primary">
+                                {Number(srv.basePrice ?? 0).toLocaleString('vi-VN')} ₫
+                              </strong>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-secondary italic">
+                          Chưa đăng ký dịch vụ trong DB
+                        </span>
+                      )}
                     </td>
-                    <td className="py-2.5 px-space-sm font-label-lg text-label-lg text-on-surface whitespace-nowrap">
-                      Trần Minh Trí
-                      <span className="block font-label-sm text-label-sm text-primary font-bold">ADMIN CẤP CAO</span>
-                    </td>
-                    <td className="py-2.5 px-space-sm">
-                      <div className="font-semibold text-on-surface">Cập nhật Hệ số K Ngập cấp 3</div>
-                      <div className="text-secondary text-[11px]">Điều chỉnh 1.8x → 2.0x</div>
-                    </td>
-                    <td className="py-2.5 px-space-sm text-secondary">
-                      Bảo vệ an toàn kỹ thuật viên cứu hộ ca đêm
-                    </td>
-                    <td className="py-2.5 px-space-sm text-right whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-secondary font-label-sm text-label-sm uppercase">
-                        Lưu trữ
-                      </span>
-                    </td>
-                  </tr>
 
-                  <tr className="hover:bg-surface-container transition-colors">
-                    <td className="py-2.5 px-space-sm font-data-mono text-[11px] text-secondary">
-                      01/08/24<br />00:00:01
+                    {/* Cột 4: Số dư ví hiện tại của Gara */}
+                    <td className="py-3.5 px-4 text-right font-mono font-bold text-on-surface whitespace-nowrap">
+                      {Number(garage.walletBalance ?? 0).toLocaleString('vi-VN')} ₫
                     </td>
-                    <td className="py-2.5 px-space-sm font-label-lg text-label-lg text-on-surface whitespace-nowrap">
-                      HỆ THỐNG
-                      <span className="block font-label-sm text-label-sm text-secondary">AUTO DISPATCH</span>
-                    </td>
-                    <td className="py-2.5 px-space-sm">
-                      <div className="font-semibold text-on-surface">Khởi tạo Bộ thông số v2.0</div>
-                      <div className="text-secondary text-[11px]">Chốt phiên bản mở rộng mùa mưa</div>
-                    </td>
-                    <td className="py-2.5 px-space-sm text-secondary">
-                      Triển khai đồng bộ toàn hệ sinh thái
-                    </td>
-                    <td className="py-2.5 px-space-sm text-right whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-secondary font-label-sm text-label-sm uppercase">
-                        Lưu trữ
+
+                    {/* Cột 5: Tỷ lệ chiết khấu hiện hành trong DB */}
+                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary font-mono font-bold text-sm">
+                        {Number(garage.commissionRate ?? 0).toFixed(1)}%
                       </span>
+                      <div className="text-[11px] text-secondary mt-1">
+                        Gara nhận {(100 - Number(garage.commissionRate ?? 0)).toFixed(1)}%
+                      </div>
+                    </td>
+
+                    {/* Cột 6: Ô nhập chỉnh sửa trực tiếp & nút Lưu chiết khấu */}
+                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="relative w-24">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.5}
+                              aria-label={`Tỷ lệ chiết khấu của ${garage.garageName}`}
+                              value={currentDraft}
+                              onChange={(e) =>
+                                setDraftRates((prev) => ({
+                                  ...prev,
+                                  [garage.garageId]: e.target.value
+                                }))
+                              }
+                              className="w-full h-9 pl-2.5 pr-6 rounded-lg border border-surface-container bg-surface-container-low font-mono font-bold text-sm text-right text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-mono text-secondary">
+                              %
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isSavingThisRow}
+                            onClick={() => void handleSaveGarageCommission(garage)}
+                            className="h-9 px-3.5 rounded-lg bg-primary text-on-primary text-xs font-bold hover:bg-primary-container transition-colors cursor-pointer disabled:opacity-60"
+                          >
+                            {isSavingThisRow ? 'Đang lưu...' : 'Lưu chiết khấu'}
+                          </button>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={draftNotes[garage.garageId] || ''}
+                          onChange={(e) =>
+                            setDraftNotes((prev) => ({
+                              ...prev,
+                              [garage.garageId]: e.target.value
+                            }))
+                          }
+                          placeholder="Ghi chú lý do điều chỉnh (tùy chọn)..."
+                          className="w-60 h-7 px-2 rounded border border-surface-container bg-surface text-xs text-on-surface"
+                        />
+                      </div>
                     </td>
                   </tr>
-                </tbody>
-              </table>
+                );
+              })}
+
+              {filteredGarages.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-8 px-4 text-center text-sm text-secondary">
+                    {isLoading
+                      ? 'Đang tải danh sách chiết khấu Gara từ cơ sở dữ liệu...'
+                      : 'Không có Gara đối tác nào khớp với bộ lọc hiện tại.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Khu vực 2 cột bên dưới: Cấu hình chiết khấu mặc định cho Gara mới & Bảng lịch sử thay đổi từ DB */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Cột trái (5 cột): Cấu hình tỷ lệ mặc định cho Gara mới */}
+        <div className="lg:col-span-5 bg-surface-container-lowest p-6 rounded-xl border border-surface-container shadow-xs space-y-4">
+          <div className="border-b border-surface-container pb-3">
+            <h3 className="text-base font-bold text-on-surface">
+              Cấu Hình Tỷ Lệ Mặc Định Cho Gara Mới
+            </h3>
+            <p className="text-xs text-secondary mt-0.5">
+              Mức chiết khấu mặc định sẽ được tự động gán cho các Gara đối tác mới khi được duyệt hồ sơ.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveGlobalCommission} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase text-secondary mb-1">
+                Tỷ lệ chiết khấu mặc định hệ thống (%)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={globalRate}
+                onChange={(e) => setGlobalRate( parseFloat(e.target.value) || 0 )}
+                className="w-full h-10 px-3 rounded-lg border border-surface-container bg-surface-container-low font-mono font-bold text-base text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+              />
             </div>
 
-            <div className="flex items-center justify-between pt-space-xs text-secondary font-body-sm text-body-sm border-t border-surface-container">
-              <span>Chu kỳ kiểm toán tự động: 24 giờ / lần</span>
-              <button
-                onClick={() => onShowToast('Xuất Tệp Kiểm Toán', 'Đã tải xuống file audit_commission_log.csv')}
-                className="text-primary hover:text-primary-container font-label-sm text-label-sm uppercase font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <span>Tải toàn bộ log kiểm toán (.CSV)</span>
-                <span className="material-symbols-outlined text-[14px]">download</span>
-              </button>
+            <div>
+              <label className="block text-xs font-bold uppercase text-secondary mb-1">
+                Lý do cập nhật cấu hình mặc định
+              </label>
+              <input
+                type="text"
+                value={changeReason}
+                onChange={(e) => setChangeReason(e.target.value)}
+                placeholder="Nhập lý do lưu vào nhật ký kiểm toán..."
+                className="w-full h-10 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+              />
             </div>
+
+            <button
+              type="submit"
+              disabled={isSavingGlobal}
+              className="w-full h-10 px-4 rounded-lg bg-primary text-on-primary font-bold text-sm hover:bg-primary-container transition-colors cursor-pointer disabled:opacity-60"
+            >
+              {isSavingGlobal
+                ? 'Đang lưu cấu hình...'
+                : 'Lưu Tỷ Lệ Mặc Định Hệ Thống'}
+            </button>
+          </form>
+        </div>
+
+        {/* Cột phải (7 cột): Lịch sử thay đổi chiết khấu lấy 100% từ Database */}
+        <div className="lg:col-span-7 bg-surface-container-lowest p-6 rounded-xl border border-surface-container shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-surface-container pb-3">
+            <div>
+              <h3 className="text-base font-bold text-on-surface">
+                Lịch Sử Thay Đổi Chiết Khấu (Audit Log từ DB)
+              </h3>
+              <p className="text-xs text-secondary mt-0.5">
+                Ghi nhận toàn bộ lịch sử điều chỉnh tỷ lệ chiết khấu bởi Quản trị viên trong cơ sở dữ liệu.
+              </p>
+            </div>
+            <span className="text-xs font-mono px-2.5 py-1 rounded bg-surface-container text-secondary font-semibold">
+              {auditLogs.length} bản ghi
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-surface-container-low border-b border-surface-container text-xs font-bold text-secondary uppercase">
+                  <th className="py-2.5 px-3">Thời gian</th>
+                  <th className="py-2.5 px-3">Quản trị viên</th>
+                  <th className="py-2.5 px-3">Nội dung thay đổi</th>
+                  <th className="py-2.5 px-3">Lý do duyệt</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-container text-xs">
+                {auditLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-surface-container-low/50">
+                    <td className="py-2.5 px-3 font-mono text-secondary whitespace-nowrap">
+                      {log.createdAt
+                        ? new Date(log.createdAt).toLocaleString('vi-VN')
+                        : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 font-semibold text-on-surface whitespace-nowrap">
+                      {log.updatedByName || 'Quản trị viên'}
+                      <span className="block text-[10px] font-mono text-primary">
+                        {log.updatedByRole || 'ADMIN'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-on-surface">
+                      <div className="font-semibold">
+                        {log.changeSummary || `Chiết khấu mặc định: ${log.globalRate}%`}
+                      </div>
+                      <div className="text-secondary font-mono text-[11px]">
+                        Phiên bản: {log.versionCode || 'v1.0'} • Tỷ lệ: {log.globalRate}%
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3 text-secondary">
+                      {log.approvalReason || 'Cập nhật từ bảng điều khiển Admin'}
+                    </td>
+                  </tr>
+                ))}
+
+                {auditLogs.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-center text-secondary">
+                      Chưa có bản ghi lịch sử thay đổi chiết khấu nào trong Database.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

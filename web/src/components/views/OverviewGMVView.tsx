@@ -1,648 +1,435 @@
-import React, { useState } from 'react';
-import { ScreenId } from '../../types';
+// ============================================================================
+// MÀN HÌNH TỔNG QUAN TÀI CHÍNH & DÒNG TIỀN HỆ THỐNG (OVERVIEW GMV VIEW - UC-25)
+// Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Quản trị Tài chính & Hệ thống Admin
+// Mục đích (Yêu cầu #8):
+// 1. Loại bỏ hoàn toàn mảng `feedRows` gắn cứng, các hình ảnh hiện trường giả và các con số giả lập
+//    (`1,48 tỷ ₫`, `1.420 giao dịch`, `Triều cường 1,72m`).
+// 2. Truy xuất đồng thời dữ liệu thực tế từ Cơ sở dữ liệu qua 4 API:
+//    `Promise.all([financeApi.getStats(), financeApi.getTransactions(), financeApi.getPayouts(), financeApi.getRefunds()])`.
+// 3. Hiển thị 4 Thẻ chỉ số KPI thực tế từ Database:
+//    - KPI 1: Tổng doanh thu giao dịch (GMV) & tổng số đơn thanh toán thành công.
+//    - KPI 2: Doanh thu phí chiết khấu sàn thu được.
+//    - KPI 3: Tổng số dư hiện đang lưu giữ trong ví của các Gara đối tác.
+//    - KPI 4: Số lượng & tổng giá trị các yêu cầu rút tiền đang chờ Admin phê duyệt.
+// 4. Hiển thị khu vực Cảnh báo nghiệp vụ thực tế từ Database:
+//    - Số yêu cầu rút tiền đang chờ duyệt (`PENDING` / `PROCESSING`) -> nhấn để mở trang Rút tiền.
+//    - Số hồ sơ khiếu nại chờ phán quyết hoàn tiền (`ESCALATED_TO_ADMIN` / `OPEN` / `UNDER_REVIEW`) -> nhấn để mở trang Hoàn tiền.
+// 5. Hiển thị Bảng Giao dịch Thanh toán Gần đây lấy 100% từ `financeApi.getTransactions()` trong Database.
+// ============================================================================
 
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ScreenId } from '../../types';
+import {
+  DisputeBackendResponse,
+  financeApi,
+  PaymentTransactionBackend,
+  PayoutRequestBackend,
+  PlatformRevenueStats
+} from '../../services/financeApi';
+
+/**
+ * Giao diện Props truyền vào OverviewGMVView.
+ */
 interface OverviewGMVViewProps {
   onSelectScreen: (screen: ScreenId) => void;
-  onShowToast: (title: string, msg: string) => void;
+  onShowToast: (title: string, msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
-export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({ onSelectScreen, onShowToast }) => {
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [periodFilter, setPeriodFilter] = useState<'today' | '7d' | 'storm' | 'custom'>('storm');
-  const [feedRows, setFeedRows] = useState([
-    {
-      code: '#RC-98421',
-      payosId: 'POS-8831092',
-      type: 'Vượt ngập ghép',
-      typeIcon: 'local_shipping',
-      badgeColor: 'bg-primary-fixed text-on-primary-fixed',
-      customer: 'Nguyễn Hoài Nam',
-      vehicle: 'Honda SH 150i • 59-G2 891.22',
-      garage: 'Gara Khang Điền Q.Bình Thạnh',
-      tech: 'Tài xế: Đỗ Văn Tuấn (KTV-08)',
-      amount: '180.000 ₫',
-      fee: '+21.600 ₫',
-      time: '14 giây trước',
-      status: 'PayOS Đã Khớp'
-    },
-    {
-      code: '#RC-98419',
-      payosId: 'POS-8831085',
-      type: 'Hút nước & Thay dầu',
-      typeIcon: 'build',
-      badgeColor: 'bg-secondary-container text-on-secondary-container',
-      customer: 'Lê Thị Mai Thảo',
-      vehicle: 'Yamaha Grande • 59-P1 455.10',
-      garage: 'Trung Tâm Xe Máy Nam Sài Gòn',
-      tech: 'Trạm cơ động số 03',
-      amount: '340.000 ₫',
-      fee: '+40.800 ₫',
-      time: '42 giây trước',
-      status: 'PayOS Đã Khớp'
-    },
-    {
-      code: '#RC-98418',
-      payosId: 'POS-8831079',
-      type: 'Kéo xe ngập đơn lẻ',
-      typeIcon: 'two_wheeler',
-      badgeColor: 'bg-tertiary-fixed text-on-tertiary-fixed',
-      customer: 'Trần Vũ Luân',
-      vehicle: 'Honda Winner X • 60-B3 772.90',
-      garage: 'Gara Hoàng Minh Q2',
-      tech: 'KTV: Lê Quốc Bảo (Xe cứu hộ 02)',
-      amount: '220.000 ₫',
-      fee: '+26.400 ₫',
-      time: '1 phút trước',
-      status: 'PayOS Đã Khớp'
-    },
-    {
-      code: '#RC-98415',
-      payosId: 'POS-8831061',
-      type: 'Vượt ngập ghép',
-      typeIcon: 'local_shipping',
-      badgeColor: 'bg-primary-fixed text-on-primary-fixed',
-      customer: 'Phạm Hương Trà',
-      vehicle: 'Vespa Primavera • 59-E1 304.55',
-      garage: 'Đội Cơ Động Thanh Đa',
-      tech: 'Tài xế: Bùi Hữu Phước',
-      amount: '180.000 ₫',
-      fee: '+21.600 ₫',
-      time: '2 phút trước',
-      status: 'PayOS Đã Khớp'
-    },
-    {
-      code: '#RC-98412',
-      payosId: 'MANUAL-CASH',
-      type: 'Tiền mặt trực tiếp',
-      typeIcon: 'payments',
-      badgeColor: 'bg-surface-container-high text-on-surface',
-      customer: 'Đặng Hoàng Quân',
-      vehicle: 'Honda Wave Alpha • 51-X2 119.84',
-      garage: 'Gara Sửa Xe 24/7 Thảo Điền',
-      tech: 'KTV: Võ Tiến Dũng',
-      amount: '120.000 ₫',
-      fee: '+14.400 ₫ (Ghi nợ)',
-      time: '3 phút trước',
-      status: 'Thu Tiền Mặt'
+export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({
+  onSelectScreen,
+  onShowToast
+}) => {
+  // ==========================================================================
+  // KHAI BÁO CÁC BIẾN TRẠNG THÁI (REACT STATE)
+  // ==========================================================================
+
+  // Dữ liệu thống kê tổng hợp từ API /finance/stats
+  const [stats, setStats] = useState<PlatformRevenueStats | null>(null);
+  // Danh sách giao dịch thanh toán thực tế từ DB
+  const [transactions, setTransactions] = useState<PaymentTransactionBackend[]>([]);
+  // Danh sách yêu cầu rút tiền từ DB
+  const [payouts, setPayouts] = useState<PayoutRequestBackend[]>([]);
+  // Danh sách hồ sơ khiếu nại & hoàn tiền từ DB
+  const [refunds, setRefunds] = useState<DisputeBackendResponse[]>([]);
+
+  // Trạng thái đang đồng bộ dữ liệu với Database
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string>('');
+
+  // ==========================================================================
+  // HÀM TẢI DỮ LIỆU TỔNG QUAN TỪ DATABASE
+  // ==========================================================================
+
+  /**
+   * Hàm gọi đồng thời 4 API tài chính để nạp dữ liệu thực từ Database.
+   */
+  const loadOverviewData = useCallback(async (showNotification = false) => {
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const [statsRes, txRes, payoutsRes, refundsRes] = await Promise.all([
+        financeApi.getStats().catch(() => null),
+        financeApi.getTransactions().catch(() => [] as PaymentTransactionBackend[]),
+        financeApi.getPayouts().catch(() => [] as PayoutRequestBackend[]),
+        financeApi.getRefunds().catch(() => [] as DisputeBackendResponse[])
+      ]);
+
+      setStats(statsRes);
+      setTransactions(Array.isArray(txRes) ? txRes : []);
+      setPayouts(Array.isArray(payoutsRes) ? payoutsRes : []);
+      setRefunds(Array.isArray(refundsRes) ? refundsRes : []);
+
+      if (showNotification) {
+        onShowToast(
+          'Đồng bộ thành công',
+          'Đã cập nhật số liệu tổng quan tài chính mới nhất từ Cơ sở dữ liệu.',
+          'success'
+        );
+      }
+    } catch (err) {
+      setErrorMsg((err as Error).message || 'Không thể tải dữ liệu tổng quan từ Database.');
+    } finally {
+      setIsLoading(false);
     }
-  ]);
+  }, [onShowToast]);
 
-  const handlePayosSync = () => {
-    setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
-      onShowToast(
-        'Đồng Bộ PayOS Thành Công!',
-        'Đã cập nhật 1,420 giao dịch và kết nối 14 điểm ngập thời gian thực.'
+  /**
+   * Tự động tải dữ liệu khi mở màn hình Tổng quan.
+   */
+  useEffect(() => {
+    void loadOverviewData(false);
+  }, [loadOverviewData]);
+
+  // ==========================================================================
+  // TÍNH TOÁN CHỈ SỐ KPI & CẢNH BÁO TỪ DỮ LIỆU THỰC TRONG DB
+  // ==========================================================================
+
+  /**
+   * Tính toán 4 chỉ số KPI và số lượng hồ sơ chờ xử lý từ dữ liệu thực tế:
+   */
+  const overviewMetrics = useMemo(() => {
+    // Các giao dịch đã thanh toán thành công
+    const paidTxs = transactions.filter((tx) => {
+      const st = String(tx.paymentStatus || tx.status || '').toUpperCase();
+      return st === 'PAID' || st === 'SUCCESS';
+    });
+
+    const txGmv = paidTxs.reduce((sum, tx) => sum + Number(tx.totalAmount ?? tx.amount ?? 0), 0);
+    const txCommission = paidTxs.reduce(
+      (sum, tx) => sum + Number(tx.platformCommission ?? tx.platformFee ?? 0),
+      0
+    );
+
+    // Các yêu cầu rút tiền đang chờ Admin duyệt
+    const pendingPayoutList = payouts.filter((p) => {
+      const st = String(p.status || '').toUpperCase();
+      return st === 'PENDING' || st === 'PROCESSING';
+    });
+    const pendingPayoutAmount = pendingPayoutList.reduce(
+      (sum, p) => sum + Number(p.amount ?? p.requestedAmount ?? 0),
+      0
+    );
+
+    // Các hồ sơ khiếu nại chờ xử lý hoàn tiền
+    const pendingDisputeList = refunds.filter((d) => {
+      const st = String(d.status || '').toUpperCase();
+      return (
+        st === 'ESCALATED_TO_ADMIN' ||
+        st === 'ADMIN_APPROVAL' ||
+        st === 'OPEN' ||
+        st === 'UNDER_REVIEW' ||
+        st === 'STAFF_REVIEW'
       );
-    }, 1200);
-  };
+    });
 
-  const handleRefreshFeed = () => {
-    onShowToast('Cập Nhật Luồng', 'Đang nạp 5 đơn cứu hộ mới nhất vừa hoàn thành qua PayOS...');
-  };
+    const totalGmv = txGmv > 0 ? txGmv : Number(stats?.totalGrossRevenueGmv ?? 0);
+    const totalCommission =
+      txCommission > 0 ? txCommission : Number(stats?.totalPlatformFeeEarned ?? 0);
+    const totalGarageWalletBalances = Number(stats?.totalGarageWalletBalances ?? 0);
+
+    return {
+      totalGmv,
+      paidTxCount:
+        paidTxs.length > 0 ? paidTxs.length : Number(stats?.totalPaidTransactionCount ?? 0),
+      totalCommission,
+      activeCommissionRate: Number(stats?.activeCommissionRate ?? 12.5),
+      totalGarageWalletBalances,
+      pendingPayoutCount:
+        pendingPayoutList.length > 0
+          ? pendingPayoutList.length
+          : Number(stats?.pendingPayoutCount ?? 0),
+      pendingPayoutAmount:
+        pendingPayoutAmount > 0
+          ? pendingPayoutAmount
+          : Number(stats?.pendingPayoutTotalAmount ?? 0),
+      pendingDisputeCount:
+        pendingDisputeList.length > 0
+          ? pendingDisputeList.length
+          : Number(stats?.openDisputesCount ?? 0),
+      pendingPayoutList,
+      pendingDisputeList
+    };
+  }, [stats, transactions, payouts, refunds]);
+
+  // Lấy tối đa 10 giao dịch mới nhất từ Database để hiển thị trên bảng Giao dịch gần đây
+  const recentTransactions = useMemo(() => {
+    return transactions.slice(0, 10);
+  }, [transactions]);
+
+  // ==========================================================================
+  // HIỂN THỊ GIAO DIỆN NGƯỜI DÙNG (JSX RENDERING)
+  // ==========================================================================
 
   return (
-    <div className="flex flex-col w-full space-y-space-md">
-      {/* Breadcrumb & Tactical Utility Bar */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 mb-2">
-        <div className="flex flex-col">
-          <div className="flex items-center gap-space-sm">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
-              Tổng quan tài chính
-            </h1>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-data-mono text-data-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-tertiary-container animate-pulse"></span>
-              Đang cập nhật
-            </span>
-          </div>
+    <div className="flex flex-col w-full space-y-6">
+      {/* Header trang Tổng quan tài chính */}
+      <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-on-surface">
+            Tổng Quan Tài Chính &amp; Dòng Tiền Hệ Thống
+          </h1>
+          <p className="text-sm text-secondary mt-1">
+            Theo dõi thời gian thực tổng giá trị giao dịch (GMV), doanh thu chiết khấu nền tảng, số dư ví Gara và các tác vụ tài chính chờ phê duyệt từ Database.
+          </p>
         </div>
 
-        {/* Quick Filters and Action CTA */}
-        <div className="flex flex-wrap items-center gap-space-xs">
-          <div className="flex items-center bg-surface-container-low p-0.5 rounded text-on-surface font-label-md text-label-md">
-            <button
-              onClick={() => setPeriodFilter('today')}
-              className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                periodFilter === 'today' ? 'bg-surface-container-lowest text-primary-container font-bold shadow-sm' : 'text-secondary hover:text-on-surface'
-              }`}
-            >
-              Hôm nay
-            </button>
-            <button
-              onClick={() => setPeriodFilter('7d')}
-              className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                periodFilter === '7d' ? 'bg-surface-container-lowest text-primary-container font-bold shadow-sm' : 'text-secondary hover:text-on-surface'
-              }`}
-            >
-              7 ngày qua
-            </button>
-            <button
-              onClick={() => setPeriodFilter('storm')}
-              className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                periodFilter === 'storm' ? 'bg-surface-container-lowest text-primary-container font-bold shadow-sm' : 'text-secondary hover:text-on-surface'
-              }`}
-            >
-              Đợt ngập #3
-            </button>
-            <button
-              onClick={() => setPeriodFilter('custom')}
-              className={`px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer ${
-                periodFilter === 'custom' ? 'bg-surface-container-lowest text-primary-container font-bold shadow-sm' : 'text-secondary hover:text-on-surface'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[14px]">calendar_month</span>
-              Tùy chọn
-            </button>
-          </div>
-          <div className="h-6 w-px bg-surface-container-high hidden sm:block"></div>
+        <div className="flex items-center gap-2.5 self-start lg:self-auto">
           <button
-            onClick={() => onShowToast('Xuất Tệp Kế Toán', 'Đã xuất bảng sao kê dòng tiền GMV định dạng PDF/Excel.')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-low hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg rounded shadow-sm transition-all cursor-pointer"
+            type="button"
+            onClick={() => onSelectScreen('reports')}
+            className="px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-sm font-semibold text-on-surface transition-colors cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[16px] text-tertiary">download</span>
-            <span>Xuất báo cáo</span>
+            Xem báo cáo P&amp;L chi tiết
           </button>
           <button
-            onClick={handlePayosSync}
-            disabled={isSyncing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg rounded shadow-sm transition-all active:scale-95 cursor-pointer disabled:opacity-80"
+            type="button"
+            disabled={isLoading}
+            onClick={() => void loadOverviewData(true)}
+            className="px-4 py-2 rounded-lg bg-primary text-on-primary font-bold text-sm hover:bg-primary-container transition-colors cursor-pointer disabled:opacity-60"
           >
-            <span className={`material-symbols-outlined text-[16px] ${isSyncing ? 'animate-spin' : ''}`}>
-              sync
-            </span>
-            <span>{isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ PayOS'}</span>
+            {isLoading ? 'Đang đồng bộ...' : 'Làm mới dữ liệu từ DB'}
           </button>
         </div>
       </div>
 
-      <div className="overview-alert"><span className="material-symbols-outlined">flood</span><strong>Ngập nặng tại Thủ Thiêm & Bình Thạnh</strong><details><summary>Chi tiết cảnh báo</summary><p>Triều cường 1,72 m · 17:30–19:45. Dự kiến 1.200 đơn/giờ. PayOS: 38 ms · SLA 99,99%. Hạn mức ký quỹ: 5 tỷ ₫.</p></details></div>
+      {errorMsg && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+          {errorMsg}
+        </div>
+      )}
 
-      {/* 5 High-Density Financial KPI Metric Cards */}
-      <div className="overview-kpis">
-        {/* KPI 1 */}
-        <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container">
-          <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Tổng giao dịch</span>
-            <span className="p-1.5 rounded bg-surface-container-low text-primary-container">
-              <span className="material-symbols-outlined text-[18px]">currency_exchange</span>
-            </span>
+      {/* 4 Thẻ chỉ số KPI chính lấy từ Database */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* KPI 1: Tổng doanh thu giao dịch (GMV) */}
+        <div
+          onClick={() => onSelectScreen('payos-reconciliation')}
+          className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs cursor-pointer hover:border-primary transition-colors"
+        >
+          <div className="text-xs font-bold uppercase text-secondary">
+            1. Tổng doanh thu giao dịch (GMV)
           </div>
-          <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold" title="1.482.500.000 ₫" aria-label="1.482.500.000 ₫">
-              1,48 tỷ <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-primary">
-              <span className="material-symbols-outlined text-[15px] font-bold">trending_up</span>
-              <span className="font-semibold">+28.4%</span>
-              <span className="text-secondary text-label-sm font-label-sm">so với kỳ trước</span>
-            </div>
+          <div className="text-2xl font-bold font-mono text-on-surface mt-1.5">
+            {overviewMetrics.totalGmv.toLocaleString('vi-VN')} ₫
           </div>
-          <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden mt-1">
-            <div className="bg-primary h-full w-[84%]"></div>
+          <div className="text-xs text-emerald-700 font-semibold mt-1">
+            {overviewMetrics.paidTxCount} giao dịch thành công trong DB
           </div>
         </div>
 
-        {/* KPI 2 */}
-        <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container">
-          <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Thu qua PayOS</span>
-            <span className="p-1.5 rounded bg-tertiary-fixed text-on-tertiary-fixed">
-              <span className="material-symbols-outlined text-[18px]">qr_code_scanner</span>
-            </span>
+        {/* KPI 2: Doanh thu chiết khấu sàn */}
+        <div
+          onClick={() => onSelectScreen('commission-settings')}
+          className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs cursor-pointer hover:border-primary transition-colors"
+        >
+          <div className="text-xs font-bold uppercase text-secondary">
+            2. Doanh thu chiết khấu sàn
           </div>
-          <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-tertiary tracking-tight font-bold" title="1.345.200.000 ₫" aria-label="1.345.200.000 ₫">
-              1,35 tỷ <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-tertiary">
-              <span className="material-symbols-outlined text-[15px]">verified_user</span>
-              <span className="font-semibold">90.7%</span>
-              <span className="text-secondary text-label-sm font-label-sm">giao dịch QR</span>
-            </div>
+          <div className="text-2xl font-bold font-mono text-primary mt-1.5">
+            {overviewMetrics.totalCommission.toLocaleString('vi-VN')} ₫
           </div>
-          <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden mt-1">
-            <div className="bg-tertiary-container h-full w-[91%]"></div>
+          <div className="text-xs text-secondary mt-1">
+            Chiết khấu mặc định hệ thống: {overviewMetrics.activeCommissionRate}%
           </div>
         </div>
 
-        {/* KPI 3 */}
-        <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container">
-          <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Phí nền tảng</span>
-            <span className="p-1.5 rounded bg-surface-container text-on-surface">
-              <span className="material-symbols-outlined text-[18px]">percent</span>
-            </span>
+        {/* KPI 3: Số dư ví các Gara */}
+        <div
+          onClick={() => onSelectScreen('reports')}
+          className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs cursor-pointer hover:border-primary transition-colors"
+        >
+          <div className="text-xs font-bold uppercase text-secondary">
+            3. Tổng số dư ví các Gara
           </div>
-          <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold" title="178.650.000 ₫" aria-label="178.650.000 ₫">
-              178,65 tr <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-secondary">
-              <span className="material-symbols-outlined text-[15px]">pie_chart</span>
-              <span className="font-semibold text-on-surface">12.05%</span>
-              <span className="text-secondary text-label-sm font-label-sm">tỷ lệ phí</span>
-            </div>
+          <div className="text-2xl font-bold font-mono text-tertiary mt-1.5">
+            {overviewMetrics.totalGarageWalletBalances.toLocaleString('vi-VN')} ₫
           </div>
-          <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden mt-1">
-            <div className="bg-secondary h-full w-[65%]"></div>
+          <div className="text-xs text-secondary mt-1">
+            Số dư khả dụng đang giữ trong ví đối tác
           </div>
         </div>
 
-        {/* KPI 4 */}
+        {/* KPI 4: Yêu cầu rút tiền chờ duyệt */}
         <div
           onClick={() => onSelectScreen('payouts')}
-          className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container cursor-pointer hover:border-error transition-colors"
+          className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs cursor-pointer hover:border-primary transition-colors"
         >
-          <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Chờ rút tiền</span>
-            <span className="p-1.5 rounded bg-error-container text-on-error-container">
-              <span className="material-symbols-outlined text-[18px]">pending_actions</span>
-            </span>
+          <div className="text-xs font-bold uppercase text-secondary">
+            4. Yêu cầu rút tiền chờ duyệt
           </div>
-          <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-error tracking-tight font-bold" title="42.800.000 ₫" aria-label="42.800.000 ₫">
-              42,8 tr <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-error">
-              <span className="material-symbols-outlined text-[15px]">storefront</span>
-              <span className="font-semibold">7 Gara</span>
-              <span className="text-secondary text-label-sm font-label-sm">chờ giải ngân</span>
-            </div>
+          <div className="text-2xl font-bold font-mono text-amber-600 mt-1.5">
+            {overviewMetrics.pendingPayoutCount} lệnh (
+            {overviewMetrics.pendingPayoutAmount.toLocaleString('vi-VN')} ₫)
           </div>
-          <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden mt-1">
-            <div className="bg-error h-full w-[45%]"></div>
-          </div>
-        </div>
-
-        {/* KPI 5 */}
-        <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col justify-between border border-surface-container">
-          <div className="flex items-start justify-between">
-            <span className="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Quỹ dự phòng</span>
-            <span className="p-1.5 rounded bg-secondary-container text-on-secondary-container">
-              <span className="material-symbols-outlined text-[18px]">shield</span>
-            </span>
-          </div>
-          <div className="my-space-sm">
-            <div className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold" title="95.000.000 ₫" aria-label="95.000.000 ₫">
-              95 tr <span className="font-label-lg text-label-lg font-normal text-secondary">₫</span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-1 font-body-sm text-body-sm text-tertiary">
-              <span className="material-symbols-outlined text-[15px]">check_circle</span>
-              <span className="font-semibold">100%</span>
-              <span className="text-secondary text-label-sm font-label-sm">bảo chứng</span>
-            </div>
-          </div>
-          <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden mt-1">
-            <div className="bg-tertiary h-full w-[100%]"></div>
+          <div className="text-xs text-secondary mt-1">
+            Nhấn để chuyển tới trang Duyệt rút tiền
           </div>
         </div>
       </div>
 
-      {/* Operational Field Context / Image Mosaics */}
-      <details className="overview-secondary"><summary>Hoạt động hiện trường & hạ tầng thanh toán</summary>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
-        <div className="bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex items-center gap-space-md border border-surface-container">
-          <img
-            className="w-20 h-20 rounded object-cover shrink-0"
-            alt="Ung Van Khiem Point"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJkUyqj1CpxbaA2oxSTBSk9frWHR1S9qyf9BPzwFXbI5d0bp-9RzM2RTqIuEXsYBgRN6MDujzYHDBGTpAPBmnySk0ITnsS5kfsz9OzxUdXyrD0SPCLUKhkwxgag80sF5grcortsPyIwJUqhQRFj9p1bMxaJYSOCWTp1lzP2ciueNPG34k8dxg6dBq_pvWkrjBGmYSWE8iit2XCeuIsJbfiOBP4FLGuZcZ8GGAbBvr9NTc4NpmjsxsS"
-          />
-          <div className="flex flex-col">
-            <span className="font-label-sm text-label-sm uppercase text-secondary">Điểm trung chuyển #04</span>
-            <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">Tuyến Ung Văn Khiêm</span>
-            <span className="font-body-sm text-body-sm text-secondary">86 lượt chở xe đã thanh toán qua PayOS</span>
-          </div>
-        </div>
-
-        <div className="bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex items-center gap-space-md border border-surface-container">
-          <img
-            className="w-20 h-20 rounded object-cover shrink-0"
-            alt="Garage Q7"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuC8_kLWs7OnNcnuCQnvo3p-csyvFnBRI-U49OZpCtSB98Gj54huVaJz-H8Bz9q2tralTej9Sz58yKVn_JOJx11VJmRH5hBUh_vQkWaf893jhykzBC6y4UgWnONHkizTzlO1tRdfxFUEmzz8SSxnonDX-D75zoOQL7zVgKL49Ewc4XZLzTi-gjC_thlcHkh3Qw7ZH1WliCaOGtKktSmc7Ut2Kaj2XtUEnkBSZxpP0jsI-Fw5jomPxd6r"
-          />
-          <div className="flex flex-col">
-            <span className="font-label-sm text-label-sm uppercase text-secondary">Xử lý thủy kích khẩn cấp</span>
-            <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">Gara Phúc Long Quận 7</span>
-            <span className="font-body-sm text-body-sm text-secondary">34 hóa đơn hoàn tất • Tiền về ví gara 100%</span>
-          </div>
-        </div>
-
-        <div className="bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex items-center gap-space-md border border-surface-container">
-          <img
-            className="w-20 h-20 rounded object-cover shrink-0"
-            alt="PayOS operations"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJFVWG0myaysfVqY77lzjlfTDlW7qxCo_IsmL9Mf0duGmNeUMl8DqrwR0XOpfqIlivR2vHBgI6SmxsDofQh4lG3qzWiWLf0iTQjzqTUueJ0PzLkqJXHSCkQQcJHalvcy4UQuywWTvFPH1Cu211N4Qx8mrnblfOgePtcIIZ_ZttJRjbuVP7kRQpnC5gZvwlDAOrzc5ruPKiZbIfZFFeONkmUaqZ918J-oS0DaFx84vwubYXzIQ0Ueu2"
-          />
-          <div className="flex flex-col">
-            <span className="font-label-sm text-label-sm uppercase text-secondary">Hạ tầng thanh toán</span>
-            <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">PayOS Webhook Stream</span>
-            <span className="font-body-sm text-body-sm text-tertiary">Tự động quyết toán 1.2s mỗi giao dịch</span>
-          </div>
-        </div>
-      </div>
-
-      </details>
-
-      {/* Charts & Analytics Grid (2 Columns) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-md">
-        {/* Left Column: Trend Area Chart */}
-        <div className="lg:col-span-8 bg-surface-container-lowest p-space-lg rounded-lg shadow-sm flex flex-col justify-between border border-surface-container">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-space-md gap-space-sm">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">Dòng tiền theo giờ</h2>
-                <span className="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold">
-                  Giờ cao điểm
-                </span>
-              </div>
-              <p className="font-body-sm text-body-sm text-secondary">
-                Giá trị giao dịch và phí nền tảng · 06:00–24:00
-              </p>
-            </div>
-            <div className="flex items-center gap-space-md font-label-sm text-label-sm">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-primary-container"></span>
-                <span className="text-on-surface font-medium">Giao dịch</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-tertiary-container"></span>
-                <span className="text-on-surface font-medium">Phí nền tảng</span>
-              </div>
-            </div>
-          </div>
-
-          {/* High-Density Inline SVG Area Chart */}
-          <div className="w-full h-64 relative mt-2 flex flex-col justify-end">
-            <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 720 220">
-              <defs>
-                <linearGradient id="gmvGradient" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="#cc4900" stopOpacity="0.35" />
-                  <stop offset="100%" stopColor="#cc4900" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="feeGradient" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="#007bb9" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#007bb9" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-              {/* Horizontal Grid Lines */}
-              <line stroke="#eff4ff" strokeDasharray="4 4" strokeWidth="1.5" x1="0" x2="720" y1="20" y2="20" />
-              <line stroke="#eff4ff" strokeDasharray="4 4" strokeWidth="1.5" x1="0" x2="720" y1="70" y2="70" />
-              <line stroke="#eff4ff" strokeDasharray="4 4" strokeWidth="1.5" x1="0" x2="720" y1="120" y2="120" />
-              <line stroke="#eff4ff" strokeDasharray="4 4" strokeWidth="1.5" x1="0" x2="720" y1="170" y2="170" />
-              <line stroke="#cbdbf5" strokeWidth="1" x1="0" x2="720" y1="210" y2="210" />
-
-              {/* GMV Rescue Volume Area & Path */}
-              <path
-                d="M 0 195 Q 60 190 120 175 T 240 150 T 360 110 T 480 30 T 540 25 T 600 85 T 660 145 T 720 180 L 720 210 L 0 210 Z"
-                fill="url(#gmvGradient)"
-              />
-              <path
-                d="M 0 195 Q 60 190 120 175 T 240 150 T 360 110 T 480 30 T 540 25 T 600 85 T 660 145 T 720 180"
-                fill="none"
-                stroke="#cc4900"
-                strokeLinecap="round"
-                strokeWidth="3"
-              />
-
-              {/* Platform Fee Area & Path */}
-              <path
-                d="M 0 206 Q 60 204 120 200 T 240 195 T 360 185 T 480 150 T 540 145 T 600 170 T 660 190 T 720 200 L 720 210 L 0 210 Z"
-                fill="url(#feeGradient)"
-              />
-              <path
-                d="M 0 206 Q 60 204 120 200 T 240 195 T 360 185 T 480 150 T 540 145 T 600 170 T 660 190 T 720 200"
-                fill="none"
-                stroke="#007bb9"
-                strokeLinecap="round"
-                strokeWidth="2.5"
-              />
-
-              {/* Peak Alert Marker (17h30 Tide) */}
-              <circle cx="510" cy="27" fill="#cc4900" r="4.5" />
-              <circle className="animate-ping" cx="510" cy="27" fill="#cc4900" opacity="0.25" r="9" />
-            </svg>
-
-            {/* Peak Callout Overlay */}
-            <div className="absolute left-[65%] top-[12%] -translate-x-1/2 bg-surface-container-lowest p-2 rounded shadow-md pointer-events-none text-left border border-surface-container">
-              <div className="font-label-sm text-label-sm text-primary uppercase font-bold">Đỉnh Ngập 17:45</div>
-              <div className="font-data-mono text-data-mono font-bold text-on-surface">312.450.000 ₫ / giờ</div>
-              <div className="font-body-sm text-body-sm text-secondary">Phí sàn: 37.600.000 ₫</div>
-            </div>
-          </div>
-
-          {/* X-Axis Labels */}
-          <div className="flex items-center justify-between text-secondary font-data-mono text-data-mono pt-2">
-            <span>06:00</span>
-            <span>09:00</span>
-            <span>12:00</span>
-            <span>15:00</span>
-            <span className="text-primary font-bold">18:00 (Đỉnh Triều)</span>
-            <span>21:00</span>
-            <span>24:00</span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-space-sm pt-space-md mt-space-md bg-surface-container-low p-space-sm rounded">
-            <div>
-              <div className="font-label-sm text-label-sm text-secondary uppercase font-semibold">Khung giờ cao điểm</div>
-              <div className="font-headline-sm text-headline-sm text-on-surface font-bold">17:00 - 20:30</div>
-            </div>
-            <div>
-              <div className="font-label-sm text-label-sm text-secondary uppercase font-semibold">GMV trung bình / đơn</div>
-              <div className="font-headline-sm text-headline-sm text-on-surface font-bold">185.000 ₫</div>
-            </div>
-            <div>
-              <div className="font-label-sm text-label-sm text-secondary uppercase font-semibold">Thời gian xác thực PayOS</div>
-              <div className="font-headline-sm text-headline-sm text-tertiary font-bold">0.82 giây</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Breakdown by Service & Gateway Distribution */}
-        <div className="lg:col-span-4 bg-surface-container-lowest p-space-lg rounded-lg shadow-sm flex flex-col justify-between space-y-space-md border border-surface-container">
+      {/* Khu vực Cảnh báo tác vụ cần Admin xử lý (Rút tiền chờ duyệt & Khiếu nại chờ phán quyết) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs flex items-center justify-between gap-4">
           <div>
-            <div className="flex items-center justify-between">
-              <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">Cơ cấu dịch vụ</h2>
-              <span className="material-symbols-outlined text-secondary text-[20px]">donut_large</span>
+            <div className="text-xs font-bold uppercase text-amber-700">
+              Cảnh báo giải ngân
             </div>
-            <p className="font-body-sm text-body-sm text-secondary mt-0.5">Tỷ trọng giá trị giao dịch</p>
+            <div className="text-base font-bold text-on-surface mt-0.5">
+              {overviewMetrics.pendingPayoutCount} yêu cầu rút tiền đang chờ Admin phê duyệt
+            </div>
+            <p className="text-xs text-secondary mt-1">
+              Tổng số tiền đề nghị rút: {overviewMetrics.pendingPayoutAmount.toLocaleString('vi-VN')} ₫
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={() => onSelectScreen('payouts')}
+            className="px-3.5 py-2 rounded-lg bg-amber-100 text-amber-900 text-xs font-bold hover:bg-amber-200 transition-colors shrink-0 cursor-pointer"
+          >
+            Xử lý rút tiền
+          </button>
+        </div>
 
-          <div className="space-y-space-sm">
-            {/* Service 1 */}
-            <div className="p-space-sm rounded bg-surface-container-low hover:bg-surface-container transition-colors">
-              <div className="flex justify-between items-center mb-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-primary"></span>
-                  <span className="font-label-lg text-label-lg text-on-surface font-semibold">Chở xe vượt ngập ghép</span>
-                </div>
-                <span className="font-data-mono text-data-mono font-bold text-on-surface">
-                  682M ₫ <span className="text-primary font-bold">(46%)</span>
-                </span>
-              </div>
-              <div className="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
-                <div className="bg-primary h-full w-[46%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-secondary mt-1 block">Xe tải sàn thấp chở 8-12 xe/chuyến</span>
+        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs flex items-center justify-between gap-4">
+          <div>
+            <div className="text-xs font-bold uppercase text-red-700">
+              Cảnh báo khiếu nại &amp; hoàn tiền
             </div>
-
-            {/* Service 2 */}
-            <div className="p-space-sm rounded bg-surface-container-low hover:bg-surface-container transition-colors">
-              <div className="flex justify-between items-center mb-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-tertiary-container"></span>
-                  <span className="font-label-lg text-label-lg text-on-surface font-semibold">Cứu hộ kéo xe đơn lẻ</span>
-                </div>
-                <span className="font-data-mono text-data-mono font-bold text-on-surface">
-                  474M ₫ <span className="text-tertiary font-bold">(32%)</span>
-                </span>
-              </div>
-              <div className="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
-                <div className="bg-tertiary-container h-full w-[32%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-secondary mt-1 block">Kéo khẩn cấp xe chết máy tại chỗ</span>
+            <div className="text-base font-bold text-on-surface mt-0.5">
+              {overviewMetrics.pendingDisputeCount} hồ sơ khiếu nại chờ quyết định hoàn tiền
             </div>
-
-            {/* Service 3 */}
-            <div className="p-space-sm rounded bg-surface-container-low hover:bg-surface-container transition-colors">
-              <div className="flex justify-between items-center mb-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-secondary"></span>
-                  <span className="font-label-lg text-label-lg text-on-surface font-semibold">Sửa & phục hồi tại gara</span>
-                </div>
-                <span className="font-data-mono text-data-mono font-bold text-on-surface">
-                  326M ₫ <span className="text-secondary font-bold">(22%)</span>
-                </span>
-              </div>
-              <div className="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
-                <div className="bg-secondary h-full w-[22%]"></div>
-              </div>
-              <span className="font-label-sm text-label-sm text-secondary mt-1 block">Xử lý thủy kích, thay dầu láp & lọc gió</span>
-            </div>
+            <p className="text-xs text-secondary mt-1">
+              Kiểm tra biên bản xác minh của Staff và thực thi hoàn tiền cho khách hàng.
+            </p>
           </div>
-
-          {/* Payment Split */}
-          <div className="bg-surface-container-low p-space-md rounded">
-            <span className="font-label-sm text-label-sm uppercase text-secondary tracking-wider block mb-2 font-bold">
-              Kênh thanh toán
-            </span>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-tertiary text-[18px]">qr_code</span>
-                <span className="font-body-sm text-body-sm text-on-surface font-semibold">PayOS · VietQR</span>
-              </div>
-              <span className="font-data-mono text-data-mono font-bold text-tertiary">91% (1.345M ₫)</span>
-            </div>
-            <div className="w-full bg-surface-container-high h-2 rounded-full overflow-hidden flex">
-              <div className="bg-tertiary-container h-full w-[91%]"></div>
-              <div className="bg-outline h-full w-[9%]"></div>
-            </div>
-            <div className="flex items-center justify-between mt-2 text-secondary font-body-sm text-body-sm">
-              <span>Tiền mặt trực tiếp cho Kỹ thuật viên:</span>
-              <span className="font-data-mono text-data-mono font-bold text-on-surface">9% (137M ₫)</span>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => onSelectScreen('refunds')}
+            className="px-3.5 py-2 rounded-lg bg-red-100 text-red-900 text-xs font-bold hover:bg-red-200 transition-colors shrink-0 cursor-pointer"
+          >
+            Xử lý hoàn tiền
+          </button>
         </div>
       </div>
 
-      {/* Real-Time Live Ticker / Completed Transactions Stream */}
-      <div className="bg-surface-container-lowest rounded-lg shadow-sm overflow-hidden border border-surface-container">
-        <div className="p-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm bg-surface-container-low/60 border-b border-surface-container">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-tertiary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-tertiary"></span>
-            </span>
-            <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-              Giao dịch gần đây
-            </h3>
+      {/* Bảng Giao dịch gần đây lấy 100% từ Database */}
+      <div className="bg-surface-container-lowest rounded-xl border border-surface-container shadow-xs overflow-hidden">
+        <div className="p-5 border-b border-surface-container flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-on-surface">
+              Giao Dịch Thanh Toán Gần Đây (Từ Database)
+            </h2>
+            <p className="text-xs text-secondary mt-0.5">
+              Hiển thị {recentTransactions.length} trên tổng số {transactions.length} giao dịch lưu trong hệ thống.
+            </p>
           </div>
-          <div className="flex items-center gap-space-sm text-secondary font-label-md text-label-md">
-            <span>Tự động làm mới: <span className="font-data-mono text-on-surface font-semibold">Mỗi 3s</span></span>
-            <button
-              onClick={handleRefreshFeed}
-              className="p-1 hover:bg-surface-container rounded text-secondary hover:text-on-surface transition-colors cursor-pointer"
-              title="Tải lại ngay"
-            >
-              <span className="material-symbols-outlined text-[16px]">refresh</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => onSelectScreen('payos-reconciliation')}
+            className="px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-xs font-bold text-primary transition-colors cursor-pointer"
+          >
+            Xem toàn bộ giao dịch
+          </button>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left font-body-md text-body-md">
-            <thead className="bg-surface-container-low font-label-md text-label-md uppercase text-secondary">
-              <tr>
-                <th className="px-space-md py-2.5 font-semibold">Mã Đơn / PayOS ID</th>
-                <th className="px-space-md py-2.5 font-semibold">Loại Dịch Vụ</th>
-                <th className="px-space-md py-2.5 font-semibold">Khách Hàng & Phương Tiện</th>
-                <th className="px-space-md py-2.5 font-semibold">Gara / Đội Cứu Hộ</th>
-                <th className="px-space-md py-2.5 font-semibold text-right">Tổng Tiền (VND)</th>
-                <th className="px-space-md py-2.5 font-semibold text-right">Phí Sàn (12%)</th>
-                <th className="px-space-md py-2.5 font-semibold text-center">Thời Gian</th>
-                <th className="px-space-md py-2.5 font-semibold text-right">Trạng Thái</th>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-container-low border-b border-surface-container text-xs font-bold text-secondary uppercase tracking-wider">
+                <th className="py-3 px-4">Mã GD / PayOS Code</th>
+                <th className="py-3 px-4">Mã đơn cứu hộ</th>
+                <th className="py-3 px-4">Gara đối tác</th>
+                <th className="py-3 px-4 text-center">Phương thức</th>
+                <th className="py-3 px-4 text-right">Tổng tiền</th>
+                <th className="py-3 px-4 text-right">Phí chiết khấu sàn</th>
+                <th className="py-3 px-4 text-right">Gara thực nhận</th>
+                <th className="py-3 px-4 text-center">Thời gian</th>
+                <th className="py-3 px-4 text-center">Trạng thái</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-surface-container-low">
-              {feedRows.map((row, idx) => (
-                <tr key={idx} className="hover:bg-surface-container-low/50 transition-colors">
-                  <td className="px-space-md py-2.5 whitespace-nowrap">
-                    <div className="font-data-mono text-data-mono font-bold text-on-surface">{row.code}</div>
-                    <div className="font-label-sm text-label-sm text-secondary">{row.payosId}</div>
-                  </td>
-                  <td className="px-space-md py-2.5 whitespace-nowrap">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-label-sm text-label-sm font-semibold ${row.badgeColor}`}>
-                      <span className="material-symbols-outlined text-[12px]">{row.typeIcon}</span>
-                      {row.type}
-                    </span>
-                  </td>
-                  <td className="px-space-md py-2.5 whitespace-nowrap">
-                    <div className="font-body-md text-body-md text-on-surface font-medium">{row.customer}</div>
-                    <div className="font-label-sm text-label-sm text-secondary">{row.vehicle}</div>
-                  </td>
-                  <td className="px-space-md py-2.5 whitespace-nowrap">
-                    <div className="text-on-surface font-medium">{row.garage}</div>
-                    <div className="font-label-sm text-label-sm text-secondary">{row.tech}</div>
-                  </td>
-                  <td className="px-space-md py-2.5 whitespace-nowrap text-right font-data-mono text-data-mono font-bold text-on-surface">
-                    {row.amount}
-                  </td>
-                  <td className="px-space-md py-2.5 whitespace-nowrap text-right font-data-mono text-data-mono text-primary font-semibold">
-                    {row.fee}
-                  </td>
-                  <td className="px-space-md py-2.5 whitespace-nowrap text-center font-data-mono text-data-mono text-secondary">
-                    {row.time}
-                  </td>
-                  <td className="px-space-md py-2.5 whitespace-nowrap text-right">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-semibold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary-container"></span>
-                      {row.status}
-                    </span>
+            <tbody className="divide-y divide-surface-container text-sm">
+              {recentTransactions.map((tx) => {
+                const totalAmount = Number(tx.totalAmount ?? tx.amount ?? 0);
+                const fee = Number(tx.platformCommission ?? tx.platformFee ?? 0);
+                const net = Number(
+                  tx.garageNetAmount ?? tx.netGarageAmount ?? Math.max(0, totalAmount - fee)
+                );
+                const rescueId = tx.rescueRequestId ?? tx.rescueOrderId ?? 0;
+                const rescueCode = tx.rescueCode || (rescueId ? `#RESCUE-${rescueId}` : '—');
+                const status = String(tx.paymentStatus || tx.status || 'PENDING').toUpperCase();
+
+                return (
+                  <tr key={tx.id} className="hover:bg-surface-container-low/50 transition-colors">
+                    <td className="py-3 px-4 font-mono text-xs">
+                      <div className="font-bold text-primary">#TX-{tx.id}</div>
+                      <div className="text-secondary">{tx.payosOrderCode || '—'}</div>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-xs font-bold text-on-surface">
+                      {rescueCode}
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-on-surface">{tx.garageName}</td>
+                    <td className="py-3 px-4 text-center font-mono text-xs">
+                      {tx.paymentMethod}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-on-surface whitespace-nowrap">
+                      {totalAmount.toLocaleString('vi-VN')} ₫
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-primary whitespace-nowrap">
+                      {fee.toLocaleString('vi-VN')} ₫ ({Number(tx.commissionRate ?? 0)}%)
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-tertiary whitespace-nowrap">
+                      {net.toLocaleString('vi-VN')} ₫
+                    </td>
+                    <td className="py-3 px-4 text-center font-mono text-xs text-secondary whitespace-nowrap">
+                      {tx.createdAt ? new Date(tx.createdAt).toLocaleString('vi-VN') : '—'}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
+                          status === 'PAID' || status === 'SUCCESS'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : status === 'REFUNDED'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {status === 'SUCCESS' ? 'PAID' : status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {recentTransactions.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="py-8 text-center text-sm text-secondary">
+                    {isLoading
+                      ? 'Đang tải danh sách giao dịch từ Database...'
+                      : 'Chưa có giao dịch nào được ghi nhận trong Database.'}
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
-        </div>
-
-        {/* Table Footer Pagination */}
-        <div className="p-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-sm text-secondary font-body-sm text-body-sm border-t border-surface-container">
-          <div className="flex items-center gap-2">
-            <span>Hiển thị 5 / 1.420 giao dịch hoàn thành trong ngày</span>
-            <span className="h-3 w-px bg-surface-container"></span>
-            <span className="text-on-surface font-semibold">Tổng GMV ca trực: 218.400.000 ₫</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button className="px-2.5 py-1 bg-surface-container-lowest hover:bg-surface-container text-on-surface rounded shadow-sm disabled:opacity-50" disabled>
-              Trước
-            </button>
-            <button className="px-2.5 py-1 bg-primary text-on-primary font-bold rounded shadow-sm">1</button>
-            <button className="px-2.5 py-1 bg-surface-container-lowest hover:bg-surface-container text-on-surface rounded shadow-sm">2</button>
-            <button className="px-2.5 py-1 bg-surface-container-lowest hover:bg-surface-container text-on-surface rounded shadow-sm">3</button>
-            <span className="px-1 text-secondary">...</span>
-            <button className="px-2.5 py-1 bg-surface-container-lowest hover:bg-surface-container text-on-surface rounded shadow-sm">Sau</button>
-          </div>
         </div>
       </div>
     </div>

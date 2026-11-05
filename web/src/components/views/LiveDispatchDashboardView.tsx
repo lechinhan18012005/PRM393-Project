@@ -495,7 +495,7 @@ export const LiveDispatchDashboardView: React.FC<LiveDispatchDashboardViewProps>
                   <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-200 text-body-xs space-y-1.5">
                     <div className="font-bold text-blue-900 flex items-center gap-1">
                       <span className="material-symbols-outlined text-[16px]">info</span>
-                      Chi tiết luồng Chở xe đơn lẻ (Luồng 3)
+                      Chi tiết chuyến Chở xe đơn lẻ
                     </div>
                     <div className="flex justify-between">
                       <span className="text-secondary">Trạng thái hệ thống:</span>

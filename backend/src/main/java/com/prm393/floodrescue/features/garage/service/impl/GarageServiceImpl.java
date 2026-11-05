@@ -329,6 +329,7 @@ public class GarageServiceImpl implements GarageService {
                 .idCardNumber(garage.getIdCardNumber())
                 .status(garage.getStatus())
                 .walletBalance(garage.getWalletBalance())
+                .commissionRate(garage.getCommissionRate() != null ? garage.getCommissionRate() : new BigDecimal("12.50"))
                 .rejectionReason(garage.getRejectionReason())
                 .createdAt(garage.getCreatedAt())
                 .address(branches.isEmpty() ? null : branches.get(0).getAddress())

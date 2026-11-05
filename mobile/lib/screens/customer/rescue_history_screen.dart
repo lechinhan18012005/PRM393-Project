@@ -133,7 +133,7 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
                     );
                   },
                   icon: const Icon(Icons.star, color: Colors.amber),
-                  label: const Text('Đánh giá dịch vụ & Thợ cứu hộ (UC-19)'),
+                  label: const Text('Đánh giá dịch vụ & Thợ cứu hộ'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryOrange,
                     foregroundColor: Colors.white,
@@ -407,7 +407,7 @@ class _RescueHistoryScreenState extends State<RescueHistoryScreen> {
                                                     color: Colors.amber,
                                                   ),
                                                   label: const Text(
-                                                    'Đánh giá dịch vụ (UC-19)',
+                                                    'Đánh giá dịch vụ',
                                                   ),
                                                 ),
                                                 const SizedBox(height: 8),

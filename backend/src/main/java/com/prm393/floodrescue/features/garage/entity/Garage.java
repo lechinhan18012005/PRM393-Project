@@ -98,6 +98,9 @@ public class Garage {
     @Builder.Default
     private BigDecimal walletBalance = BigDecimal.ZERO;
 
+    @Column(name = "commission_rate", precision = 5, scale = 2)
+    private BigDecimal commissionRate;
+
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
 

@@ -1,3 +1,24 @@
+// ============================================================================
+// TẬP TIN: electronic_invoice_screen.dart
+// TÁC GIẢ / PHỤ TRÁCH: Nguyễn Hoàng Long
+// PHÂN HỆ: Mobile Customer App - Luồng 5 (UC-18) & Luồng 6 (UC-23)
+// MÔ TẢ NGHIỆP VỤ & KỸ THUẬT:
+//   - Màn hình hiển thị Biên nhận thanh toán / Hóa đơn điện tử chi tiết sau khi
+//     khách hàng đã hoàn tất thanh toán đơn cứu hộ (UC-18).
+//   - Trình bày đầy đủ và minh bạch các thông tin chứng từ thanh toán:
+//       + Mã đơn cứu hộ, mã tham chiếu giao dịch PayOS, thời gian hoàn tất.
+//       + Đơn vị thực hiện (Gara cứu hộ), thông tin khách hàng và biển số/dòng xe.
+//       + Bóc tách chi tiết cấu thành chi phí: Giá dịch vụ cứu hộ cơ bản
+//         (`serviceBasePrice`), Phí dịch vụ khẩn cấp & điều phối (`bookingFee`),
+//         Phương thức thanh toán và Tổng số tiền thanh toán.
+//   - Tích hợp trực tiếp cửa sổ BottomSheet gửi hồ sơ Khiếu nại & Yêu cầu hoàn tiền
+//     sau cứu hộ (UC-23 - `_showDisputeBottomSheet`):
+//       + Cho phép khách hàng chọn nhóm lý do khiếu nại (`OVERCHARGE`, `POOR_QUALITY`,
+//         `DAMAGE`, `FAKE_RESCUE`), nhập số tiền đề nghị hoàn trả (ràng buộc
+//         `0 < amount <= paidAmount`) và mô tả chi tiết sự việc để gửi lên
+//         bộ phận CSKH (Staff) và Quản trị viên (Admin) thông qua `DisputeService`.
+// ============================================================================
+
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -7,18 +28,25 @@ import '../../core/services/dispute_service.dart';
 import '../../core/widgets/rescue_ui.dart';
 import 'stitch_hydro_rescue_screen.dart';
 
+/// Widget màn hình Biên nhận thanh toán cứu hộ & Gửi yêu cầu khiếu nại hoàn tiền (UC-18 & UC-23).
 class ElectronicInvoiceScreen extends StatelessWidget {
+  /// Dữ liệu giao dịch thanh toán (PayOS VietQR hoặc Tiền mặt) đã hoàn tất.
   final PaymentTransactionModel? transaction;
+
+  /// Dữ liệu chi tiết đơn cứu hộ (chứa thông tin xe, phí cơ bản, phí điều phối...).
   final RescueOrderModel? order;
 
+  /// Khởi tạo [ElectronicInvoiceScreen] với đối tượng [transaction] và [order] tùy chọn.
   const ElectronicInvoiceScreen({
     super.key,
     this.transaction,
     this.order,
   });
 
+  /// Kiểm tra xem biên nhận đang hiển thị dữ liệu giao dịch thật hay chế độ minh họa (Preview).
   bool get _isReal => transaction != null || order != null;
 
+  /// Hàm tiện ích định dạng số thực sang chuỗi tiền tệ VNĐ có dấu chấm phân cách hàng nghìn.
   String _formatVnd(double val) {
     final intVal = val.round();
     final str = intVal.toString();
@@ -32,6 +60,19 @@ class ElectronicInvoiceScreen extends StatelessWidget {
     return '${buffer.toString()} đ';
   }
 
+  // ==========================================================================
+  // MODAL BOTTOM SHEET: GỬI HỒ SƠ KHIẾU NẠI & YÊU CẦU HOÀN TIỀN (UC-23)
+  // ==========================================================================
+
+  /// Hiển thị biểu mẫu Modal BottomSheet cho phép khách hàng gửi khiếu nại dịch vụ
+  /// và yêu cầu hoàn tiền (UC-23) gắn trực tiếp với biên nhận thanh toán hiện tại.
+  ///
+  /// Tham số đầu vào:
+  /// - [context]: BuildContext của màn hình biên nhận.
+  /// - [rescueOrderId]: Mã định danh đơn cứu hộ cần khiếu nại.
+  /// - [paymentTransactionId]: Mã định danh giao dịch thanh toán để đối chiếu hoàn tiền.
+  /// - [rescueCode]: Mã hiển thị đơn cứu hộ.
+  /// - [paidAmount]: Tổng số tiền khách hàng đã thanh toán (dùng làm mức trần hoàn tiền tối đa).
   void _showDisputeBottomSheet(
     BuildContext context, {
     required int rescueOrderId,
@@ -39,11 +80,15 @@ class ElectronicInvoiceScreen extends StatelessWidget {
     required String rescueCode,
     required double paidAmount,
   }) {
+    // Khởi tạo controller cho ô nhập số tiền yêu cầu hoàn (mặc định điền sẵn toàn bộ số tiền đã trả)
     final amountController = TextEditingController(
       text: paidAmount.round().toString(),
     );
+    // Khởi tạo controller cho ô nhập mô tả chi tiết lý do khiếu nại và bằng chứng
     final reasonController = TextEditingController();
+    // Nhóm lý do khiếu nại mặc định: Thu vượt báo giá ('OVERCHARGE')
     String selectedType = 'OVERCHARGE';
+    // Cờ kiểm soát trạng thái đang gửi request API để khóa nút bấm tránh gửi trùng
     bool isSubmitting = false;
 
     showModalBottomSheet<void>(
@@ -54,9 +99,11 @@ class ElectronicInvoiceScreen extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (sheetCtx) {
+        // Sử dụng StatefulBuilder để quản lý state cục bộ (selectedType, isSubmitting) bên trong BottomSheet
         return StatefulBuilder(
           builder: (ctx, setModalState) {
             return Padding(
+              // Tự động đẩy nội dung lên phía trên bàn phím ảo khi người dùng nhập liệu (viewInsets.bottom)
               padding: EdgeInsets.only(
                 left: 20,
                 right: 20,
@@ -68,6 +115,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Hàng tiêu đề Modal và nút đóng (X)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -85,6 +133,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                    // Dòng tóm tắt mã đơn cứu hộ và tổng số tiền đã thanh toán
                     Text(
                       'Đơn cứu hộ: $rescueCode • Đã thanh toán: ${_formatVnd(paidAmount)}',
                       style: const TextStyle(
@@ -93,6 +142,8 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    // Trường 1: Dropdown chọn nhóm lý do khiếu nại chuẩn hóa theo nghiệp vụ UC-23
                     DropdownButtonFormField<String>(
                       initialValue: selectedType,
                       decoration: const InputDecoration(
@@ -124,6 +175,8 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                       },
                     ),
                     const SizedBox(height: 12),
+
+                    // Trường 2: Ô nhập số tiền yêu cầu hoàn trả (VNĐ)
                     TextField(
                       controller: amountController,
                       keyboardType: TextInputType.number,
@@ -133,6 +186,8 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
+
+                    // Trường 3: Ô nhập mô tả chi tiết sự việc & bằng chứng phục vụ CSKH thẩm định
                     TextField(
                       controller: reasonController,
                       maxLines: 3,
@@ -144,14 +199,18 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    // Nút xác nhận gửi hồ sơ khiếu nại lên Backend
                     ElevatedButton.icon(
                       onPressed: isSubmitting
                           ? null
                           : () async {
+                              // Bước 1: Kiểm tra tính hợp lệ (Validation) của số tiền và lý do khiếu nại
                               final amount =
                                   double.tryParse(amountController.text.trim()) ??
                                   0;
                               final reason = reasonController.text.trim();
+                              // Ràng buộc nghiệp vụ: Số tiền hoàn phải lớn hơn 0 và không vượt quá số tiền đã thanh toán
                               if (amount <= 0 || amount > paidAmount) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
@@ -162,6 +221,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                 );
                                 return;
                               }
+                              // Ràng buộc nghiệp vụ: Bắt buộc phải có mô tả lý do khiếu nại
                               if (reason.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -173,6 +233,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                 return;
                               }
 
+                              // Bước 2: Bật trạng thái loading và gọi DisputeService.createDispute(...)
                               setModalState(() => isSubmitting = true);
                               try {
                                 final created =
@@ -183,9 +244,11 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                   requestedRefundAmount: amount,
                                   customerReason: reason,
                                 );
+                                // Đóng BottomSheet sau khi gửi thành công
                                 if (sheetCtx.mounted) {
                                   Navigator.of(sheetCtx).pop();
                                 }
+                                // Hiển thị thông báo xác nhận kèm mã hồ sơ khiếu nại (disputeCode)
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
@@ -197,6 +260,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                   );
                                 }
                               } catch (e) {
+                                // Xử lý ngoại lệ nếu gọi API thất bại (hoặc khi đang ở chế độ Demo Preview)
                                 if (sheetCtx.mounted) {
                                   Navigator.of(sheetCtx).pop();
                                 }
@@ -238,14 +302,20 @@ class ElectronicInvoiceScreen extends StatelessWidget {
     );
   }
 
+  // ==========================================================================
+  // XÂY DỰNG GIAO DIỆN BIÊN NHẬN THANH TOÁN ĐIỆN TỬ (WIDGET TREE)
+  // ==========================================================================
+
   @override
   Widget build(BuildContext context) {
+    // Bước 1: Chuẩn bị và trích xuất dữ liệu hiển thị trên biên nhận từ transaction và order
     final code = transaction?.rescueCode ??
         order?.orderCode ??
         '#RC-DEMO-8924';
     final total = transaction?.amount ??
         order?.totalAmount ??
         150000.0;
+    // Bóc tách giá dịch vụ cơ bản và phí đặt đơn khẩn cấp / điều phối
     final basePrice = order?.serviceBasePrice ?? (total - 30000.0);
     final bookingFee = order?.bookingFee ?? 30000.0;
     final garageName = transaction?.garageName ??
@@ -254,6 +324,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
     final customerName = order?.customerName ??
         transaction?.customerName ??
         'Khách hàng cứu hộ';
+    // Ghép biển số xe và mẫu xe (nếu có)
     final vehicleInfo = [
       if (order?.vehiclePlate != null && order!.vehiclePlate.isNotEmpty) order!.vehiclePlate,
       if (order?.vehicleModel != null && order!.vehicleModel!.isNotEmpty) order!.vehicleModel!,
@@ -270,6 +341,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.surface,
+      // Thanh tiêu đề màn hình biên nhận thanh toán
       appBar: AppBar(
         title: const Text(
           'Biên nhận thanh toán cứu hộ',
@@ -283,22 +355,26 @@ class ElectronicInvoiceScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Phần mở đầu giới thiệu mục đích màn hình biên nhận
             const RescueIntro(
               eyebrow: 'THÔNG TIN BIÊN NHẬN',
               title: 'Biên nhận cứu hộ dịch vụ',
               description: 'Lưu lại chi tiết chi phí và xác nhận hoàn tất thanh toán.',
             ),
             const SizedBox(height: 12),
+            // Hiển thị nhãn ghi chú nếu đang ở chế độ xem mẫu không có giao dịch thật
             if (!_isReal)
               const RescueDemoNote(
                 'Biên nhận minh họa · Chưa có giao dịch thật',
               ),
-            // Receipt Paper Box
+
+            // Receipt Paper Box: Khung giấy biên nhận dịch vụ chính
             RescuePanel(
               padding: 20,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Phần Header biên nhận: Tiêu đề hệ thống và con dấu trạng thái "ĐÃ THANH TOÁN"
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -346,6 +422,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                   ),
                   const Divider(height: 24),
 
+                  // Phần Thông tin định danh chung của đơn cứu hộ và giao dịch
                   Text(
                     'Mã đơn cứu hộ: $code',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -382,11 +459,13 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
 
+                  // Phần Bảng kê chi tiết từng hạng mục chi phí dịch vụ
                   _buildDetailRow(serviceName, _formatVnd(basePrice)),
                   _buildDetailRow('Phí dịch vụ khẩn cấp & điều phối', _formatVnd(bookingFee)),
                   _buildDetailRow('Phương thức thanh toán', methodStr),
 
                   const Divider(height: 24),
+                  // Dòng Tổng thanh toán được tô đậm và làm nổi bật
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -410,6 +489,8 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
+
+                  // Huy hiệu chứng nhận biên nhận điện tử hợp lệ trên hệ thống HydroRescue
                   Center(
                     child: Column(
                       children: [
@@ -435,6 +516,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
+            // Nút mở biểu mẫu Khiếu nại dịch vụ / Yêu cầu hoàn tiền (UC-23)
             OutlinedButton.icon(
               onPressed: () => _showDisputeBottomSheet(
                 context,
@@ -459,6 +541,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
+            // Nút điều hướng quay về Trang chủ Khách hàng (xóa toàn bộ lịch sử stack trước đó)
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pushAndRemoveUntil(
@@ -487,6 +570,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
     );
   }
 
+  /// Xây dựng một dòng hiển thị hạng mục chi phí (Tên hạng mục - Số tiền / Giá trị) trong biên nhận.
   Widget _buildDetailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),

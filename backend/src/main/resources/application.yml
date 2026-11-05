@@ -35,7 +35,7 @@ app:
     hmac-secret: ${APP_SECURITY_HMAC_SECRET:}
     encryption-key: ${APP_SECURITY_ENCRYPTION_KEY:}
   demo:
-    seed-users: ${APP_DEMO_SEED_USERS:false}
+    seed-users: ${APP_DEMO_SEED_USERS:true}
   rescue:
     booking-fee: ${RESCUE_BOOKING_FEE:30000}
     hotline: ${RESCUE_HOTLINE:1900-6868}
