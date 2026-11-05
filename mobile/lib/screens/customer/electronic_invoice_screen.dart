@@ -26,6 +26,7 @@ import '../../core/models/payment_transaction_model.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/services/dispute_service.dart';
 import '../../core/services/media_service.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../core/widgets/rescue_ui.dart';
 import 'customer_disputes_screen.dart';
 import 'stitch_hydro_rescue_screen.dart';
@@ -39,11 +40,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
   final RescueOrderModel? order;
 
   /// Khởi tạo [ElectronicInvoiceScreen] với đối tượng [transaction] và [order] tùy chọn.
-  const ElectronicInvoiceScreen({
-    super.key,
-    this.transaction,
-    this.order,
-  });
+  const ElectronicInvoiceScreen({super.key, this.transaction, this.order});
 
   /// Kiểm tra xem biên nhận đang hiển thị dữ liệu giao dịch thật hay chế độ minh họa (Preview).
   bool get _isReal => transaction != null || order != null;
@@ -85,7 +82,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
   }) {
     // Khởi tạo controller cho ô nhập số tiền yêu cầu hoàn (mặc định điền sẵn toàn bộ số tiền đã trả)
     final amountController = TextEditingController(
-      text: paidAmount.round().toString(),
+      text: formatVndInput(paidAmount),
     );
     // Khởi tạo controller cho ô nhập mô tả chi tiết lý do khiếu nại và bằng chứng
     final reasonController = TextEditingController();
@@ -127,9 +124,8 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'Gửi khiếu nại & Yêu cầu hoàn tiền',
-                            style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
+                            style: Theme.of(ctx).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
                           ),
                         ),
                         IconButton(
@@ -150,6 +146,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
 
                     // Trường 1: Dropdown chọn nhóm lý do khiếu nại chuẩn hóa theo nghiệp vụ UC-23
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       initialValue: selectedType,
                       decoration: const InputDecoration(
                         labelText: 'Nhóm lý do khiếu nại',
@@ -158,19 +155,35 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                       items: const [
                         DropdownMenuItem(
                           value: 'OVERCHARGE',
-                          child: Text('Thu vượt báo giá / phụ phí ngoài luồng'),
+                          child: Text(
+                            'Thu vượt báo giá / phụ phí ngoài luồng',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'POOR_QUALITY',
-                          child: Text('Chất lượng cứu hộ / sửa chữa không đạt'),
+                          child: Text(
+                            'Chất lượng cứu hộ / sửa chữa không đạt',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'DAMAGE',
-                          child: Text('Hư hỏng phương tiện trong lúc cứu hộ'),
+                          child: Text(
+                            'Hư hỏng phương tiện trong lúc cứu hộ',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'FAKE_RESCUE',
-                          child: Text('Báo hoàn tất khống / hủy sau khi thu tiền'),
+                          child: Text(
+                            'Báo hoàn tất khống / hủy sau khi thu tiền',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                       onChanged: (val) {
@@ -184,9 +197,14 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                     // Trường 2: Ô nhập số tiền yêu cầu hoàn trả (VNĐ)
                     TextField(
                       controller: amountController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
+                      readOnly: true,
+                      enableInteractiveSelection: false,
+                      decoration: InputDecoration(
                         labelText: 'Số tiền yêu cầu hoàn trả (VNĐ)',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixText: '₫',
+                        helperText:
+                            'Cố định bằng số tiền đã thanh toán: ${formatVnd(paidAmount)}',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -198,16 +216,15 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                       maxLines: 3,
                       decoration: const InputDecoration(
                         labelText: 'Mô tả chi tiết sự việc & bằng chứng',
-                        hintText:
-                            'Nhập lý do khiếu nại để bộ phận CSKH (Staff) đối chiếu và đề xuất Admin hoàn tiền...',
+                        hintText: 'Nhập lý do khiếu nại để bộ phận CSKH (Staff) đối chiếu và đề xuất Admin hoàn tiền...',
                         border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 14),
 
                     // Section: Bằng chứng ảnh
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Ảnh chụp bằng chứng (${pickedImages.length}/3)',
@@ -218,38 +235,61 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                           ),
                         ),
                         if (pickedImages.length < 3)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextButton.icon(
-                                onPressed: isSubmitting
-                                    ? null
-                                    : () async {
-                                        final photo = await MediaService.instance.pickImageFromCamera();
-                                        if (photo != null) {
-                                          setModalState(() {
-                                            if (pickedImages.length < 3) pickedImages.add(photo);
-                                          });
-                                        }
-                                      },
-                                icon: const Icon(Icons.camera_alt_outlined, size: 16),
-                                label: const Text('Chụp', style: TextStyle(fontSize: 12)),
-                              ),
-                              TextButton.icon(
-                                onPressed: isSubmitting
-                                    ? null
-                                    : () async {
-                                        final photo = await MediaService.instance.pickImageFromGallery();
-                                        if (photo != null) {
-                                          setModalState(() {
-                                            if (pickedImages.length < 3) pickedImages.add(photo);
-                                          });
-                                        }
-                                      },
-                                icon: const Icon(Icons.photo_library_outlined, size: 16),
-                                label: const Text('Thư viện', style: TextStyle(fontSize: 12)),
-                              ),
-                            ],
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Wrap(
+                              spacing: 4,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: isSubmitting
+                                      ? null
+                                      : () async {
+                                          final photo = await MediaService
+                                              .instance
+                                              .pickImageFromCamera();
+                                          if (photo != null) {
+                                            setModalState(() {
+                                              if (pickedImages.length < 3) {
+                                                pickedImages.add(photo);
+                                              }
+                                            });
+                                          }
+                                        },
+                                  icon: const Icon(
+                                    Icons.camera_alt_outlined,
+                                    size: 16,
+                                  ),
+                                  label: const Text(
+                                    'Chụp',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: isSubmitting
+                                      ? null
+                                      : () async {
+                                          final photo = await MediaService
+                                              .instance
+                                              .pickImageFromGallery();
+                                          if (photo != null) {
+                                            setModalState(() {
+                                              if (pickedImages.length < 3) {
+                                                pickedImages.add(photo);
+                                              }
+                                            });
+                                          }
+                                        },
+                                  icon: const Icon(
+                                    Icons.photo_library_outlined,
+                                    size: 16,
+                                  ),
+                                  label: const Text(
+                                    'Thư viện',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                       ],
                     ),
@@ -261,7 +301,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
                           itemCount: pickedImages.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          separatorBuilder: (_, _) => const SizedBox(width: 8),
                           itemBuilder: (ctx, idx) {
                             final img = pickedImages[idx];
                             return Stack(
@@ -289,7 +329,11 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                     child: const CircleAvatar(
                                       radius: 10,
                                       backgroundColor: Colors.black54,
-                                      child: Icon(Icons.close, size: 12, color: Colors.white),
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 12,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -308,9 +352,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                           ? null
                           : () async {
                               // Bước 1: Kiểm tra tính hợp lệ (Validation) của số tiền và lý do khiếu nại
-                              final amount =
-                                  double.tryParse(amountController.text.trim()) ??
-                                  0;
+                              final amount = parseVnd(amountController.text);
                               final reason = reasonController.text.trim();
                               // Ràng buộc nghiệp vụ: Số tiền hoàn phải lớn hơn 0 và không vượt quá số tiền đã thanh toán
                               if (amount <= 0 || amount > paidAmount) {
@@ -341,27 +383,30 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                 // Upload photos
                                 final List<String> uploadedUrls = [];
                                 for (final img in pickedImages) {
-                                  final url = await DisputeService().uploadEvidencePhoto(
-                                    img.bytes,
-                                    img.filename,
-                                  );
+                                  final url = await DisputeService()
+                                      .uploadEvidencePhoto(
+                                        img.bytes,
+                                        img.filename,
+                                      );
                                   uploadedUrls.add(url);
                                 }
-                                final evidenceUrls =
-                                    uploadedUrls.isNotEmpty ? uploadedUrls.join(',') : null;
+                                final evidenceUrls = uploadedUrls.isNotEmpty
+                                    ? uploadedUrls.join(',')
+                                    : null;
 
-                                final created =
-                                    await DisputeService().createDispute(
-                                  rescueOrderId: rescueOrderId,
-                                  paymentTransactionId: paymentTransactionId,
-                                  disputeType: selectedType,
-                                  requestedRefundAmount: amount,
-                                  customerReason: reason,
-                                  evidenceImageUrls: evidenceUrls,
-                                  rescueCode: rescueCode,
-                                  garageName: garageName,
-                                  originalAmount: paidAmount,
-                                );
+                                final created = await DisputeService()
+                                    .createDispute(
+                                      rescueOrderId: rescueOrderId,
+                                      paymentTransactionId:
+                                          paymentTransactionId,
+                                      disputeType: selectedType,
+                                      requestedRefundAmount: amount,
+                                      customerReason: reason,
+                                      evidenceImageUrls: evidenceUrls,
+                                      rescueCode: rescueCode,
+                                      garageName: garageName,
+                                      originalAmount: paidAmount,
+                                    );
                                 // Đóng BottomSheet sau khi gửi thành công
                                 if (sheetCtx.mounted) {
                                   Navigator.of(sheetCtx).pop();
@@ -398,8 +443,9 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      backgroundColor:
-                                          _isReal ? Colors.red.shade700 : Colors.green.shade700,
+                                      backgroundColor: _isReal
+                                          ? Colors.red.shade700
+                                          : Colors.green.shade700,
                                       content: Text(
                                         _isReal
                                             ? 'Đã ghi nhận yêu cầu khiếu nại ($e)'
@@ -452,33 +498,34 @@ class ElectronicInvoiceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Bước 1: Chuẩn bị và trích xuất dữ liệu hiển thị trên biên nhận từ transaction và order
-    final code = transaction?.rescueCode ??
-        order?.orderCode ??
-        '#RC-DEMO-8924';
-    final total = transaction?.amount ??
-        order?.totalAmount ??
-        150000.0;
+    final code = transaction?.rescueCode ?? order?.orderCode ?? '#RC-DEMO-8924';
+    final total = transaction?.amount ?? order?.totalAmount ?? 150000.0;
     // Bóc tách giá dịch vụ cơ bản và phí đặt đơn khẩn cấp / điều phối
     final basePrice = order?.serviceBasePrice ?? total;
     final bookingFee = order?.bookingFee ?? 0;
     final garageName = transaction?.garageName ??
         order?.garageName ??
         'Trung tâm cứu hộ liên kết';
-    final customerName = order?.customerName ??
-        transaction?.customerName ??
-        'Khách hàng cứu hộ';
+    final customerName =
+        order?.customerName ?? transaction?.customerName ?? 'Khách hàng cứu hộ';
     // Ghép biển số xe và mẫu xe (nếu có)
     final vehicleInfo = [
-      if (order?.vehiclePlate != null && order!.vehiclePlate.isNotEmpty) order!.vehiclePlate,
-      if (order?.vehicleModel != null && order!.vehicleModel!.isNotEmpty) order!.vehicleModel!,
+      if (order?.vehiclePlate != null && order!.vehiclePlate.isNotEmpty)
+        order!.vehiclePlate,
+      if (order?.vehicleModel != null && order!.vehicleModel!.isNotEmpty)
+        order!.vehicleModel!,
     ].join(' • ');
-    final serviceName = order?.serviceName ?? 'Chở xe máy qua điểm ngập (Chuyến riêng)';
+    final serviceName =
+        order?.serviceName ?? 'Chở xe máy qua điểm ngập (Chuyến riêng)';
     final methodStr = (transaction?.paymentMethod == 'CASH')
         ? 'Tiền mặt tại hiện trường'
         : 'PayOS VietQR';
-    final refCode = transaction?.payosOrderCode != null && transaction!.payosOrderCode > 0
+    final refCode =
+        transaction?.payosOrderCode != null && transaction!.payosOrderCode > 0
         ? '#${transaction!.payosOrderCode}'
-        : (order?.paymentOrderCode != null ? '#${order!.paymentOrderCode}' : 'RESCUE-$code');
+        : (order?.paymentOrderCode != null
+              ? '#${order!.paymentOrderCode}'
+              : 'RESCUE-$code');
     final paidAtStr = transaction?.paidAt ?? order?.paidAt ?? 'Đã hoàn tất';
     final rescueOrderId = transaction?.rescueOrderId ?? order?.id ?? 8924;
 
@@ -502,7 +549,8 @@ class ElectronicInvoiceScreen extends StatelessWidget {
             const RescueIntro(
               eyebrow: 'THÔNG TIN BIÊN NHẬN',
               title: 'Biên nhận cứu hộ dịch vụ',
-              description: 'Lưu lại chi tiết chi phí và xác nhận hoàn tất thanh toán.',
+              description:
+                  'Lưu lại chi tiết chi phí và xác nhận hoàn tất thanh toán.',
             ),
             const SizedBox(height: 12),
             // Hiển thị nhãn ghi chú nếu đang ở chế độ xem mẫu không có giao dịch thật
@@ -546,7 +594,10 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.green.shade50,
                           borderRadius: BorderRadius.circular(8),
@@ -568,27 +619,42 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                   // Phần Thông tin định danh chung của đơn cứu hộ và giao dịch
                   Text(
                     'Mã đơn cứu hộ: $code',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Mã tham chiếu thanh toán: $refCode',
-                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Thời gian hoàn tất: $paidAtStr',
-                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Đơn vị thực hiện: $garageName',
-                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Khách hàng: $customerName${vehicleInfo.isNotEmpty ? " • $vehicleInfo" : ""}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary,
+                    ),
                   ),
 
                   const SizedBox(height: 16),
@@ -607,7 +673,10 @@ class ElectronicInvoiceScreen extends StatelessWidget {
                   if (bookingFee > 0)
                     _buildDetailRow('Phí đặt xe (đơn cũ)', _formatVnd(bookingFee)),
                   if (transaction?.platformFee != null)
-                    _buildDetailRow('Phí chiết khấu của nền tảng (đã gồm trong giá)', _formatVnd(transaction!.platformFee!)),
+                    _buildDetailRow(
+                      'Phí chiết khấu của nền tảng (đã gồm trong giá)',
+                      _formatVnd(transaction!.platformFee!),
+                    ),
                   _buildDetailRow('Phương thức thanh toán', methodStr),
 
                   const Divider(height: 24),
@@ -729,10 +798,7 @@ class ElectronicInvoiceScreen extends StatelessWidget {
             flex: 6,
             child: Text(
               label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurface,
-              ),
+              style: const TextStyle(fontSize: 12, color: AppColors.onSurface),
             ),
           ),
           const SizedBox(width: 8),

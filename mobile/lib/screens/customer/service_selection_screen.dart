@@ -590,6 +590,14 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            RescueIntro(
+              eyebrow: 'BẮT ĐẦU YÊU CẦU',
+              title: _introTitle,
+              description: _selectedService == 0
+                  ? 'Xác nhận điểm đón, chọn chuyến riêng hoặc khởi tạo chuyến gom và số lượng từ 2 đến 6 xe.'
+                  : 'Xác nhận điểm xe đang gặp nạn, chọn gara khả dụng; thợ sẽ đến kiểm tra và gửi báo giá để bạn duyệt.',
+            ),
+            const SizedBox(height: 16),
             Text(
               'Bạn cần hỗ trợ gì?',
               style: Theme.of(context).textTheme.titleLarge,
@@ -600,15 +608,6 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
               const SizedBox(height: 8),
             ],
             const SizedBox(height: 4),
-
-            RescueIntro(
-              eyebrow: 'BẮT ĐẦU YÊU CẦU',
-              title: _introTitle,
-              description: _selectedService == 0
-                  ? 'Xác nhận điểm đón, chọn chuyến riêng hoặc khởi tạo chuyến gom và số lượng từ 2 đến 6 xe.'
-                  : 'Xác nhận điểm xe đang gặp nạn, chọn gara khả dụng; thợ sẽ đến kiểm tra và gửi báo giá để bạn duyệt.',
-            ),
-            const SizedBox(height: 12),
 
             // Thông tin xe & địa điểm
             RescuePanel(

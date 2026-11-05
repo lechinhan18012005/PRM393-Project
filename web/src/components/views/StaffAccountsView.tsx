@@ -27,9 +27,14 @@ import { managementApi, UserProfileRecord } from '../../services/managementApi';
 type StaffStatusFilter = 'ALL' | 'ACTIVE' | 'LOCKED';
 
 /**
- * Mật khẩu mặc định được chuẩn hóa cho toàn bộ tài khoản Staff mới khởi tạo theo Cách A.
+ * Hàm tạo mật khẩu ngẫu nhiên 8 ký tự gồm chữ hoa, chữ thường và chữ số.
  */
-const DEFAULT_STAFF_PASSWORD = 'Password@123';
+function generateRandomPassword(length = 8): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let res = '';
+  for (let i = 0; i < length; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
+  return res;
+}
 
 export function StaffAccountsView() {
   // ==========================================================================
@@ -119,6 +124,7 @@ export function StaffAccountsView() {
   async function handleCreateStaff(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const trimmedEmail = emailInput.trim();
+    const randomPassword = generateRandomPassword(8);
     if (!trimmedEmail) {
       setError('Vui lòng nhập địa chỉ Email của nhân viên Staff.');
       return;
@@ -143,7 +149,7 @@ export function StaffAccountsView() {
         email: trimmedEmail,
         fullName: derivedFullName,
         phoneNumber: phoneInput.trim() || undefined,
-        password: DEFAULT_STAFF_PASSWORD
+        password: randomPassword
       });
 
       // Lưu thông tin tài khoản vừa tạo để hiển thị trên hộp thông báo thành công
@@ -151,7 +157,7 @@ export function StaffAccountsView() {
         email: created.email || trimmedEmail,
         username: created.username || trimmedEmail.split('@')[0],
         fullName: created.fullName || derivedFullName,
-        defaultPassword: created.defaultPassword || DEFAULT_STAFF_PASSWORD
+        defaultPassword: randomPassword
       });
 
       // Xóa trắng các ô nhập trên form sau khi tạo thành công
@@ -220,7 +226,7 @@ export function StaffAccountsView() {
       `- Họ tên: ${createdAccount.fullName}`,
       `- Email đăng nhập: ${createdAccount.email}`,
       `- Tên đăng nhập: ${createdAccount.username}`,
-      `- Mật khẩu mặc định: ${createdAccount.defaultPassword}`
+      `- Mật khẩu: ${createdAccount.defaultPassword}`
     ].join('\n');
 
     void navigator.clipboard.writeText(textToCopy);
@@ -319,14 +325,15 @@ export function StaffAccountsView() {
             <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase">
               Chỉ dành cho Admin
             </span>
+  
           </div>
-          <p className="text-sm text-secondary mt-1">
-            Khởi tạo trực tiếp tài khoản nhân viên điều phối &amp; CSKH với mật khẩu mặc định{' '}
-            <code className="px-1.5 py-0.5 rounded bg-surface-container font-mono font-bold text-on-surface">
-              {DEFAULT_STAFF_PASSWORD}
-            </code>{' '}
-            (nhân viên đăng nhập ngay không cần mã mời) và quản lý quyền truy cập.
-          </p>
+
+
+
+
+
+
+
         </div>
 
         {/* 3 Thẻ chỉ số nhanh (Tổng số, Đang hoạt động, Đã khóa) */}
@@ -354,13 +361,13 @@ export function StaffAccountsView() {
               Tạo tài khoản Staff mới (Kích hoạt ngay)
             </h2>
             <p className="text-xs text-secondary mt-0.5">
-              Nhập Email nhân viên (bắt buộc) và Họ tên (nếu để trống hệ thống tự động tạo từ Email). Tài khoản sẽ được tạo ngay với mật khẩu mặc định{' '}
-              <strong>{DEFAULT_STAFF_PASSWORD}</strong>.
+              Nhập Email nhân viên (bắt buộc) và Họ tên (nếu để trống hệ thống tự động tạo từ Email).
             </p>
+  
           </div>
-          <span className="text-xs font-mono px-2.5 py-1 rounded bg-surface-container text-secondary font-semibold">
-            Mật khẩu mặc định: {DEFAULT_STAFF_PASSWORD}
-          </span>
+
+
+
         </div>
 
         <form onSubmit={handleCreateStaff} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
@@ -437,24 +444,26 @@ export function StaffAccountsView() {
               </div>
               <div className="text-xs space-x-4 flex flex-wrap gap-y-1">
                 <span>
-                  Họ tên: <strong>{createdAccount.fullName}</strong>
-                </span>
+                  Họ tên: <strong>{createdAccount.fullName}</strong></span>
+      
                 <span>
-                  Email: <strong className="font-mono">{createdAccount.email}</strong>
-                </span>
+                  Email: <strong className="font-mono">{createdAccount.email}</strong></span>
+      
                 <span>
-                  Username: <strong className="font-mono">{createdAccount.username}</strong>
-                </span>
+                  Username: <strong className="font-mono">{createdAccount.username}</strong></span>
+      
                 <span>
-                  Mật khẩu mặc định:{' '}
+                  Mật khẩu:{' '}
                   <code className="px-2 py-0.5 rounded bg-white border border-emerald-300 font-mono font-bold text-emerald-900">
                     {createdAccount.defaultPassword}
                   </code>
                 </span>
+      
               </div>
               <p className="text-xs text-emerald-800">
-                Nhân viên Staff có thể dùng Email/Username và mật khẩu mặc định này để đăng nhập ngay vào hệ thống và tự đổi mật khẩu sau.
+                Nhân viên Staff có thể dùng Email/Username và mật khẩu này để đăng nhập ngay vào hệ thống và tự đổi mật khẩu sau.
               </p>
+    
             </div>
 
             <div className="flex items-center gap-2 shrink-0">

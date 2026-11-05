@@ -151,7 +151,8 @@ export function GarageFinanceView() {
       {showPayout && wallet && <GarageModal title="Yêu cầu rút tiền" description={`Số dư khả dụng: ${money(wallet?.availableBalance)}`} onClose={() => { if (!submittingRef.current) setShowPayout(false); }}>
         <form className="garage-form" onSubmit={submitPayout}>
           <GarageError message={payoutError} />
-          <label>Số tiền (VNĐ)<input type="number" min="50000" max={wallet.availableBalance} step="1" required disabled={submitting} value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></label>
+          <label>Số tiền (VNĐ)<input type="text" inputMode="numeric" required disabled={submitting} value={form.amount ? Number(form.amount).toLocaleString('vi-VN') : ''} onChange={e => setForm({ ...form, amount: e.target.value.replace(/\D/g, '').replace(/^0+/, '') })} /></label>
+          {form.amount && Number(form.amount) > wallet.availableBalance && <p style={{ color: '#dc2626', fontSize: 13, margin: '-4px 0 0' }}>Số tiền nhập vào ({Number(form.amount).toLocaleString('vi-VN')}đ) lớn hơn số dư khả dụng của gara ({wallet.availableBalance.toLocaleString('vi-VN')}đ).</p>}
           <label>Mã ngân hàng<input required maxLength={30} placeholder="VD: VCB" disabled={submitting} value={form.bankCode} onChange={e => setForm({ ...form, bankCode: e.target.value })} /></label>
           <label>Tên ngân hàng<input maxLength={120} disabled={submitting} value={form.bankName} onChange={e => setForm({ ...form, bankName: e.target.value })} /></label>
           <label>Số tài khoản<input required maxLength={60} inputMode="numeric" disabled={submitting} value={form.accountNumber} onChange={e => setForm({ ...form, accountNumber: e.target.value })} /></label>

@@ -7,6 +7,7 @@ import 'package:mobile/providers/flood_report_provider.dart';
 import 'package:mobile/providers/vehicle_provider.dart';
 import 'package:mobile/screens/customer/stitch_hydro_rescue_screen.dart';
 import 'package:mobile/screens/customer/service_selection_screen.dart';
+import 'package:mobile/screens/customer/electronic_invoice_screen.dart';
 
 class _FlowFlood extends FloodReportProvider {
   @override
@@ -80,6 +81,36 @@ Widget _wrap(Widget child, {TextScaler? textScaler}) {
 }
 
 void main() {
+  testWidgets('Dispute refund amount is fixed to the paid amount', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(home: ElectronicInvoiceScreen()));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Khiếu nại dịch vụ / Yêu cầu hoàn tiền'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Khiếu nại dịch vụ / Yêu cầu hoàn tiền'));
+    await tester.pumpAndSettle();
+
+    final amountField = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .first;
+    expect(amountField.readOnly, isTrue);
+    expect(amountField.enableInteractiveSelection, isFalse);
+    expect(amountField.controller?.text, '150.000');
+    expect(
+      find.textContaining('Cố định bằng số tiền đã thanh toán'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Choose vehicle and open rescue services', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -96,6 +127,10 @@ void main() {
     await tester.tap(find.byKey(const Key('request-rescue')));
     await tester.pumpAndSettle();
     expect(find.byType(ServiceSelectionScreen), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('BẮT ĐẦU YÊU CẦU')).dy,
+      lessThan(tester.getTopLeft(find.text('Bạn cần hỗ trợ gì?')).dy),
+    );
     expect(
       tester.getTopLeft(find.text('Bạn cần hỗ trợ gì?')).dy,
       lessThan(
