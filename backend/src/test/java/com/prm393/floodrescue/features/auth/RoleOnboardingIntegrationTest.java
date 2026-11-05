@@ -83,7 +83,7 @@ class RoleOnboardingIntegrationTest {
     String token(User user) throws Exception {
         return call(
                         post("/api/v1/auth/login"),
-                        Map.of("identifier", user.getUsername(), "password", "Password@123"),
+                        Map.of("identifier", user.getEmail(), "password", "Password@123"),
                         200)
                 .path("accessToken")
                 .asText();
@@ -122,7 +122,7 @@ class RoleOnboardingIntegrationTest {
                         post("/api/v1/auth/login"),
                         Map.of(
                                 "identifier",
-                                user.getUsername(),
+                                user.getEmail(),
                                 "password",
                                 "Password@123",
                                 "platform",

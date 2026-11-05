@@ -165,9 +165,7 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
 
       // Điều hướng quay về màn hình Trang chủ Khách hàng và xóa các màn hình thanh toán/đánh giá khỏi stack
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => const StitchHydroRescueScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const StitchHydroRescueScreen()),
         (route) => false,
       );
     } catch (e) {
@@ -183,9 +181,7 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
           ),
         );
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => const StitchHydroRescueScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const StitchHydroRescueScreen()),
           (route) => false,
         );
       } else {
@@ -215,8 +211,11 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
     final mechanicDisplay = widget.mechanicName ?? 'Thợ Phạm Tuấn Anh';
     final garageDisplay =
         widget.garageName ?? 'Đội cứu hộ cơ động • Gara Toàn Thắng (Q.7)';
-    final orderCodeDisplay = widget.rescueCode ??
-        (widget.rescueOrderId != null ? '#RC-${widget.rescueOrderId}' : '#RC-8821');
+    final orderCodeDisplay =
+        widget.rescueCode ??
+        (widget.rescueOrderId != null
+            ? '#RC-${widget.rescueOrderId}'
+            : '#RC-8821');
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -238,8 +237,7 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
             const RescueIntro(
               eyebrow: 'CHẤT LƯỢNG HỖ TRỢ',
               title: 'Chia sẻ trải nghiệm',
-              description:
-                  'Đánh giá số sao và nhận xét để hệ thống cập nhật điểm uy tín (CSAT) của Thợ & Gara cứu hộ.',
+              description: 'Đánh giá số sao và nhận xét để hệ thống cập nhật điểm uy tín (CSAT) của Thợ & Gara cứu hộ.',
             ),
             const SizedBox(height: 12),
 
@@ -398,8 +396,9 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
 
             // Nút xác nhận "Gửi Đánh Giá Cứu Hộ"
             ElevatedButton(
-              onPressed:
-                  (_isSubmitting || _existingRating != null) ? null : _handleSubmit,
+              onPressed: (_isSubmitting || _existingRating != null)
+                  ? null
+                  : _handleSubmit,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryOrange,
                 foregroundColor: Colors.white,
@@ -412,7 +411,10 @@ class _RatingReviewScreenState extends State<RatingReviewScreen> {
                 _existingRating != null
                     ? 'Đã Gửi Đánh Giá'
                     : (_isSubmitting ? 'Đang gửi...' : 'Gửi Đánh Giá Cứu Hộ'),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
               ),
             ),
           ],

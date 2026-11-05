@@ -225,12 +225,14 @@ void main() {
           );
           await tester.pumpAndSettle();
 
-          // Hiển thị đúng sai số thật, không thay bằng độ chính xác giả.
-          expect(find.textContaining('3 m'), findsWidgets);
-          expect(find.textContaining('±138 m'), findsWidgets);
-
-          expect(find.text('Đủ điều kiện'), findsOneWidget);
-          expect(find.text('Chỉ tham khảo'), findsOneWidget);
+          // Khoảng cách chỉ hiển thị một lần ở dòng tổng hợp phía trên bản đồ.
+          expect(find.textContaining('3 m'), findsOneWidget);
+          expect(find.text('Khoảng cách'), findsNothing);
+          expect(find.text('Mục tiêu ≤ 30m'), findsNothing);
+          expect(find.textContaining('Điểm trả'), findsNothing);
+          expect(find.textContaining('±138 m'), findsNothing);
+          expect(find.text('Đủ điều kiện'), findsNothing);
+          expect(find.text('Độ mới GPS'), findsNothing);
           expect(find.textContaining('Sai số quá lớn'), findsNothing);
           final filledButton = tester.widget<FilledButton>(
             find.byType(FilledButton),

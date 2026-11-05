@@ -26,6 +26,11 @@ public class CrossingOptionDto {
     private BigDecimal serviceBasePrice;
     private BigDecimal bookingFee;
     private BigDecimal totalAmount;
+    private BigDecimal groupPrice2Vehicles;
+    private BigDecimal groupPrice3Vehicles;
+    private BigDecimal groupPrice4Vehicles;
+    private BigDecimal groupPrice5Vehicles;
+    private BigDecimal groupPrice6Vehicles;
     private String currency;
     private int estimatedTimeMin;
     private int availableMechanicCount;

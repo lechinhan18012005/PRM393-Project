@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/models/rescue_order_model.dart';
@@ -25,6 +27,19 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
   bool _isCancelling = false;
   bool _noMechanicFound = false;
   String? _errorMessage;
+
+  Future<void> _callMechanic(String phone) async {
+    final uri = Uri(
+      scheme: 'tel',
+      path: phone.replaceAll(RegExp(r'[^0-9+]'), ''),
+    );
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể mở ứng dụng gọi điện.')),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -117,7 +132,9 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Đã hủy yêu cầu tìm kiếm thành công (Không mất phí).'),
+            content: Text(
+              'Đã hủy yêu cầu tìm kiếm thành công (Không mất phí).',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -128,7 +145,9 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
         setState(() => _isCancelling = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi hủy đơn: ${e.toString().replaceFirst("Exception: ", "")}'),
+            content: Text(
+              'Lỗi hủy đơn: ${e.toString().replaceFirst("Exception: ", "")}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -139,7 +158,8 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
   @override
   Widget build(BuildContext context) {
     final order = _order;
-    final isDispatched = order?.status == 'DISPATCHED' || order?.status == 'IN_PROGRESS';
+    final isDispatched =
+        order?.status == 'DISPATCHED' || order?.status == 'IN_PROGRESS';
 
     return Scaffold(
       backgroundColor: const Color(0xFF112C42), // Dark radar theme
@@ -158,7 +178,10 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
               icon: const Icon(Icons.close, color: Colors.white70, size: 18),
               label: const Text(
                 'Hủy tìm',
-                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
         ],
@@ -170,14 +193,14 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
             isDispatched
                 ? 'ĐÃ KẾT NỐI ĐỘI CỨU HỘ THÀNH CÔNG'
                 : _noMechanicFound
-                    ? 'CHƯA TÌM THẤY THỢ PHÙ HỢP'
-                    : 'ĐANG ĐIỀU PHỐI TUẦN TỰ THEO KHOẢNG CÁCH (3-5KM)',
+                ? 'CHƯA TÌM THẤY THỢ PHÙ HỢP'
+                : 'ĐANG ĐIỀU PHỐI TUẦN TỰ THEO KHOẢNG CÁCH (3-5KM)',
             style: TextStyle(
               color: isDispatched
                   ? Colors.greenAccent
                   : _noMechanicFound
-                      ? Colors.orangeAccent
-                      : AppColors.primaryContainer,
+                  ? Colors.orangeAccent
+                  : AppColors.primaryContainer,
               fontSize: 11,
               fontWeight: FontWeight.bold,
               letterSpacing: 1,
@@ -188,8 +211,8 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
             isDispatched
                 ? 'Thợ cứu hộ đang chuẩn bị di chuyển đến vị trí xe của bạn.'
                 : _noMechanicFound
-                    ? 'Hiện các thợ có xe chở chuyên dụng của gara đang bận.'
-                    : 'Hệ thống gửi offer 45 giây lần lượt đến từng thợ đủ điều kiện...',
+                ? 'Hiện các thợ có xe chở chuyên dụng của gara đang bận.'
+                : 'Hệ thống gửi yêu cầu 2 phút lần lượt đến từng thợ đủ điều kiện...',
             style: const TextStyle(color: Colors.white70, fontSize: 13),
             textAlign: TextAlign.center,
           ),
@@ -207,7 +230,11 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: (isDispatched ? Colors.green : AppColors.primaryOrange).withValues(alpha: 0.2),
+                      color:
+                          (isDispatched
+                                  ? Colors.green
+                                  : AppColors.primaryOrange)
+                              .withValues(alpha: 0.2),
                       width: 1.5,
                     ),
                   ),
@@ -219,7 +246,11 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: (isDispatched ? Colors.green : AppColors.primaryOrange).withValues(alpha: 0.35),
+                      color:
+                          (isDispatched
+                                  ? Colors.green
+                                  : AppColors.primaryOrange)
+                              .withValues(alpha: 0.35),
                       width: 1.5,
                     ),
                   ),
@@ -231,7 +262,11 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: (isDispatched ? Colors.green : AppColors.primaryOrange).withValues(alpha: 0.6),
+                      color:
+                          (isDispatched
+                                  ? Colors.green
+                                  : AppColors.primaryOrange)
+                              .withValues(alpha: 0.6),
                       width: 1.5,
                     ),
                   ),
@@ -241,11 +276,15 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: isDispatched ? Colors.green : AppColors.primaryOrange,
+                    color: isDispatched
+                        ? Colors.green
+                        : AppColors.primaryOrange,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: isDispatched ? Colors.greenAccent : AppColors.primaryOrange,
+                        color: isDispatched
+                            ? Colors.greenAccent
+                            : AppColors.primaryOrange,
                         blurRadius: 16,
                       ),
                     ],
@@ -332,15 +371,23 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      order != null ? 'Đang tìm thợ cho đơn #${order.orderCode}' : 'Đang tìm thợ gần bạn...',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      order != null
+                          ? 'Đang tìm thợ cho đơn #${order.orderCode}'
+                          : 'Đang tìm thợ gần bạn...',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       order?.pickupAddress ?? 'Điểm đón đã xác nhận',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppColors.secondary),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.secondary,
+                      ),
                     ),
                   ],
                 ),
@@ -350,14 +397,23 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
           const SizedBox(height: 14),
           OutlinedButton.icon(
             onPressed: _isCancelling ? null : _cancelSearch,
-            icon: const Icon(Icons.cancel_outlined, size: 18, color: Colors.red),
+            icon: const Icon(
+              Icons.cancel_outlined,
+              size: 18,
+              color: Colors.red,
+            ),
             label: Text(
               _isCancelling ? 'Đang hủy...' : 'Hủy tìm cứu hộ (Miễn phí 100%)',
-              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.redAccent),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
         ],
@@ -365,7 +421,10 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
     );
   }
 
-  Widget _buildMatchedMechanicCard(BuildContext context, RescueOrderModel order) {
+  Widget _buildMatchedMechanicCard(
+    BuildContext context,
+    RescueOrderModel order,
+  ) {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -430,10 +489,7 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(8),
@@ -451,6 +507,15 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
             ],
           ),
           const SizedBox(height: 16),
+          if (order.mechanicPhone?.trim().isNotEmpty == true) ...[
+            OutlinedButton.icon(
+              key: const ValueKey('contact-matched-mechanic'),
+              onPressed: () => _callMechanic(order.mechanicPhone!),
+              icon: const Icon(Icons.call_outlined, size: 18),
+              label: Text('Liên hệ nhân viên (${order.mechanicPhone})'),
+            ),
+            const SizedBox(height: 8),
+          ],
           ElevatedButton.icon(
             onPressed: () {
               Navigator.of(context).pushReplacement(
@@ -498,7 +563,11 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
         children: [
           Row(
             children: [
-              Icon(Icons.error_outline, color: Colors.orange.shade700, size: 28),
+              Icon(
+                Icons.error_outline,
+                color: Colors.orange.shade700,
+                size: 28,
+              ),
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
@@ -525,7 +594,9 @@ class _RadarDispatchScreenState extends State<RadarDispatchScreen>
               const SizedBox(width: 10),
               Expanded(
                 child: FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.primaryOrange),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryOrange,
+                  ),
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Chọn gara khác'),
                 ),

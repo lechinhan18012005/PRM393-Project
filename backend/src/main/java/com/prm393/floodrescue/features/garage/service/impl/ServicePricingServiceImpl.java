@@ -122,6 +122,7 @@ public class ServicePricingServiceImpl implements ServicePricingService {
                         : standardPrice.multiply(BigDecimal.valueOf(1.3));
 
         validatePriceRange(standardPrice, minPrice, maxPrice);
+        validateGroupPrices(serviceType, standardPrice, dto);
 
         // 3. Đối chiếu Giá trần Sàn (Price Ceiling Check)
         priceCeilingService.validatePriceAgainstCeiling(
@@ -143,6 +144,11 @@ public class ServicePricingServiceImpl implements ServicePricingService {
                         .itemCategoryType(itemCategoryType)
                         .applicableVehicleType(vehicleType)
                         .standardPrice(standardPrice)
+                        .groupPrice2Vehicles(dto.getGroupPrice2Vehicles())
+                        .groupPrice3Vehicles(dto.getGroupPrice3Vehicles())
+                        .groupPrice4Vehicles(dto.getGroupPrice4Vehicles())
+                        .groupPrice5Vehicles(dto.getGroupPrice5Vehicles())
+                        .groupPrice6Vehicles(dto.getGroupPrice6Vehicles())
                         .minPrice(minPrice)
                         .maxPrice(maxPrice)
                         .unit(dto.getUnit() != null ? dto.getUnit() : "lượt")
@@ -232,6 +238,7 @@ public class ServicePricingServiceImpl implements ServicePricingService {
         BigDecimal maxPrice = dto.getMaxPrice() != null ? dto.getMaxPrice() : item.getMaxPrice();
 
         validatePriceRange(standardPrice, minPrice, maxPrice);
+        validateGroupPrices(serviceType, standardPrice, dto);
 
         // Kiểm tra trần giá sàn
         priceCeilingService.validatePriceAgainstCeiling(
@@ -250,6 +257,11 @@ public class ServicePricingServiceImpl implements ServicePricingService {
         item.setItemCategoryType(itemCategoryType);
         item.setApplicableVehicleType(vehicleType);
         item.setStandardPrice(standardPrice);
+        item.setGroupPrice2Vehicles(dto.getGroupPrice2Vehicles());
+        item.setGroupPrice3Vehicles(dto.getGroupPrice3Vehicles());
+        item.setGroupPrice4Vehicles(dto.getGroupPrice4Vehicles());
+        item.setGroupPrice5Vehicles(dto.getGroupPrice5Vehicles());
+        item.setGroupPrice6Vehicles(dto.getGroupPrice6Vehicles());
         item.setMinPrice(minPrice);
         item.setMaxPrice(maxPrice);
         if (dto.getUnit() != null) item.setUnit(dto.getUnit());
@@ -354,6 +366,11 @@ public class ServicePricingServiceImpl implements ServicePricingService {
                 .itemCategoryType(item.getItemCategoryType())
                 .applicableVehicleType(item.getApplicableVehicleType())
                 .standardPrice(item.getStandardPrice())
+                .groupPrice2Vehicles(item.getGroupPrice2Vehicles())
+                .groupPrice3Vehicles(item.getGroupPrice3Vehicles())
+                .groupPrice4Vehicles(item.getGroupPrice4Vehicles())
+                .groupPrice5Vehicles(item.getGroupPrice5Vehicles())
+                .groupPrice6Vehicles(item.getGroupPrice6Vehicles())
                 .minPrice(item.getMinPrice())
                 .maxPrice(item.getMaxPrice())
                 .unit(item.getUnit())
@@ -364,5 +381,27 @@ public class ServicePricingServiceImpl implements ServicePricingService {
                 .adminCeilingSnapshot(item.getAdminCeilingSnapshot())
                 .warrantyDays(item.getWarrantyDays())
                 .build();
+    }
+
+    private void validateGroupPrices(ServiceType serviceType, BigDecimal standardPrice, ServiceItemDto dto) {
+        if (serviceType != ServiceType.CROSSING) {
+            return;
+        }
+        BigDecimal[] prices = {
+                dto.getGroupPrice2Vehicles(), dto.getGroupPrice3Vehicles(),
+                dto.getGroupPrice4Vehicles(), dto.getGroupPrice5Vehicles(),
+                dto.getGroupPrice6Vehicles()
+        };
+        for (int i = 0; i < prices.length; i++) {
+            int vehicleCount = i + 2;
+            BigDecimal price = prices[i];
+            if (price == null || price.compareTo(BigDecimal.valueOf(1000)) < 0) {
+                throw new BadRequestException("Vui lòng niêm yết tổng cước chuyến gom cho đủ từ 2 đến 6 xe");
+            }
+            if (price.compareTo(standardPrice.multiply(BigDecimal.valueOf(vehicleCount))) >= 0) {
+                throw new BadRequestException("Giá gom " + vehicleCount
+                        + " xe phải thấp hơn tổng giá đi riêng tương ứng");
+            }
+        }
     }
 }

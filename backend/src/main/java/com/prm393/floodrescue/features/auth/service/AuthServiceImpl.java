@@ -3,6 +3,7 @@ package com.prm393.floodrescue.features.auth.service;
 import com.prm393.floodrescue.common.exception.BadRequestException;
 import com.prm393.floodrescue.common.exception.ResourceNotFoundException;
 import com.prm393.floodrescue.common.exception.UnauthorizedException;
+import com.prm393.floodrescue.common.utils.PhoneUtils;
 import com.prm393.floodrescue.config.JwtProperties;
 import com.prm393.floodrescue.config.JwtService;
 import com.prm393.floodrescue.features.auth.dto.AuthResponse;
@@ -93,9 +94,13 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request) {
+        String identifier = request.getIdentifier().trim();
         User user =
-                userRepository
-                        .findByIdentifier(request.getIdentifier().trim())
+                (identifier.contains("@")
+                                ? userRepository.findByEmailIgnoreCase(identifier)
+                                : userRepository
+                                        .findByPhone(PhoneUtils.normalize(identifier))
+                                        .or(() -> userRepository.findByPhone(identifier)))
                         .orElseThrow(
                                 () ->
                                         new BadCredentialsException(

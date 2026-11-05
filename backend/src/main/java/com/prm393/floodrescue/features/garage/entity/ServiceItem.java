@@ -46,6 +46,21 @@ public class ServiceItem {
     @Column(name = "standard_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal standardPrice;
 
+    @Column(name = "group_price_2_vehicles", precision = 12, scale = 2)
+    private BigDecimal groupPrice2Vehicles;
+
+    @Column(name = "group_price_3_vehicles", precision = 12, scale = 2)
+    private BigDecimal groupPrice3Vehicles;
+
+    @Column(name = "group_price_4_vehicles", precision = 12, scale = 2)
+    private BigDecimal groupPrice4Vehicles;
+
+    @Column(name = "group_price_5_vehicles", precision = 12, scale = 2)
+    private BigDecimal groupPrice5Vehicles;
+
+    @Column(name = "group_price_6_vehicles", precision = 12, scale = 2)
+    private BigDecimal groupPrice6Vehicles;
+
     @Column(name = "min_price", precision = 12, scale = 2)
     private BigDecimal minPrice;
 

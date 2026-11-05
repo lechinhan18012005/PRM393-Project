@@ -43,10 +43,9 @@ public class ExecutionController {
 
     @PostMapping("/transfer-to-garage")
     public ResponseEntity<ApiResponse<ExecutionActionResponse>> transfer(
-            @PathVariable Long orderId, @AuthenticationPrincipal User user,
-            @Valid @RequestBody TransferToGarageRequest request) {
+            @PathVariable Long orderId, @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(ApiResponse.success("Đã chuyển trạng thái kéo xe về garage",
-                executionService.transfer(orderId, request.getDestinationBranchId(), user)));
+                executionService.transfer(orderId, user)));
     }
 
     @PostMapping("/delivered")

@@ -16,7 +16,8 @@ class MockAuthProvider extends AuthProvider {
   UserModel? _mockUser;
 
   MockAuthProvider({UserModel? user}) {
-    _mockUser = user ??
+    _mockUser =
+        user ??
         UserModel(
           id: 1,
           username: 'customer_test',
@@ -49,7 +50,8 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'jwt_access_token': 'dummy_access_token',
       'jwt_refresh_token': 'dummy_refresh_token',
-      'user_data': '{"id":1,"username":"test","email":"test@vn.vn","role":"CUSTOMER"}',
+      'user_data':
+          '{"id":1,"username":"test","email":"test@vn.vn","role":"CUSTOMER"}',
     });
   });
 
@@ -146,7 +148,9 @@ void main() {
       expect(find.byType(LoginScreen), findsOneWidget);
     });
 
-    testWidgets('StitchHydroRescueScreen (Customer) has working logout button', (tester) async {
+    testWidgets('Customer home hides logout and keeps account access', (
+      tester,
+    ) async {
       final mockAuth = MockAuthProvider();
 
       await tester.pumpWidget(
@@ -161,20 +165,8 @@ void main() {
         ),
       );
 
-      final logoutBtn = find.byKey(const Key('customer-logout-btn'));
-      expect(logoutBtn, findsOneWidget);
-
-      await tester.tap(logoutBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Xác nhận đăng xuất'), findsOneWidget);
-
-      final confirmBtn = find.widgetWithText(FilledButton, 'Đăng xuất');
-      await tester.tap(confirmBtn);
-      await tester.pumpAndSettle();
-
-      expect(mockAuth.logoutCalled, isTrue);
-      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.byKey(const Key('customer-logout-btn')), findsNothing);
+      expect(find.byKey(const Key('open-account')), findsOneWidget);
     });
 
     testWidgets('MechanicHomeScreen has working logout button', (tester) async {
@@ -211,7 +203,7 @@ void main() {
       expect(find.text('Xác nhận đăng xuất'), findsOneWidget);
     });
 
-    testWidgets('VehicleProfileScreen has working logout buttons', (tester) async {
+    testWidgets('VehicleProfileScreen hides logout buttons', (tester) async {
       final mockAuth = MockAuthProvider();
 
       await tester.pumpWidget(
@@ -226,13 +218,11 @@ void main() {
         ),
       );
 
-      expect(find.byKey(const Key('vehicle-profile-logout-btn')), findsOneWidget);
-      expect(find.byKey(const Key('logout-button-vehicle-profile')), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('vehicle-profile-logout-btn')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Xác nhận đăng xuất'), findsOneWidget);
+      expect(find.byKey(const Key('vehicle-profile-logout-btn')), findsNothing);
+      expect(
+        find.byKey(const Key('logout-button-vehicle-profile')),
+        findsNothing,
+      );
     });
   });
 }

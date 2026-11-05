@@ -20,6 +20,7 @@ public class RescueOfferResponse {
     private Long orderId;
     private String orderCode;
     private OrderType orderType;
+    private Integer groupVehicleCount;
     private RescueOfferStatus status;
 
     private String customerName;

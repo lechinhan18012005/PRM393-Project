@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/models/rescue_order_model.dart';
 import '../../core/services/media_service.dart';
 import '../../core/services/rescue_service.dart';
 import '../../features/execution/execution_api.dart';
@@ -20,17 +21,18 @@ class RepairExecutionScreen extends StatefulWidget {
 class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
   final _api = ExecutionApi();
   final _rescueService = RescueService();
-  final _destinationBranch = TextEditingController();
-  final _progressNote = TextEditingController();
-  final _done = <int>{0, 1, 2, 3};
+  final _done = <int>{};
   bool _started = false;
   bool _towing = false;
   bool _pickedUp = false;
   bool _transferred = false;
   bool _delivered = false;
   bool _busy = false;
+  bool _uploadingEvidence = false;
   PickedMediaFile? _evidenceFile;
   String? _evidenceUrl;
+  String? _evidenceUploadError;
+  RescueOrderModel? _order;
 
   static const _steps = [
     'Tháo bugi, sấy khô và chống ẩm',
@@ -44,7 +46,20 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
   void initState() {
     super.initState();
     _towing = widget.orderType == 'TOWING';
-    if (widget.orderId != null) _loadHistory();
+    if (widget.orderId != null) {
+      _loadHistory();
+      _loadOrder();
+    }
+  }
+
+  Future<void> _loadOrder() async {
+    try {
+      final order = await _rescueService.getOrderById(widget.orderId!);
+      if (!mounted) return;
+      setState(() => _order = order);
+    } catch (_) {
+      // Thao tác chính vẫn có thể tiếp tục; backend luôn tự xác định chi nhánh đích.
+    }
   }
 
   Future<void> _loadHistory() async {
@@ -54,6 +69,16 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
       final actions = records
           .map((record) => record['action']?.toString())
           .toSet();
+      final completedSteps = <int>{};
+      for (final record in records) {
+        if (record['action']?.toString() != 'PROGRESS_UPDATED') continue;
+        final note = record['note']?.toString() ?? '';
+        final match = RegExp(r'^CHECKLIST_STEP:(\d+)$').firstMatch(note);
+        final step = match == null ? null : int.tryParse(match.group(1)!);
+        if (step != null && step >= 0 && step < _steps.length) {
+          completedSteps.add(step);
+        }
+      }
       String? evidence;
       for (final record in records.reversed) {
         final url = record['evidenceImageUrl']?.toString();
@@ -69,6 +94,9 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
         _transferred = actions.contains('TRANSFER_TO_GARAGE');
         _delivered = actions.contains('VEHICLE_DELIVERED');
         _evidenceUrl = evidence;
+        _done
+          ..clear()
+          ..addAll(completedSteps);
       });
     } catch (_) {
       // Màn hình vẫn cho phép thử lại thao tác chính khi lịch sử tạm lỗi.
@@ -103,27 +131,44 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
   }
 
   Future<void> _transfer() async {
-    final branchId = int.tryParse(_destinationBranch.text);
-    if (branchId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Nhập ID chi nhánh hợp lệ')));
-      return;
-    }
     final success = await _run(
-      () => _api.transferToGarage(widget.orderId!, branchId),
+      () => _api.transferToGarage(widget.orderId!),
       'Đã bắt đầu vận chuyển xe về garage',
     );
     if (success && mounted) setState(() => _transferred = true);
   }
 
   Future<void> _pickEvidence() async {
-    final file = await MediaService.instance.pickImageFromCamera();
+    final fromCamera = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Chụp ảnh bằng Camera'),
+              onTap: () => Navigator.of(sheet).pop(true),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Chọn ảnh từ Thư viện'),
+              onTap: () => Navigator.of(sheet).pop(false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (fromCamera == null) return;
+    final file = fromCamera
+        ? await MediaService.instance.pickImageFromCamera()
+        : await MediaService.instance.pickImageFromGallery();
     if (file != null && mounted) {
       setState(() {
         _evidenceFile = file;
         _evidenceUrl = null;
+        _evidenceUploadError = null;
       });
+      await _prepareEvidenceUpload();
     }
   }
 
@@ -131,27 +176,65 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
     if (_evidenceUrl != null) return _evidenceUrl;
     final file = _evidenceFile;
     if (file == null) return null;
-    final url = await _rescueService.uploadOrderEvidence(
-      widget.orderId!,
-      file.bytes,
-      file.filename,
-    );
-    if (mounted) setState(() => _evidenceUrl = url);
-    return url;
+    if (mounted) {
+      setState(() {
+        _uploadingEvidence = true;
+        _evidenceUploadError = null;
+      });
+    }
+    try {
+      final url = await _rescueService.uploadOrderEvidence(
+        widget.orderId!,
+        file.bytes,
+        file.filename,
+      );
+      if (mounted) setState(() => _evidenceUrl = url);
+      return url;
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _evidenceUploadError = error.toString().replaceFirst(
+            'Exception: ',
+            '',
+          );
+        });
+      }
+      rethrow;
+    } finally {
+      if (mounted) setState(() => _uploadingEvidence = false);
+    }
   }
 
-  Future<void> _updateProgress() async {
-    final note = _progressNote.text.trim();
-    if (note.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Nhập nội dung tiến độ')));
+  Future<void> _prepareEvidenceUpload() async {
+    try {
+      await _uploadEvidence();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tải ảnh chưa thành công. Bạn có thể bấm thử lại.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _completeChecklistStep(int index) async {
+    if (_done.contains(index) || index != _done.length || _busy) return;
+    if (widget.orderId == null) {
+      setState(() => _done.add(index));
       return;
     }
-    final success = await _run(() async {
-      final imageUrl = await _uploadEvidence();
-      await _api.updateProgress(widget.orderId!, note, imageUrl: imageUrl);
-    }, 'Đã cập nhật tiến độ');
-    if (success) _progressNote.clear();
+    if (!_started) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cần bắt đầu dịch vụ trước')),
+      );
+      return;
+    }
+    final success = await _run(
+      () => _api.updateProgress(widget.orderId!, 'CHECKLIST_STEP:$index'),
+      'Đã hoàn thành bước ${index + 1}',
+    );
+    if (success && mounted) setState(() => _done.add(index));
   }
 
   Future<void> _markPickedUp() async {
@@ -184,18 +267,14 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
       );
       return;
     }
-    await _run(() async {
+    final success = await _run(() async {
       final imageUrl = await _uploadEvidence();
       if (imageUrl == null) throw Exception('Không thể tải ảnh nghiệm thu');
       await _api.requestCompletion(widget.orderId!, imageUrl);
     }, 'Đã gửi ảnh nghiệm thu và yêu cầu hoàn tất đơn');
-  }
-
-  @override
-  void dispose() {
-    _destinationBranch.dispose();
-    _progressNote.dispose();
-    super.dispose();
+    if (success && mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
   }
 
   @override
@@ -216,8 +295,11 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
 
     return MechanicPage(
       title: _towing ? 'Kéo xe về garage' : 'Sửa chữa tại chỗ',
+      showDemoNotice: false,
       bottom: FilledButton.icon(
-        onPressed: _busy || !canComplete ? null : _complete,
+        onPressed: _busy || _uploadingEvidence || !canComplete
+            ? null
+            : _complete,
         icon: const Icon(Icons.task_alt),
         label: Text(
           _towing ? 'Hoàn tất bàn giao xe' : 'Gửi yêu cầu nghiệm thu',
@@ -271,8 +353,6 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
           ),
         ),
         if (_towing) ..._buildTowingWorkflow() else ..._buildRepairWorkflow(),
-        const MechanicSection('Cập nhật tiến độ'),
-        _progressPanel(),
         MechanicSection(
           _towing ? 'Ảnh bàn giao tại garage' : 'Kiểm tra trước nghiệm thu',
         ),
@@ -282,7 +362,12 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: _busy || !_transferred || _delivered
+              onPressed:
+                  _busy ||
+                      _uploadingEvidence ||
+                      _evidenceUrl == null ||
+                      !_transferred ||
+                      _delivered
                   ? null
                   : _markDelivered,
               icon: const Icon(Icons.handshake_outlined),
@@ -297,7 +382,7 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
         const SizedBox(height: 8),
         Text(
           _towing
-              ? 'Đơn kéo xe kết thúc khi xe được bàn giao tại garage. Việc sửa chữa tại garage phải được tiếp nhận và báo giá riêng.'
+              ? 'Dịch vụ kết thúc khi xe được bàn giao tại garage. Giá kéo xe không bao gồm sửa chữa.'
               : 'Sau khi gửi nghiệm thu, khách hàng sẽ nhận yêu cầu xác nhận và thanh toán.',
           style: const TextStyle(
             color: AppColors.secondary,
@@ -312,14 +397,6 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
   List<Widget> _buildRepairWorkflow() => [
     const MechanicSection('Quy trình sửa chữa tại chỗ'),
     _checklist(),
-    const SizedBox(height: 8),
-    const MechanicPanel(
-      child: MechanicInfo(
-        icon: Icons.info_outline,
-        title: 'Xe không thể sửa tại chỗ?',
-        value: 'Quay lại màn hình Lập báo giá, chọn phương án kéo xe và chờ khách hàng duyệt trước khi nhận xe.',
-      ),
-    ),
   ];
 
   List<Widget> _buildTowingWorkflow() => [
@@ -327,6 +404,14 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
     MechanicPanel(
       child: Column(
         children: [
+          MechanicInfo(
+            icon: Icons.garage_outlined,
+            title: _order?.branchName ?? 'Chi nhánh garage đích',
+            value:
+                _order?.branchAddress ??
+                'Hệ thống tự xác định theo chi nhánh đang quản lý đơn và thợ.',
+          ),
+          const Divider(height: 24),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -338,16 +423,6 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _destinationBranch,
-            enabled: _pickedUp && !_transferred,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'ID chi nhánh garage đích',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -364,32 +439,6 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
       ),
     ),
   ];
-
-  Widget _progressPanel() => MechanicPanel(
-    child: Column(
-      children: [
-        TextField(
-          controller: _progressNote,
-          maxLines: 2,
-          decoration: InputDecoration(
-            labelText: _towing
-                ? 'Tình trạng vận chuyển'
-                : 'Nội dung sửa chữa vừa thực hiện',
-            border: const OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _busy || !_started ? null : _updateProgress,
-            icon: const Icon(Icons.update),
-            label: const Text('Lưu tiến độ'),
-          ),
-        ),
-      ],
-    ),
-  );
 
   Widget _evidencePanel({required bool towing}) => MechanicPanel(
     child: Column(
@@ -417,17 +466,29 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: _busy ? null : _pickEvidence,
-            icon: const Icon(Icons.camera_alt_outlined),
+            onPressed: _busy || _uploadingEvidence ? null : _pickEvidence,
+            icon: const Icon(Icons.add_a_photo_outlined),
             label: Text(
-              _evidenceFile == null && _evidenceUrl == null
+              _uploadingEvidence
+                  ? 'Đang tải ảnh lên...'
+                  : _evidenceFile == null && _evidenceUrl == null
                   ? towing
-                        ? 'Chụp ảnh bàn giao xe'
-                        : 'Chụp ảnh nghiệm thu sửa chữa'
-                  : 'Chụp lại ảnh',
+                        ? 'Thêm ảnh bàn giao xe'
+                        : 'Thêm ảnh nghiệm thu sửa chữa'
+                  : 'Chụp hoặc chọn lại ảnh',
             ),
           ),
         ),
+        if (_uploadingEvidence) ...[
+          const SizedBox(height: 8),
+          const LinearProgressIndicator(),
+          const SizedBox(height: 6),
+          const Text(
+            'Ảnh đang được tối ưu và tải lên trước để bước hoàn tất nhanh hơn.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.secondary, fontSize: 11),
+          ),
+        ],
         if (_evidenceUrl != null)
           const Padding(
             padding: EdgeInsets.only(top: 8),
@@ -436,6 +497,19 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
               style: TextStyle(color: Colors.green, fontSize: 12),
             ),
           ),
+        if (_evidenceUploadError != null && !_uploadingEvidence) ...[
+          const SizedBox(height: 8),
+          Text(
+            _evidenceUploadError!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.red, fontSize: 11),
+          ),
+          TextButton.icon(
+            onPressed: _prepareEvidenceUpload,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Thử tải ảnh lại'),
+          ),
+        ],
       ],
     ),
   );
@@ -509,28 +583,38 @@ class _RepairExecutionScreenState extends State<RepairExecutionScreen> {
   Widget _checklist() => MechanicPanel(
     padding: 0,
     child: Column(
-      children: List.generate(
-        _steps.length,
-        (index) => CheckboxListTile(
-          value: _done.contains(index),
-          onChanged: (selected) => setState(() {
-            selected == true ? _done.add(index) : _done.remove(index);
-          }),
+      children: List.generate(_steps.length, (index) {
+        final completed = _done.contains(index);
+        final canComplete =
+            !_busy &&
+            index == _done.length &&
+            (widget.orderId == null || _started);
+        return CheckboxListTile(
+          value: completed,
+          onChanged: completed
+              ? (_) {}
+              : canComplete
+              ? (_) => _completeChecklistStep(index)
+              : null,
           controlAffinity: ListTileControlAffinity.leading,
           title: Text(
             _steps[index],
             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
-            'Bước ${index + 1}',
+            completed
+                ? 'Đã hoàn thành'
+                : index == _done.length
+                ? 'Bước ${index + 1} · Thực hiện tiếp theo'
+                : 'Bước ${index + 1}',
             style: const TextStyle(fontSize: 11, color: AppColors.secondary),
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
             vertical: 6,
           ),
-        ),
-      ),
+        );
+      }),
     ),
   );
 }

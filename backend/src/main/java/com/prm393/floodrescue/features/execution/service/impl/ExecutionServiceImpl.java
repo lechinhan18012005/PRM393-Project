@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +32,9 @@ public class ExecutionServiceImpl implements ExecutionService {
     private static final Set<String> IN_PROGRESS = Set.of("IN_PROGRESS");
     private static final Set<String> PICKUP_ALLOWED = Set.of("IN_PROGRESS");
     private static final Set<String> DELIVERY_ALLOWED = Set.of("IN_PROGRESS");
+    private static final Set<String> ONSITE_CHECKLIST_STEPS = Set.of(
+            "CHECKLIST_STEP:0", "CHECKLIST_STEP:1", "CHECKLIST_STEP:2",
+            "CHECKLIST_STEP:3", "CHECKLIST_STEP:4");
 
     private final RescueOrderLookup orderLookup;
     private final RescueOrderCommands orderCommands;
@@ -58,11 +62,19 @@ public class ExecutionServiceImpl implements ExecutionService {
                                                   User mechanicUser) {
         OrderSnapshot order = assignedOrder(orderId, mechanicUser);
         requireStatus(order, IN_PROGRESS, "Đơn chưa bắt đầu thực hiện dịch vụ");
+        if (!"ONSITE_REPAIR".equalsIgnoreCase(order.getRescueType())) {
+            throw new BadRequestException(
+                    "Tiến độ dịch vụ được hệ thống cập nhật tự động theo từng bước");
+        }
+        String checklistStep = note == null ? "" : note.trim();
+        if (!ONSITE_CHECKLIST_STEPS.contains(checklistStep)) {
+            throw new BadRequestException("Chỉ chấp nhận tiến độ từ checklist sửa chữa");
+        }
         ServiceExecutionRecord record = saveRecord(order, ExecutionAction.PROGRESS_UPDATED,
-                note.trim(), trimToNull(evidenceImageUrl), null, null);
+                checklistStep, null, null, null);
         return ExecutionActionResponse.builder().executionRecordId(record.getId())
                 .orderId(orderId).action("PROGRESS_UPDATED")
-                .completionImageUrl(trimToNull(evidenceImageUrl)).build();
+                .build();
     }
 
     @Transactional
@@ -81,7 +93,7 @@ public class ExecutionServiceImpl implements ExecutionService {
 
     @Transactional
     @Override
-    public ExecutionActionResponse transfer(Long orderId, Long destinationBranchId, User mechanicUser) {
+    public ExecutionActionResponse transfer(Long orderId, User mechanicUser) {
         OrderSnapshot order = assignedOrder(orderId, mechanicUser);
         requireStatus(order, IN_PROGRESS, "Đơn chưa bắt đầu thực hiện dịch vụ");
         requireTowing(order);
@@ -89,6 +101,10 @@ public class ExecutionServiceImpl implements ExecutionService {
                 "Cần xác nhận nhận xe trước khi vận chuyển");
         requireActionAbsent(orderId, ExecutionAction.TRANSFER_TO_GARAGE,
                 "Xe đã được xác nhận chuyển về garage");
+        Long destinationBranchId = order.getBranchId();
+        if (destinationBranchId == null) {
+            throw new BadRequestException("Đơn cứu hộ chưa được gán chi nhánh garage đích");
+        }
         GarageBranchSnapshot branch = garageCatalog.getRequiredBranch(destinationBranchId, order.getGarageId());
         if (!branch.isOpen()) throw new BadRequestException("Chi nhánh đích đang đóng");
         orderCommands.transferToGarage(orderId, destinationBranchId);
@@ -180,8 +196,9 @@ public class ExecutionServiceImpl implements ExecutionService {
             throw new AccessDeniedException("Thợ không được phân công cho đơn này");
         }
         MechanicContextSnapshot mechanic = garageCatalog.getRequiredMechanicContext(user.getId());
-        if (!mechanic.getMechanicStaffId().equals(order.getMechanicStaffId())
-                || !mechanic.getBranchId().equals(order.getBranchId())) {
+        if (!Objects.equals(mechanic.getMechanicStaffId(), order.getMechanicStaffId())
+                || !Objects.equals(mechanic.getGarageId(), order.getGarageId())
+                || !Objects.equals(mechanic.getBranchId(), order.getBranchId())) {
             throw new AccessDeniedException("Phân công thợ hoặc chi nhánh không hợp lệ");
         }
         return order;

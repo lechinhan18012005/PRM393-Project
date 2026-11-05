@@ -25,11 +25,10 @@ class ExecutionApi {
     ),
   );
 
-  Future<void> transferToGarage(int orderId, int branchId) => _client.post(
+  Future<void> transferToGarage(int orderId) => _client.post(
     Uri.parse(
       '${ApiConstants.baseUrl}/rescue-orders/$orderId/execution/transfer-to-garage',
     ),
-    body: {'destinationBranchId': branchId},
   );
 
   Future<void> requestCompletion(int orderId, String imageUrl) => _client.post(
