@@ -23,14 +23,21 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    Optional<User> findByEmailIgnoreCase(String email);
+
     Optional<User> findByPhone(String phone);
 
+    // Internal security/profile lookup. Public login validates and resolves only email or phone.
     @Query("SELECT u FROM User u WHERE u.username = :identifier OR u.email = :identifier OR u.phone = :identifier")
     Optional<User> findByIdentifier(@Param("identifier") String identifier);
 
     boolean existsByUsername(String username);
 
+    boolean existsByUsernameIgnoreCase(String username);
+
     boolean existsByEmail(String email);
+
+    boolean existsByEmailIgnoreCase(String email);
 
     boolean existsByPhone(String phone);
 

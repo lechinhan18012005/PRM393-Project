@@ -6,6 +6,7 @@ import com.prm393.floodrescue.features.auth.dto.*;
 import com.prm393.floodrescue.features.auth.entity.*;
 import com.prm393.floodrescue.features.auth.repository.UserRepository;
 import com.prm393.floodrescue.features.garage.dto.RegisterGarageRequest;
+import com.prm393.floodrescue.features.onboarding.dto.CreateStaffAccountRequest;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -58,6 +59,19 @@ public class OnboardingController {
         return ApiResponse.success(service.invite(user, request.email(), null, true));
     }
 
+    /**
+     * Cách A: Admin tạo trực tiếp tài khoản Nhân viên Điều hành (Role.STAFF) trên cổng Web Admin.
+     */
+    @PostMapping("/admin/staff")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<UserProfileResponse> createStaffAccount(
+            @AuthenticationPrincipal User admin,
+            @Valid @RequestBody CreateStaffAccountRequest request
+    ) {
+        UserProfileResponse created = service.createStaffAccount(admin, request);
+        return ApiResponse.success("Khởi tạo tài khoản Nhân viên Điều hành (STAFF) thành công!", created);
+    }
+
     @PostMapping("/garages/mechanics/invitations")
     @PreAuthorize("hasRole('GARAGE_OWNER')")
     public ApiResponse<Map<String, Object>> inviteMechanic(
@@ -69,11 +83,11 @@ public class OnboardingController {
 
     @GetMapping("/admin/staff")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<List<UserProfileResponse>> listStaff() {
-        return ApiResponse.success(
-                users.findByRole(Role.STAFF).stream()
-                        .map(UserProfileResponse::fromEntity)
-                        .toList());
+    public ApiResponse<List<UserProfileResponse>> listStaff(
+            @RequestParam(value = "search", required = false) String search,
+            @RequestParam(value = "active", required = false) Boolean active
+    ) {
+        return ApiResponse.success(service.getStaffAccounts(search, active));
     }
 
     @PatchMapping("/admin/staff/{id}/status")

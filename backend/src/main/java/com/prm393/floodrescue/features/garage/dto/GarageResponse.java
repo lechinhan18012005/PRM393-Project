@@ -25,6 +25,7 @@ public class GarageResponse {
     private String idCardNumber;
     private GarageStatus status;
     private BigDecimal walletBalance;
+    private BigDecimal commissionRate;
     private String rejectionReason;
     private LocalDateTime createdAt;
     private int branchCount;

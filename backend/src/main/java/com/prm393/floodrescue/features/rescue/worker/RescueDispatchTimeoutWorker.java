@@ -21,7 +21,7 @@ public class RescueDispatchTimeoutWorker {
     private final RescueDispatchService rescueDispatchService;
 
     /**
-     * Quét định kỳ 5 giây các offer PENDING đã quá hạn 45 giây để chuyển EXPIRED và điều phối tiếp (B03)
+     * Quét định kỳ 5 giây các offer PENDING đã quá hạn 2 phút để chuyển EXPIRED và điều phối tiếp (B03)
      */
     @Scheduled(fixedDelay = 5000)
     public void processExpiredOffers() {

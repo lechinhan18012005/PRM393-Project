@@ -77,6 +77,72 @@ void main() {
       },
     );
 
+    test('submitRating với 1 sao (Không hài lòng)', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(utf8.encode(jsonEncode({
+          'success': true,
+          'data': {'id': 302, 'rescueOrderId': 8822, 'stars': 1, 'comment': 'Thợ đến quá trễ'}
+        })), 201, headers: {'content-type': 'application/json; charset=utf-8'});
+      });
+
+      final service = RatingService(client: mockClient, authService: _FakeAuthService());
+      final rating = await service.submitRating(rescueOrderId: 8822, stars: 1, comment: 'Thợ đến quá trễ');
+      expect(rating.stars, 1);
+    });
+
+    test('submitRating với 2 sao (Cần cải thiện)', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(utf8.encode(jsonEncode({
+          'success': true,
+          'data': {'id': 303, 'rescueOrderId': 8823, 'stars': 2, 'tags': 'Giá cao'}
+        })), 201, headers: {'content-type': 'application/json; charset=utf-8'});
+      });
+
+      final service = RatingService(client: mockClient, authService: _FakeAuthService());
+      final rating = await service.submitRating(rescueOrderId: 8823, stars: 2, tags: 'Giá cao');
+      expect(rating.stars, 2);
+    });
+
+    test('submitRating với 3 sao (Bình thường)', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(utf8.encode(jsonEncode({
+          'success': true,
+          'data': {'id': 304, 'rescueOrderId': 8824, 'stars': 3}
+        })), 201, headers: {'content-type': 'application/json; charset=utf-8'});
+      });
+
+      final service = RatingService(client: mockClient, authService: _FakeAuthService());
+      final rating = await service.submitRating(rescueOrderId: 8824, stars: 3);
+      expect(rating.stars, 3);
+    });
+
+    test('submitRating với 4 sao (Hài lòng)', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(utf8.encode(jsonEncode({
+          'success': true,
+          'data': {'id': 305, 'rescueOrderId': 8825, 'stars': 4, 'tags': 'Kỹ thuật tốt'}
+        })), 201, headers: {'content-type': 'application/json; charset=utf-8'});
+      });
+
+      final service = RatingService(client: mockClient, authService: _FakeAuthService());
+      final rating = await service.submitRating(rescueOrderId: 8825, stars: 4, tags: 'Kỹ thuật tốt');
+      expect(rating.stars, 4);
+    });
+
+    test('submitRating không kèm nhận xét hay tags thành công', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(utf8.encode(jsonEncode({
+          'success': true,
+          'data': {'id': 306, 'rescueOrderId': 8826, 'stars': 5}
+        })), 201, headers: {'content-type': 'application/json; charset=utf-8'});
+      });
+
+      final service = RatingService(client: mockClient, authService: _FakeAuthService());
+      final rating = await service.submitRating(rescueOrderId: 8826, stars: 5);
+      expect(rating.stars, 5);
+      expect(rating.comment, isNull);
+    });
+
     test(
       'submitRating ném Exception khi gửi đánh giá trùng lặp (400 Bad Request)',
       () async {
@@ -147,5 +213,38 @@ void main() {
         expect(rating.stars, 5);
       },
     );
+
+    test('getRatingByOrder trả về null khi đơn chưa được đánh giá (404/empty)', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({'success': false, 'message': 'Chưa có đánh giá'})),
+          404,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = RatingService(client: mockClient, authService: _FakeAuthService());
+      final rating = await service.getRatingByOrder(9999);
+      expect(rating, isNull);
+    });
+
+    test('getMyRatings trả về danh sách lịch sử đánh giá của khách hàng', () async {
+      final mockClient = MockClient((request) async {
+        expect(request.url.path, endsWith('/api/v1/ratings/my'));
+        final responseJson = {
+          'success': true,
+          'data': [
+            {'id': 301, 'rescueOrderId': 8821, 'stars': 5},
+            {'id': 302, 'rescueOrderId': 8822, 'stars': 4},
+          ]
+        };
+        return http.Response.bytes(utf8.encode(jsonEncode(responseJson)), 200, headers: {'content-type': 'application/json; charset=utf-8'});
+      });
+
+      final service = RatingService(client: mockClient, authService: _FakeAuthService());
+      final list = await service.getMyRatings();
+      expect(list.length, 2);
+      expect(list.first.stars, 5);
+    });
   });
 }

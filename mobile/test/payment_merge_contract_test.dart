@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile/core/constants/api_constants.dart';
+import 'package:mobile/core/models/payment_transaction_model.dart';
 import 'package:mobile/core/services/payment_service.dart';
 import 'package:mobile/screens/customer/payment_success_screen.dart';
 import 'package:mobile/screens/customer/vietqr_payment_screen.dart';
@@ -116,7 +117,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(find.textContaining('SOS-42'), findsWidgets);
-          expect(find.textContaining('UC-18 Preview'), findsOneWidget);
+          expect(find.textContaining('Chế độ xem trước'), findsOneWidget);
           final button = find.byType(ElevatedButton);
           await tester.ensureVisible(button);
           await tester.tap(button);
@@ -347,4 +348,110 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  test('PaymentTransactionModel fromJson parses complete VietQR payload with financial breakdown', () {
+    final json = {
+      'id': 501,
+      'rescueOrderId': 42,
+      'rescueCode': '#RC-0042',
+      'orderType': 'WATERLOGGED_REPAIR',
+      'garageId': 7,
+      'garageName': 'Gara Cuu Ho Nam Sai Gon',
+      'payosOrderCode': 2604168899,
+      'amount': 500000.0,
+      'commissionRate': 12.5,
+      'platformFee': 62500.0,
+      'netGarageAmount': 437500.0,
+      'paymentMethod': 'PAYOS_VIETQR',
+      'status': 'SUCCESS',
+      'reconciled': true,
+      'checksumValid': true,
+      'paymentContent': 'RESCUE 2604168899',
+    };
+
+    final model = PaymentTransactionModel.fromJson(json);
+    expect(model.id, 501);
+    expect(model.rescueOrderId, 42);
+    expect(model.amount, 500000.0);
+    expect(model.commissionRate, 12.5);
+    expect(model.platformFee, 62500.0);
+    expect(model.netGarageAmount, 437500.0);
+    expect(model.isSuccess, isTrue);
+    expect(model.isPending, isFalse);
+    expect(model.isTerminal, isTrue);
+  });
+
+  test('PaymentTransactionModel parses CASH payment method properly', () {
+    final json = {
+      'id': 502,
+      'rescueOrderId': 43,
+      'payosOrderCode': 2604168800,
+      'amount': 200000.0,
+      'paymentMethod': 'CASH',
+      'status': 'PENDING',
+    };
+
+    final model = PaymentTransactionModel.fromJson(json);
+    expect(model.isCash, isTrue);
+    expect(model.isSuccess, isFalse);
+    expect(model.isPending, isTrue);
+  });
+
+  test('PaymentTransactionModel toJson round-trip retains critical transaction properties', () {
+    final original = PaymentTransactionModel(
+      id: 503,
+      payosOrderCode: 991122,
+      rescueOrderId: 44,
+      amount: 350000.0,
+      paymentMethod: 'PAYOS_VIETQR',
+      status: 'SUCCESS',
+    );
+
+    final map = original.toJson();
+    final reconstructed = PaymentTransactionModel.fromJson(map);
+    expect(reconstructed.id, original.id);
+    expect(reconstructed.payosOrderCode, original.payosOrderCode);
+    expect(reconstructed.amount, original.amount);
+    expect(reconstructed.status, original.status);
+  });
+
+  test('PaymentTransactionModel parses QR and financial breakdown accurately', () {
+    final json = {
+      'id': 504,
+      'rescueOrderId': 45,
+      'payosOrderCode': 991122,
+      'amount': 400000.0,
+      'commissionRate': 10.0,
+      'platformFee': 40000.0,
+      'netGarageAmount': 360000.0,
+      'qrCode': '00020101021238570010A000000727',
+      'checkoutUrl': 'https://pay.payos.vn/web/991122',
+      'status': 'PENDING',
+    };
+
+    final response = PaymentTransactionModel.fromJson(json);
+    expect(response.rescueOrderId, 45);
+    expect(response.payosOrderCode, 991122);
+    expect(response.amount, 400000.0);
+    expect(response.commissionRate, 10.0);
+    expect(response.platformFee, 40000.0);
+    expect(response.netGarageAmount, 360000.0);
+    expect(response.checkoutUrl, isNotNull);
+  });
+
+  test('PaymentService URL builder generates correct endpoints for order lookup and refresh', () {
+    expect(ApiConstants.paymentByOrderCodeUrl(12345), endsWith('/payments/12345'));
+    expect(ApiConstants.paymentsByRescueOrderUrl(678), endsWith('/payments/order/678'));
+  });
+
+  test('PaymentTransactionModel handles REFUNDED status as terminal but not success', () {
+    final model = PaymentTransactionModel(
+      id: 505,
+      payosOrderCode: 991133,
+      amount: 100000.0,
+      status: 'REFUNDED',
+    );
+    expect(model.isTerminal, isTrue);
+    expect(model.isSuccess, isFalse);
+  });
 }

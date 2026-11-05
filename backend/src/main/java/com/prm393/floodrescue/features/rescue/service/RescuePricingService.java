@@ -70,6 +70,18 @@ public class RescuePricingService {
     }
 
     @Transactional(readOnly = true)
+    public List<CrossingOptionDto> getEligibleCrossingGarages(
+            Double pickupLat, Double pickupLng, int page, int size) {
+        return paginate(getEligibleGarages(ServiceType.CROSSING, pickupLat, pickupLng), page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CrossingOptionDto> getEligibleGarages(
+            ServiceType serviceType, Double pickupLat, Double pickupLng, int page, int size) {
+        return paginate(getEligibleGarages(serviceType, pickupLat, pickupLng), page, size);
+    }
+
+    @Transactional(readOnly = true)
     public List<CrossingOptionDto> getEligibleGarages(ServiceType serviceType, Double pickupLat, Double pickupLng) {
         List<Garage> approvedGarages = garageRepository.findAll().stream()
                 .filter(g -> g.getStatus() == GarageStatus.APPROVED)
@@ -118,8 +130,8 @@ public class RescuePricingService {
                     })
                     .toList();
 
-            // Nếu người dùng cung cấp vị trí đón mà gara này không có thợ trong bán kính 7km thì bỏ qua
-            if (pickupLat != null && pickupLng != null && availableMechanics.isEmpty()) {
+            // Chỉ hiển thị gara khi có ít nhất một thợ đang hoạt động, sẵn sàng và đủ điều kiện.
+            if (availableMechanics.isEmpty()) {
                 continue;
             }
 
@@ -144,6 +156,11 @@ public class RescuePricingService {
                         .serviceBasePrice(basePrice)
                         .bookingFee(bookingFee)
                         .totalAmount(total)
+                        .groupPrice2Vehicles(service.getGroupPrice2Vehicles())
+                        .groupPrice3Vehicles(service.getGroupPrice3Vehicles())
+                        .groupPrice4Vehicles(service.getGroupPrice4Vehicles())
+                        .groupPrice5Vehicles(service.getGroupPrice5Vehicles())
+                        .groupPrice6Vehicles(service.getGroupPrice6Vehicles())
                         .currency("VND")
                         .estimatedTimeMin(service.getEstimatedTimeMin() != null ? service.getEstimatedTimeMin() : 20)
                         .availableMechanicCount(availableMechanics.size())
@@ -151,5 +168,13 @@ public class RescuePricingService {
             }
         }
         return options;
+    }
+
+    private List<CrossingOptionDto> paginate(List<CrossingOptionDto> options, int page, int size) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(size, 50));
+        int fromIndex = Math.min(safePage * safeSize, options.size());
+        int toIndex = Math.min(fromIndex + safeSize, options.size());
+        return options.subList(fromIndex, toIndex);
     }
 }

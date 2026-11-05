@@ -37,6 +37,7 @@ export interface ServiceFormErrors {
   category?: string;
   unit?: string;
   standardPrice?: string;
+  groupPrices?: string;
   minPrice?: string;
   maxPrice?: string;
   estimatedTimeMin?: string;
@@ -243,6 +244,14 @@ export function GarageServicesPricingView(_props: Props) {
     const estimatedTimeMin = Number(data.estimatedTimeMin || 0);
     const warrantyDays = Number(data.warrantyDays || 0);
     const description = String(data.description || '').trim();
+    const groupPrices = Object.fromEntries(
+      [2, 3, 4, 5, 6].map((count) => [
+        `groupPrice${count}Vehicles`,
+        String(data.serviceType) === 'CROSSING'
+          ? Number(data[`groupPrice${count}Vehicles`] || 0)
+          : null
+      ])
+    ) as Record<string, number | null>;
 
     const finalCategory = (selectedCategoryCode === 'KHAC' ? customCategory : selectedCategoryCode).trim().toUpperCase();
     const finalUnit = (selectedUnit === 'KHAC' ? customUnit : selectedUnit).trim();
@@ -327,6 +336,20 @@ export function GarageServicesPricingView(_props: Props) {
       errors.description = 'Mô tả không được vượt quá 500 ký tự';
     }
 
+    if (String(data.serviceType) === 'CROSSING') {
+      for (const count of [2, 3, 4, 5, 6]) {
+        const price = groupPrices[`groupPrice${count}Vehicles`] ?? 0;
+        if (price < 1000) {
+          errors.groupPrices = 'Vui lòng nhập đủ tổng cước chuyến gom từ 2 đến 6 xe';
+          break;
+        }
+        if (price >= standardPrice * count) {
+          errors.groupPrices = `Giá gom ${count} xe phải thấp hơn ${standardPrice * count} đ (giá đi riêng tương ứng)`;
+          break;
+        }
+      }
+    }
+
     // Nếu frontend validation phát hiện lỗi: hiển thị trực tiếp dưới từng ô nhập
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -346,6 +369,7 @@ export function GarageServicesPricingView(_props: Props) {
       standardPrice,
       minPrice,
       maxPrice,
+      ...groupPrices,
       estimatedTimeMin,
       warrantyDays,
       active: editing?.active ?? true
@@ -537,6 +561,17 @@ export function GarageServicesPricingView(_props: Props) {
                     {service.maxPrice.toLocaleString('vi-VN')} đ · {service.estimatedTimeMin} phút · Bảo
                     hành {service.warrantyDays} ngày
                   </small>
+                  {service.serviceType === 'CROSSING' && (
+                    <small className="text-orange-700 bg-orange-50 px-2 py-1 rounded inline-block w-fit">
+                      Giá chuyến gom:{' '}
+                      {[2, 3, 4, 5, 6]
+                        .map((count) => {
+                          const price = service[`groupPrice${count}Vehicles` as keyof ServiceItemBackend] as number | null | undefined;
+                          return `${count} xe: ${price ? price.toLocaleString('vi-VN') + ' đ' : 'chưa niêm yết'}`;
+                        })
+                        .join(' · ')}
+                    </small>
+                  )}
                   {service.adminCeilingSnapshot && (
                     <small className="text-orange-700 bg-orange-50 px-2 py-0.5 rounded inline-block w-fit">
                       Trần giá quy định: {service.adminCeilingSnapshot.toLocaleString('vi-VN')} đ
@@ -838,6 +873,35 @@ export function GarageServicesPricingView(_props: Props) {
                 )}
               </label>
             </div>
+
+            {formServiceType === 'CROSSING' && (
+              <div className={`rounded-lg border p-3 ${fieldErrors.groupPrices ? 'border-rose-400 bg-rose-50/20' : 'border-orange-200 bg-orange-50/40'}`}>
+                <div className="mb-2">
+                  <p className="text-sm font-semibold text-orange-800">Giá niêm yết chuyến gom (bắt buộc)</p>
+                  <p className="text-xs text-gray-600">Nhập tổng cước cho cả nhóm 2–6 xe. Mỗi mức phải thấp hơn tổng giá đi chuyến riêng tương ứng.</p>
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  {[2, 3, 4, 5, 6].map((count) => (
+                    <label className="block" key={count}>
+                      <span className="text-xs font-medium">{count} xe (đ)</span>
+                      <input
+                        name={`groupPrice${count}Vehicles`}
+                        type="number"
+                        min="1000"
+                        step="1000"
+                        defaultValue={editing?.[`groupPrice${count}Vehicles` as keyof ServiceItemBackend] as number | undefined}
+                        onChange={() => clearFieldError('groupPrices')}
+                        className="w-full border border-gray-300 rounded p-2 mt-1"
+                        placeholder="0"
+                      />
+                    </label>
+                  ))}
+                </div>
+                {fieldErrors.groupPrices && (
+                  <p className="text-xs text-rose-600 mt-2 font-medium">⚠ {fieldErrors.groupPrices}</p>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-2">
               <div className="block">

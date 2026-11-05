@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/utils/currency_formatter.dart';
+
 import '../../core/constants/app_colors.dart';
 import 'batch_trip_api.dart';
 import 'batch_trip_models.dart';
@@ -154,7 +156,7 @@ class _CustomerBatchTripScreenState extends State<CustomerBatchTripScreen> {
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('${trip.fare.toStringAsFixed(0)} đ'),
+                      Text(formatVnd(trip.fare)),
                       TextButton(
                         onPressed: _busy ? null : () => _join(trip),
                         child: const Text('Tham gia'),
@@ -202,7 +204,7 @@ class _JoinedTripView extends StatelessWidget {
               Text('Điểm tập kết: ${trip.pickupPlace}'),
               Text('Điểm trả an toàn: ${trip.destinationPlace}'),
               Text('${trip.currentVehicleCount}/${trip.capacity} xe'),
-              Text('Giá: ${trip.fare.toStringAsFixed(0)} đ'),
+              Text('Giá: ${formatVnd(trip.fare)}'),
               Text('Khởi hành: ${trip.departureTime.toLocal()}'),
               const SizedBox(height: 12),
               const Text(

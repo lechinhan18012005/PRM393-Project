@@ -22,11 +22,15 @@ class RescueService {
   Future<List<CrossingOptionModel>> getCrossingOptions({
     double? pickupLatitude,
     double? pickupLongitude,
+    int page = 0,
+    int size = 10,
   }) async {
     return getRescueOptions(
       serviceType: 'CROSSING',
       pickupLatitude: pickupLatitude,
       pickupLongitude: pickupLongitude,
+      page: page,
+      size: size,
     );
   }
 
@@ -34,6 +38,8 @@ class RescueService {
     required String serviceType,
     double? pickupLatitude,
     double? pickupLongitude,
+    int page = 0,
+    int size = 10,
   }) async {
     final headers = await _getHeaders();
     final uri = Uri.parse(ApiConstants.rescueOptionsUrl).replace(
@@ -42,6 +48,8 @@ class RescueService {
         if (pickupLatitude != null) 'pickupLatitude': pickupLatitude.toString(),
         if (pickupLongitude != null)
           'pickupLongitude': pickupLongitude.toString(),
+        'page': page.toString(),
+        'size': size.toString(),
       },
     );
     final response = await http.get(uri, headers: headers);
@@ -58,6 +66,7 @@ class RescueService {
   // 2. Khách tạo đơn SOS chở xe vượt ngập đơn lẻ
   Future<RescueOrderModel> createSingleCrossingOrder({
     String orderType = 'SINGLE_CROSSING',
+    int? groupVehicleCount,
     required int garageId,
     required int serviceItemId,
     required int vehicleId,
@@ -77,6 +86,7 @@ class RescueService {
     final headers = await _getHeaders();
     final payload = <String, dynamic>{
       'orderType': orderType,
+      'groupVehicleCount': ?groupVehicleCount,
       'garageId': garageId,
       'serviceItemId': serviceItemId,
       'vehicleId': vehicleId,
@@ -126,7 +136,8 @@ class RescueService {
     if (response.statusCode == 200 &&
         data['success'] == true &&
         data['data'] != null) {
-      return RescueOrderModel.fromJson(data['data']);
+      final order = RescueOrderModel.fromJson(data['data']);
+      return order.isActive ? order : null;
     }
     return null;
   }

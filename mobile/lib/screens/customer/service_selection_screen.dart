@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/models/vehicle_model.dart';
+import '../../core/services/geocoding_service.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/rescue_service.dart';
 import '../../core/widgets/info_details.dart';
@@ -11,8 +12,6 @@ import '../../core/widgets/rescue_ui.dart';
 import '../../providers/rescue_provider.dart';
 import '../../providers/vehicle_provider.dart';
 import '../../features/batch_transport/batch_trip_api.dart';
-import '../../features/batch_transport/batch_trip_models.dart';
-import '../../features/batch_transport/customer_batch_trip_screen.dart';
 import 'radar_dispatch_screen.dart';
 
 class ServiceSelectionScreen extends StatefulWidget {
@@ -24,6 +23,7 @@ class ServiceSelectionScreen extends StatefulWidget {
     this.vehicleId,
     this.initialVehicle,
     this.batchTripApi,
+    this.geocodingService,
   });
 
   final int initialService;
@@ -31,6 +31,7 @@ class ServiceSelectionScreen extends StatefulWidget {
   final int? vehicleId;
   final VehicleModel? initialVehicle;
   final BatchTripApi? batchTripApi;
+  final GeocodingService? geocodingService;
 
   @override
   State<ServiceSelectionScreen> createState() => _ServiceSelectionScreenState();
@@ -41,26 +42,24 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
   int _waterLevel = 1;
 
   final TextEditingController _pickupController = TextEditingController();
-  final TextEditingController _dropoffController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
 
   double? _pickupLat;
   double? _pickupLng;
-  double? _dropoffLat;
-  double? _dropoffLng;
+  double? _pickupAccuracyMeters;
+  String? _pickupLocationSource;
 
   VehicleModel? _selectedVehicle;
 
   String _clientRequestId = UniqueKey().toString();
   bool _isLocating = false;
-  bool _isProgrammaticAddressUpdate = false;
-  bool _isLoadingTrips = false;
+  bool _isResolvingAddress = false;
   bool _isSubmitting = false;
+  bool _isGroupTrip = false;
+  int _groupVehicleCount = 2;
 
   CrossingOptionModel? _selectedOption;
-  BatchTripModel? _selectedBatchTrip;
-  List<BatchTripModel> _nearbyBatchTrips = const [];
-  late final BatchTripApi _batchTripApi;
+  late final GeocodingService _geocodingService;
 
   static const _waterLabels = [
     'Mắt cá · 20 cm',
@@ -74,48 +73,44 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
       price: 'Chọn chuyến riêng hoặc chuyến gom',
       note: 'Chở xe và người tới vùng khô ráo',
       icon: Icons.local_shipping_outlined,
-      detail:
-          'Bạn có thể chọn chuyến riêng để được điều phối ngay, hoặc tham gia một chuyến gom đã được thợ hoặc gara mở sẵn để nhận giá ưu đãi.',
+      detail: 'Bạn có thể chọn chuyến riêng để được điều phối ngay, hoặc tự khởi tạo chuyến gom 2–6 xe với mức giá nhóm do gara niêm yết.',
     ),
     (
       title: 'Cứu hộ và kiểm tra xe tại chỗ',
       price: 'Báo giá minh bạch sau kiểm tra',
       note: 'Thợ đến hiện trường hỗ trợ nổ máy hoặc kéo về gara',
       icon: Icons.build_circle_outlined,
-      detail:
-          'Thợ cứu hộ kiểm tra tình trạng xe tại hiện trường. Nếu có thể khắc phục, thợ lập báo giá sửa tại chỗ; nếu hư hỏng nặng, thợ lập báo giá kéo xe về gara để bạn phê duyệt trước khi sửa.',
+      detail: 'Thợ cứu hộ kiểm tra tình trạng xe tại hiện trường. Nếu có thể khắc phục, thợ lập báo giá sửa tại chỗ; nếu hư hỏng nặng, thợ lập báo giá kéo xe về gara. Dịch vụ kéo xe kết thúc khi bàn giao tại gara và không bao gồm sửa chữa.',
     ),
   ];
 
   String get _serviceType =>
       const ['CROSSING', 'REPAIR_ONSITE'][_selectedService];
-  String get _orderType =>
-      const ['SINGLE_CROSSING', 'ONSITE_REPAIR'][_selectedService];
+  String get _orderType => _selectedService == 0
+      ? (_isGroupTrip ? 'BATCH_CROSSING' : 'SINGLE_CROSSING')
+      : 'ONSITE_REPAIR';
   String get _customerNote => const [
-        'Chở xe vượt ngập đơn lẻ đến nơi khô ráo',
-        'Yêu cầu thợ kiểm tra xe ngập và báo giá phương án xử lý phù hợp',
-      ][_selectedService];
+    'Chở xe vượt ngập đơn lẻ đến nơi khô ráo',
+    'Yêu cầu thợ kiểm tra xe ngập và báo giá phương án xử lý phù hợp',
+  ][_selectedService];
   String get _introTitle => const [
-        'Chở xe vượt ngập an toàn',
-        'Cứu hộ và kiểm tra xe ngập',
-      ][_selectedService];
+    'Chở xe vượt ngập an toàn',
+    'Cứu hộ và kiểm tra xe ngập',
+  ][_selectedService];
   String get _optionHeading => const [
-        'Gara cung cấp dịch vụ chở xe trong bán kính',
-        'Gara có thợ cứu hộ đang sẵn sàng',
-      ][_selectedService];
+    'Gara cung cấp dịch vụ chở xe trong bán kính',
+    'Gara có thợ cứu hộ đang sẵn sàng',
+  ][_selectedService];
 
   @override
   void initState() {
     super.initState();
-    _batchTripApi = widget.batchTripApi ?? BatchTripApi();
+    _geocodingService = widget.geocodingService ?? GeocodingService();
     _selectedService = widget.initialService.clamp(0, _services.length - 1);
 
     if (widget.initialVehicle != null) {
       _selectedVehicle = widget.initialVehicle;
     }
-
-    _pickupController.addListener(_onPickupAddressChanged);
-    _dropoffController.addListener(_onDropoffAddressChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _initializeVehicleAndLocation();
@@ -124,10 +119,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
 
   @override
   void dispose() {
-    _pickupController.removeListener(_onPickupAddressChanged);
-    _dropoffController.removeListener(_onDropoffAddressChanged);
     _pickupController.dispose();
-    _dropoffController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -146,21 +138,21 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
 
       if (_selectedVehicle == null) {
         if (widget.vehicleId != null) {
-          final match = vehicleProvider.vehicles.where((v) => v.id == widget.vehicleId).firstOrNull;
+          final match = vehicleProvider.vehicles
+              .where((v) => v.id == widget.vehicleId)
+              .firstOrNull;
           _selectedVehicle = match;
         }
-        _selectedVehicle ??= vehicleProvider.selectedVehicle ??
-            (vehicleProvider.vehicles.isNotEmpty ? vehicleProvider.vehicles.first : null);
+        _selectedVehicle ??=
+            vehicleProvider.selectedVehicle ??
+            (vehicleProvider.vehicles.isNotEmpty
+                ? vehicleProvider.vehicles.first
+                : null);
       }
     }
 
     // 2. Tự động lấy vị trí GPS hiện tại của thiết bị
     await _syncCurrentGpsLocation(silent: true);
-
-    // 3. Khởi tạo điểm trả xe an toàn mặc định cho dịch vụ chở xe
-    if (_selectedService == 0 && (_dropoffLat == null || _dropoffLng == null)) {
-      _setSafeHighlandDropoff();
-    }
 
     if (mounted) {
       setState(() {});
@@ -168,69 +160,63 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     }
   }
 
-  void _setSafeHighlandDropoff() {
-    _isProgrammaticAddressUpdate = true;
-    _dropoffLat = 10.7490;
-    _dropoffLng = 106.7290;
-    _dropoffController.text = 'Vùng gò cao khô ráo (khu vực an toàn lân cận)';
-    _isProgrammaticAddressUpdate = false;
+  void _onPickupAddressChanged(String _) {
+    setState(() {
+      _pickupLat = null;
+      _pickupLng = null;
+      _pickupAccuracyMeters = null;
+      _pickupLocationSource = null;
+      _selectedOption = null;
+    });
   }
 
-  void _onPickupAddressChanged() {
-    if (_isProgrammaticAddressUpdate || _isLocating) return;
-    final text = _pickupController.text.trim();
-    if (text.isEmpty) {
+  Future<bool> _resolvePickupAddress({bool showSuccess = true}) async {
+    final address = _pickupController.text.trim();
+    if (address.length < 3 || _isResolvingAddress) return false;
+    setState(() => _isResolvingAddress = true);
+    try {
+      final result = await _geocodingService.search(address);
+      if (!mounted) return false;
+      if (result == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Không tìm thấy địa chỉ. Hãy nhập thêm phường/xã, quận/huyện hoặc tỉnh/thành.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return false;
+      }
       setState(() {
-        _pickupLat = null;
-        _pickupLng = null;
+        _pickupLat = result.latitude;
+        _pickupLng = result.longitude;
+        _pickupAccuracyMeters = null;
+        _pickupLocationSource = 'OpenStreetMap';
         _selectedOption = null;
       });
-      return;
-    }
-    final loc = LocationService.instance.resolveAddressCoordinates(text, isDropoff: false);
-    setState(() {
-      if (loc != null) {
-        _pickupLat = loc.latitude;
-        _pickupLng = loc.longitude;
-      } else {
-        _pickupLat = null;
-        _pickupLng = null;
+      await _loadServiceOptions();
+      if (showSuccess && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã xác định vị trí: ${result.displayName}'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
-      _selectedOption = null;
-      _selectedBatchTrip = null;
-    });
-    if (_pickupLat != null && _pickupLng != null) {
-      _loadServiceOptions();
-    }
-  }
-
-  void _onDropoffAddressChanged() {
-    if (_isProgrammaticAddressUpdate || _isLocating) return;
-    final text = _dropoffController.text.trim();
-    if (text.isEmpty) {
-      setState(() {
-        _dropoffLat = null;
-        _dropoffLng = null;
-      });
-      return;
-    }
-    final loc = LocationService.instance.resolveAddressCoordinates(text, isDropoff: true);
-    setState(() {
-      if (loc != null) {
-        _dropoffLat = loc.latitude;
-        _dropoffLng = loc.longitude;
-      } else {
-        _dropoffLat = null;
-        _dropoffLng = null;
+      return true;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
-      _selectedBatchTrip = null;
-    });
-    if (_selectedService == 0 &&
-        _pickupLat != null &&
-        _pickupLng != null &&
-        _dropoffLat != null &&
-        _dropoffLng != null) {
-      _loadNearbyBatchTrips();
+      return false;
+    } finally {
+      if (mounted) setState(() => _isResolvingAddress = false);
     }
   }
 
@@ -240,17 +226,16 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
       final loc = await LocationService.instance.getCurrentLocation();
       if (!mounted) return;
       if (loc != null) {
-        _isProgrammaticAddressUpdate = true;
         setState(() {
           _pickupLat = loc.latitude;
           _pickupLng = loc.longitude;
+          _pickupAccuracyMeters = loc.accuracyMeters;
+          _pickupLocationSource = 'GPS thiết bị';
           _pickupController.text =
               'Vị trí GPS hiện tại (${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)})';
           _selectedOption = null;
-          _selectedBatchTrip = null;
           _isLocating = false;
         });
-        _isProgrammaticAddressUpdate = false;
 
         _loadServiceOptions();
         if (!silent && mounted) {
@@ -264,32 +249,27 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           );
         }
       } else {
-        // Nếu không lấy được GPS thiết bị, đặt mặc định vị trí ngập phổ biến TP.HCM để demo không gián đoạn
-        if (_pickupLat == null || _pickupLng == null) {
-          _isProgrammaticAddressUpdate = true;
-          _pickupLat = 10.7385;
-          _pickupLng = 106.7215;
-          _pickupController.text = 'Huỳnh Tấn Phát, Tân Thuận Đông, Quận 7, TP.HCM';
-          _isProgrammaticAddressUpdate = false;
-        }
         setState(() => _isLocating = false);
         if (!silent && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Không thể lấy vị trí từ GPS thiết bị. Vui lòng bật GPS hoặc nhập địa chỉ.'),
+              content: Text(
+                'Không thể lấy vị trí từ GPS thiết bị. Vui lòng bật GPS hoặc nhập địa chỉ.',
+              ),
               backgroundColor: Colors.orange,
             ),
           );
         }
       }
     } catch (e) {
-      _isProgrammaticAddressUpdate = false;
       if (mounted) {
         setState(() => _isLocating = false);
         if (!silent) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Lỗi đọc GPS: ${e.toString().replaceFirst("Exception: ", "")}'),
+              content: Text(
+                'Lỗi đọc GPS: ${e.toString().replaceFirst("Exception: ", "")}',
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -301,7 +281,10 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
   Future<void> _loadServiceOptions() async {
     if (_pickupLat == null || _pickupLng == null) return;
     try {
-      final rescueProvider = Provider.of<RescueProvider?>(context, listen: false);
+      final rescueProvider = Provider.of<RescueProvider?>(
+        context,
+        listen: false,
+      );
       if (rescueProvider != null) {
         if (_serviceType == 'CROSSING') {
           await rescueProvider.loadCrossingOptions(
@@ -327,48 +310,26 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           }
         }
       }
-      if (_selectedService == 0 &&
-          rescueProvider != null &&
-          _pickupLat != null &&
-          _pickupLng != null) {
-        await _loadNearbyBatchTrips();
-      } else if (mounted) {
-        setState(() {
-          _nearbyBatchTrips = const [];
-          _selectedBatchTrip = null;
-        });
-      }
     } catch (_) {}
   }
 
-  Future<void> _loadNearbyBatchTrips() async {
-    if (_pickupLat == null ||
-        _pickupLng == null ||
-        _dropoffLat == null ||
-        _dropoffLng == null) {
-      if (mounted) setState(() => _nearbyBatchTrips = const []);
-      return;
-    }
-    if (mounted) setState(() => _isLoadingTrips = true);
-    try {
-      final trips = await _batchTripApi.nearby(
-        _pickupLat!,
-        _pickupLng!,
-        destinationLatitude: _dropoffLat,
-        destinationLongitude: _dropoffLng,
+  Future<void> _loadMoreServiceOptions() async {
+    if (_pickupLat == null || _pickupLng == null) return;
+    final rescueProvider = Provider.of<RescueProvider?>(context, listen: false);
+    if (rescueProvider == null) return;
+    if (_serviceType == 'CROSSING') {
+      await rescueProvider.loadCrossingOptions(
+        pickupLatitude: _pickupLat,
+        pickupLongitude: _pickupLng,
+        loadMore: true,
       );
-      if (!mounted) return;
-      setState(() {
-        _nearbyBatchTrips = trips;
-        if (_selectedBatchTrip != null &&
-            !trips.any((trip) => trip.id == _selectedBatchTrip!.id)) {
-          _selectedBatchTrip = null;
-        }
-      });
-    } catch (_) {
-      if (mounted) setState(() => _nearbyBatchTrips = const []);
-    } finally {
-      if (mounted) setState(() => _isLoadingTrips = false);
+    } else {
+      await rescueProvider.loadRescueOptions(
+        serviceType: _serviceType,
+        pickupLatitude: _pickupLat,
+        pickupLongitude: _pickupLng,
+        loadMore: true,
+      );
     }
   }
 
@@ -421,15 +382,29 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(vertical: 4),
                     leading: CircleAvatar(
-                      backgroundColor: isCurrent ? AppColors.primaryContainer : AppColors.surfaceContainerLow,
+                      backgroundColor: isCurrent
+                          ? AppColors.primaryContainer
+                          : AppColors.surfaceContainerLow,
                       child: Icon(
-                        v.vehicleType == 'ELECTRIC' ? Icons.electric_moped : Icons.two_wheeler,
-                        color: isCurrent ? AppColors.primary : AppColors.secondary,
+                        v.vehicleType == 'ELECTRIC'
+                            ? Icons.electric_moped
+                            : Icons.two_wheeler,
+                        color: isCurrent
+                            ? AppColors.primary
+                            : AppColors.secondary,
                       ),
                     ),
-                    title: Text(v.displayName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    title: Text(
+                      v.displayName,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     subtitle: Text('${v.licensePlate} • ${v.typeDisplayName}'),
-                    trailing: isCurrent ? const Icon(Icons.check_circle, color: AppColors.primary) : null,
+                    trailing: isCurrent
+                        ? const Icon(
+                            Icons.check_circle,
+                            color: AppColors.primary,
+                          )
+                        : null,
                     onTap: () {
                       setState(() {
                         _selectedVehicle = v;
@@ -447,99 +422,74 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
   }
 
   Future<void> _submitSos() async {
+    if ((_pickupLat == null || _pickupLng == null) &&
+        _pickupController.text.trim().isNotEmpty) {
+      await _resolvePickupAddress(showSuccess: false);
+      if (!mounted) return;
+    }
     if (_pickupLat == null || _pickupLng == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Vui lòng chọn hoặc định vị tọa độ điểm đón hợp lệ qua GPS!'),
+          content: Text(
+            'Vui lòng định vị GPS hoặc nhập địa chỉ điểm đón rồi bấm "Tìm trên bản đồ".',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
 
-    if (_selectedService == 0 && (_dropoffLat == null || _dropoffLng == null)) {
+    if (_selectedOption == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Vui lòng nhập điểm đến hợp lệ hoặc chọn tọa độ khô ráo!'),
+          content: Text(
+            'Vui lòng chọn một gara cứu hộ khả dụng trước khi gửi yêu cầu!',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
 
-    if (_selectedBatchTrip == null && _selectedOption == null) {
+    if (_isGroupTrip &&
+        !_selectedOption!.groupPrices.containsKey(_groupVehicleCount)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng chọn một gara cứu hộ khả dụng trước khi gửi yêu cầu!'),
+        SnackBar(
+          content: Text(
+            'Gara chưa niêm yết giá chuyến gom cho $_groupVehicleCount xe.',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
 
-    final dropoffAddress = _selectedService == 1
-        ? _pickupController.text.trim()
-        : _dropoffController.text.trim();
-    final dropoffLatitude = _selectedService == 1 ? _pickupLat! : _dropoffLat!;
-    final dropoffLongitude = _selectedService == 1 ? _pickupLng! : _dropoffLng!;
+    final dropoffAddress = _pickupController.text.trim();
+    final dropoffLatitude = _pickupLat!;
+    final dropoffLongitude = _pickupLng!;
 
     final customNote = _notesController.text.trim();
-    final fullCustomerNotes = customNote.isNotEmpty
-        ? '$_customerNote. Ghi chú thêm: $customNote'
+    final groupNote = _isGroupTrip
+        ? 'Chuyến gom do khách khởi tạo: $_groupVehicleCount xe'
         : _customerNote;
+    final fullCustomerNotes = customNote.isNotEmpty
+        ? '$groupNote. Ghi chú thêm: $customNote'
+        : groupNote;
 
     final targetVehicleId = _selectedVehicle?.id ?? widget.vehicleId ?? 1;
 
     final rescueProvider = Provider.of<RescueProvider?>(context, listen: false);
     setState(() => _isSubmitting = true);
     try {
-      if (_selectedBatchTrip != null) {
-        final trip = _selectedBatchTrip!;
-        if (trip.garageId == null || trip.serviceItemId == null) {
-          throw Exception('Chuyến gom chưa được cấu hình dịch vụ vượt ngập');
-        }
-        final orderPayload = <String, dynamic>{
-          'orderType': 'BATCH_CROSSING',
-          'garageId': trip.garageId,
-          'serviceItemId': trip.serviceItemId,
-          'vehicleId': targetVehicleId,
-          'pickupAddress': _pickupController.text.trim(),
-          'pickupLatitude': _pickupLat!,
-          'pickupLongitude': _pickupLng!,
-          'dropoffAddress': dropoffAddress,
-          'dropoffLatitude': dropoffLatitude,
-          'dropoffLongitude': dropoffLongitude,
-          'waterLevel': _waterLabels[_waterLevel],
-          'customerNotes': fullCustomerNotes,
-          'clientRequestId': _clientRequestId,
-        };
-        final joined = await _batchTripApi.createOrderAndJoin(
-          tripId: trip.id,
-          expectedBatchFare: trip.fare,
-          order: orderPayload,
-        );
-        rescueProvider?.setCurrentOrder(joined.order);
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => CustomerBatchTripScreen(
-              orderId: joined.order.id,
-              garageId: trip.garageId!,
-              latitude: _pickupLat!,
-              longitude: _pickupLng!,
-              destinationLatitude: dropoffLatitude,
-              destinationLongitude: dropoffLongitude,
-              initialTrip: joined.trip,
-            ),
-          ),
-        );
-        return;
-      }
-
+      final selectedBasePrice = _isGroupTrip
+          ? _selectedOption!.groupPrices[_groupVehicleCount]!
+          : _selectedOption!.serviceBasePrice;
+      final selectedTotal = selectedBasePrice + _selectedOption!.bookingFee;
       RescueOrderModel order;
       if (rescueProvider != null) {
         order = await rescueProvider.createSingleCrossingOrder(
           orderType: _orderType,
+          groupVehicleCount: _isGroupTrip ? _groupVehicleCount : null,
           garageId: _selectedOption!.garageId,
           serviceItemId: _selectedOption!.serviceItemId,
           vehicleId: targetVehicleId,
@@ -552,13 +502,14 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           waterLevel: _waterLabels[_waterLevel],
           customerNotes: fullCustomerNotes,
           clientRequestId: _clientRequestId,
-          expectedServiceBasePrice: _selectedOption!.serviceBasePrice,
+          expectedServiceBasePrice: selectedBasePrice,
           expectedBookingFee: _selectedOption!.bookingFee,
-          expectedTotalAmount: _selectedOption!.totalAmount,
+          expectedTotalAmount: selectedTotal,
         );
       } else {
         order = await RescueService().createSingleCrossingOrder(
           orderType: _orderType,
+          groupVehicleCount: _isGroupTrip ? _groupVehicleCount : null,
           garageId: _selectedOption!.garageId,
           serviceItemId: _selectedOption!.serviceItemId,
           vehicleId: targetVehicleId,
@@ -571,15 +522,16 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           waterLevel: _waterLabels[_waterLevel],
           customerNotes: fullCustomerNotes,
           clientRequestId: _clientRequestId,
-          expectedServiceBasePrice: _selectedOption!.serviceBasePrice,
+          expectedServiceBasePrice: selectedBasePrice,
           expectedBookingFee: _selectedOption!.bookingFee,
-          expectedTotalAmount: _selectedOption!.totalAmount,
+          expectedTotalAmount: selectedTotal,
         );
       }
 
       if (mounted) {
         final destination = RadarDispatchScreen(orderId: order.id);
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => destination));
+        Navigator.of(context)
+            .pushReplacement(MaterialPageRoute(builder: (_) => destination));
       }
     } catch (e) {
       if (mounted) {
@@ -588,7 +540,9 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           _clientRequestId = UniqueKey().toString();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Mức giá dịch vụ đã thay đổi trên hệ thống. Đang tải lại mức giá mới!'),
+              content: const Text(
+                'Mức giá dịch vụ đã thay đổi trên hệ thống. Đang tải lại mức giá mới!',
+              ),
               backgroundColor: Colors.orange.shade800,
             ),
           );
@@ -613,8 +567,10 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     final options = rescueProvider?.crossingOptions ?? <CrossingOptionModel>[];
     final isLoading = rescueProvider?.isLoading ?? false;
 
-    final vehicleDisplayName = _selectedVehicle?.displayName ?? widget.vehicleName ?? 'Xe máy của bạn';
-    final vehiclePlate = _selectedVehicle?.licensePlate ?? widget.vehiclePlate ?? '';
+    final vehicleDisplayName =
+        _selectedVehicle?.displayName ?? widget.vehicleName ?? 'Xe máy của bạn';
+    final vehiclePlate =
+        _selectedVehicle?.licensePlate ?? widget.vehiclePlate ?? '';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Chọn dịch vụ cứu hộ')),
@@ -623,11 +579,22 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Text(
+              'Bạn cần hỗ trợ gì?',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 10),
+            for (var i = 0; i < _services.length; i++) ...[
+              _serviceCard(i),
+              const SizedBox(height: 8),
+            ],
+            const SizedBox(height: 4),
+
             RescueIntro(
               eyebrow: 'BẮT ĐẦU YÊU CẦU',
               title: _introTitle,
               description: _selectedService == 0
-                  ? 'Xác nhận điểm đón và điểm trả, sau đó chọn chuyến riêng hoặc tham gia chuyến gom do thợ mở sẵn.'
+                  ? 'Xác nhận điểm đón, chọn chuyến riêng hoặc khởi tạo chuyến gom và số lượng từ 2 đến 6 xe.'
                   : 'Xác nhận điểm xe đang gặp nạn, chọn gara khả dụng; thợ sẽ đến kiểm tra và gửi báo giá để bạn duyệt.',
             ),
             const SizedBox(height: 12),
@@ -673,15 +640,22 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                               ),
                             ),
                             TextField(
+                              key: const Key('rescue-pickup-address'),
                               controller: _pickupController,
+                              onChanged: _onPickupAddressChanged,
+                              textInputAction: TextInputAction.search,
+                              onSubmitted: (_) => _resolvePickupAddress(),
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                               ),
                               decoration: const InputDecoration(
                                 isDense: true,
-                                hintText: 'Nhập địa chỉ hoặc bấm nút GPS để định vị...',
-                                contentPadding: EdgeInsets.symmetric(vertical: 6),
+                                hintText:
+                                    'Nhập số nhà, tên đường, phường/xã...',
+                                contentPadding: EdgeInsets.symmetric(
+                                  vertical: 6,
+                                ),
                                 border: UnderlineInputBorder(),
                               ),
                             ),
@@ -689,39 +663,108 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                               const Padding(
                                 padding: EdgeInsets.only(top: 4),
                                 child: Text(
-                                  'Chưa có tọa độ đón. Hãy bấm "Định vị GPS thực tế" hoặc nhập địa chỉ.',
+                                  'Chưa có tọa độ. Dùng GPS hoặc tìm địa chỉ trên bản đồ.',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.deepOrange,
                                   ),
                                 ),
-                              ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                style: TextButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                ),
-                                onPressed: _isLocating ? null : () => _syncCurrentGpsLocation(silent: false),
-                                icon: _isLocating
-                                    ? const SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(strokeWidth: 1.5),
-                                      )
-                                    : const Icon(
-                                        Icons.my_location,
-                                        size: 14,
-                                        color: AppColors.primaryOrange,
+                              )
+                            else
+                              Padding(
+                                key: const Key('pickup-coordinate-confirmed'),
+                                padding: const EdgeInsets.only(top: 5),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.check_circle,
+                                      size: 14,
+                                      color: Colors.green,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Expanded(
+                                      child: Text(
+                                        'Tọa độ GPS (${_pickupLocationSource ?? "đã xác định"}): '
+                                        '${_pickupLat!.toStringAsFixed(6)}, '
+                                        '${_pickupLng!.toStringAsFixed(6)}'
+                                        '${_pickupAccuracyMeters == null ? "" : " (±${_pickupAccuracyMeters!.toStringAsFixed(0)} m)"}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.green,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
-                                label: Text(
-                                  _isLocating ? 'Đang đọc GPS...' : 'Định vị GPS thực tế',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.primaryOrange,
-                                    fontWeight: FontWeight.bold,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Wrap(
+                              alignment: WrapAlignment.end,
+                              spacing: 8,
+                              children: [
+                                TextButton.icon(
+                                  key: const Key('geocode-pickup-address'),
+                                  onPressed: _isResolvingAddress || _isLocating
+                                      ? null
+                                      : _resolvePickupAddress,
+                                  icon: _isResolvingAddress
+                                      ? const SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 1.5,
+                                          ),
+                                        )
+                                      : const Icon(Icons.search, size: 14),
+                                  label: Text(
+                                    _isResolvingAddress
+                                        ? 'Đang tìm...'
+                                        : 'Tìm trên bản đồ',
                                   ),
+                                ),
+                                TextButton.icon(
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  onPressed: _isLocating
+                                      ? null
+                                      : () => _syncCurrentGpsLocation(
+                                          silent: false,
+                                        ),
+                                  icon: _isLocating
+                                      ? const SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 1.5,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.my_location,
+                                          size: 14,
+                                          color: AppColors.primaryOrange,
+                                        ),
+                                  label: Text(
+                                    _isLocating
+                                        ? 'Đang đọc GPS...'
+                                        : 'Định vị GPS thực tế',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.primaryOrange,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                'Dữ liệu địa chỉ © OpenStreetMap contributors',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: AppColors.secondary,
                                 ),
                               ),
                             ),
@@ -731,75 +774,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                     ],
                   ),
 
-                  // Điểm trả xe (chỉ hiển thị khi là chở xe vượt ngập)
-                  if (_selectedService == 0) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.wb_sunny_outlined,
-                          color: Colors.green,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Điểm trả xe (vùng khô ráo an toàn)',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.secondary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              TextField(
-                                controller: _dropoffController,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  hintText: 'Nhập điểm đến an toàn...',
-                                  contentPadding: EdgeInsets.symmetric(vertical: 6),
-                                  border: UnderlineInputBorder(),
-                                ),
-                              ),
-                              if (_dropoffLat == null)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 4),
-                                  child: Text(
-                                    'Chưa xác định tọa độ trả xe. Nhập địa chỉ hoặc chọn "Vùng gò cao".',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.deepOrange,
-                                    ),
-                                  ),
-                                ),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: TextButton.icon(
-                                  style: TextButton.styleFrom(
-                                    visualDensity: VisualDensity.compact,
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                  onPressed: _setSafeHighlandDropoff,
-                                  icon: const Icon(Icons.terrain_outlined, size: 14, color: Colors.blueAccent),
-                                  label: const Text(
-                                    'Chọn vùng gò cao',
-                                    style: TextStyle(fontSize: 11, color: Colors.blueAccent, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else ...[
+                  if (_selectedService == 1) ...[
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -809,12 +784,19 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                       ),
                       child: const Row(
                         children: [
-                          Icon(Icons.info_outline, size: 16, color: Colors.blue),
+                          Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: Colors.blue,
+                          ),
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'Thợ cứu hộ sẽ đến trực tiếp điểm đón để kiểm tra và khắc phục xe tại chỗ.',
-                              style: TextStyle(fontSize: 11, color: Colors.blue),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blue,
+                              ),
                             ),
                           ),
                         ],
@@ -825,16 +807,6 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
               ),
             ),
             const SizedBox(height: 18),
-
-            Text(
-              'Bạn cần hỗ trợ gì?',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 10),
-            for (var i = 0; i < _services.length; i++) ...[
-              _serviceCard(i),
-              const SizedBox(height: 8),
-            ],
 
             InfoDetails(
               key: ValueKey(_selectedService),
@@ -851,62 +823,29 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
               const SizedBox(height: 14),
             ],
 
-            if (_selectedBatchTrip != null) ...[
-              Text(
-                'Chuyến gom bạn sẽ tham gia',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
+            Text(
+              _optionHeading,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            if (options.isNotEmpty)
               RescuePanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Điểm tập kết: ${_selectedBatchTrip!.pickupPlace}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text('Điểm trả: ${_selectedBatchTrip!.destinationPlace}'),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${_selectedBatchTrip!.availableSlots} chỗ còn lại · Khởi hành ${_selectedBatchTrip!.departureTime.toLocal()}',
-                      style: const TextStyle(color: AppColors.secondary),
-                    ),
-                    const Divider(height: 20),
-                    _priceRow(
-                      'Giá trọn gói mỗi xe',
-                      '${_selectedBatchTrip!.fare.toStringAsFixed(0)} ₫',
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Đơn và chỗ trong chuyến chỉ được tạo sau khi bạn xác nhận.',
-                      style: TextStyle(fontSize: 11, color: Colors.green),
-                    ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              Text(
-                _optionHeading,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              if (options.isNotEmpty)
-                RescuePanel(
-                  child: RadioGroup<int>(
-                    groupValue: _selectedOption?.garageId,
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _selectedOption = options.firstWhere((o) => o.garageId == val);
-                        });
-                      }
-                    },
-                    child: Column(
-                      children: [
-                        for (final opt in options)
-                          RadioListTile<int>(
-                            value: opt.garageId,
+                child: RadioGroup<int>(
+                  groupValue: _selectedOption?.garageId,
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _selectedOption = options.firstWhere(
+                          (o) => o.garageId == val,
+                        );
+                      });
+                    }
+                  },
+                  child: Column(
+                    children: [
+                      for (final opt in options)
+                        RadioListTile<int>(
+                          value: opt.garageId,
                           title: Text(
                             opt.garageName,
                             style: const TextStyle(
@@ -915,89 +854,106 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                             ),
                           ),
                           subtitle: Text(
-                            '${opt.branchAddress ?? opt.branchName ?? "Chi nhánh phục vụ"} • ${opt.serviceBasePrice.toStringAsFixed(0)} ₫',
+                            '${opt.branchAddress ?? opt.branchName ?? "Chi nhánh phục vụ"} • ${_formatPrice(_isGroupTrip ? opt.groupPrices[_groupVehicleCount] : opt.serviceBasePrice)}',
                             style: const TextStyle(fontSize: 12),
-                          ),
-                          secondary: Text(
-                            '~ ${opt.estimatedTimeMin} phút',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
-                            ),
                           ),
                           contentPadding: EdgeInsets.zero,
                         ),
                       const Divider(),
                       if (_selectedOption != null) ...[
                         _priceRow(
-                          'Cước dịch vụ niêm yết',
-                          '${_selectedOption!.serviceBasePrice.toStringAsFixed(0)} ₫',
+                          _isGroupTrip
+                              ? 'Tổng cước gom $_groupVehicleCount xe'
+                              : 'Cước chuyến riêng',
+                          _formatPrice(
+                            _isGroupTrip
+                                ? _selectedOption!
+                                      .groupPrices[_groupVehicleCount]
+                                : _selectedOption!.serviceBasePrice,
+                            fallback: 'Chưa niêm yết',
+                          ),
                         ),
                         const SizedBox(height: 4),
                         _priceRow(
                           'Phí đặt xe (nền tảng)',
-                          '${_selectedOption!.bookingFee.toStringAsFixed(0)} ₫',
+                          _formatPrice(_selectedOption!.bookingFee),
                         ),
                         const Divider(height: 16),
                         _priceRow(
                           'Tổng thanh toán dự kiến',
-                          '${_selectedOption!.totalAmount.toStringAsFixed(0)} ₫',
+                          _formatPrice(
+                            ((_isGroupTrip
+                                        ? _selectedOption!
+                                              .groupPrices[_groupVehicleCount]
+                                        : _selectedOption!.serviceBasePrice) ??
+                                    0) +
+                                _selectedOption!.bookingFee,
+                          ),
                           isBold: true,
                         ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          '✓ Giá niêm yết cố định, không phát sinh phụ phí tại hiện trường',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.green,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      ],
+                      if (rescueProvider?.hasMoreOptions == true) ...[
+                        const Divider(height: 20),
+                        TextButton.icon(
+                          key: const ValueKey('load-more-garages'),
+                          onPressed:
+                              rescueProvider?.isLoadingMoreOptions == true
+                              ? null
+                              : _loadMoreServiceOptions,
+                          icon: rescueProvider?.isLoadingMoreOptions == true
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.expand_more),
+                          label: const Text('Xem thêm gara'),
                         ),
                       ],
                     ],
                   ),
                 ),
               )
-              else if (isLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.amber.shade200),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.location_off_outlined,
-                        color: Colors.orange,
-                        size: 36,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        rescueProvider?.errorMessage ??
-                            'Không tìm thấy gara cứu hộ nào có thợ sẵn sàng trong bán kính phục vụ quanh điểm đón.',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: _loadServiceOptions,
-                        icon: const Icon(Icons.refresh, size: 18),
-                        label: const Text('Thử tìm lại gara'),
-                      ),
-                    ],
-                  ),
+            else if (isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.shade200),
                 ),
-            ],
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.location_off_outlined,
+                      color: Colors.orange,
+                      size: 36,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      rescueProvider?.errorMessage ?? 'Không tìm thấy gara cứu hộ nào có thợ sẵn sàng trong bán kính phục vụ quanh điểm đón.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _loadServiceOptions,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Thử tìm lại gara'),
+                    ),
+                  ],
+                ),
+              ),
 
             const SizedBox(height: 18),
             Text(
@@ -1081,9 +1037,9 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
               label: Text(
                 isLoading || _isSubmitting
                     ? 'Đang tạo đơn...'
-                    : _selectedBatchTrip != null
-                        ? 'Xác nhận tham gia chuyến'
-                        : 'Tìm cứu hộ',
+                    : _isGroupTrip
+                    ? 'Khởi tạo chuyến gom'
+                    : 'Tìm cứu hộ',
               ),
             ),
           ),
@@ -1119,11 +1075,17 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
     );
   }
 
-  Widget _crossingModeSection(List<CrossingOptionModel> options) {
-    final eligibleTrips = _nearbyBatchTrips.where((trip) {
-      return trip.garageId != null && trip.serviceItemId != null;
-    }).toList();
+  String _formatPrice(num? amount, {String fallback = 'Chưa có giá'}) {
+    if (amount == null) return fallback;
+    final digits = amount.round().toString();
+    final formatted = digits.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => '.',
+    );
+    return '$formatted ₫';
+  }
 
+  Widget _crossingModeSection(List<CrossingOptionModel> options) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1133,14 +1095,12 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
         ),
         const SizedBox(height: 8),
         Card(
-          color: _selectedBatchTrip == null
-              ? const Color(0xFFFFF8F3)
-              : Colors.white,
+          color: !_isGroupTrip ? const Color(0xFFFFF8F3) : Colors.white,
           child: ListTile(
             key: const ValueKey('crossing-private'),
             onTap: () {
               setState(() {
-                _selectedBatchTrip = null;
+                _isGroupTrip = false;
                 _selectedOption = options.isEmpty ? null : options.first;
                 _clientRequestId = UniqueKey().toString();
               });
@@ -1152,76 +1112,71 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
             ),
             subtitle: const Text('Điều phối thợ riêng, không cần chờ ghép xe'),
             trailing: Icon(
-              _selectedBatchTrip == null
-                  ? Icons.check_circle
-                  : Icons.circle_outlined,
-              color: _selectedBatchTrip == null
+              !_isGroupTrip ? Icons.check_circle : Icons.circle_outlined,
+              color: !_isGroupTrip
                   ? AppColors.primaryOrange
                   : AppColors.outlineVariant,
             ),
           ),
         ),
         const SizedBox(height: 6),
-        if (_isLoadingTrips)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (eligibleTrips.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text(
-              'Hiện chưa có chuyến gom phù hợp do thợ hoặc gara mở. Bạn có thể chọn chuyến riêng.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.secondary),
-            ),
-          )
-        else ...[
-          const Padding(
-            padding: EdgeInsets.only(top: 6, bottom: 4),
-            child: Text(
-              'Chuyến gom đang mở gần bạn',
+        Card(
+          color: _isGroupTrip ? const Color(0xFFFFF8F3) : Colors.white,
+          child: ListTile(
+            key: const ValueKey('crossing-group'),
+            onTap: () {
+              setState(() {
+                _isGroupTrip = true;
+                _selectedOption = options.isEmpty ? null : options.first;
+                _clientRequestId = UniqueKey().toString();
+              });
+            },
+            leading: const Icon(Icons.groups_2_outlined),
+            title: const Text(
+              'Chọn chuyến gom',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-          ),
-          for (final trip in eligibleTrips)
-            Card(
-              color: _selectedBatchTrip?.id == trip.id
-                  ? const Color(0xFFFFF8F3)
-                  : Colors.white,
-              child: ListTile(
-                key: ValueKey('batch-trip-${trip.id}'),
-                onTap: () {
-                  setState(() {
-                    _selectedBatchTrip = trip;
-                    _selectedOption = null;
-                    _clientRequestId = UniqueKey().toString();
-                  });
-                },
-                leading: const Icon(Icons.groups_2_outlined),
-                title: Text(
-                  'Tập kết: ${trip.pickupPlace}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  'Điểm trả: ${trip.destinationPlace}\n'
-                  '${trip.availableSlots} chỗ · ${trip.fare.toStringAsFixed(0)} ₫/xe',
-                ),
-                isThreeLine: true,
-                trailing: Icon(
-                  _selectedBatchTrip?.id == trip.id
-                      ? Icons.check_circle
-                      : Icons.circle_outlined,
-                  color: _selectedBatchTrip?.id == trip.id
-                      ? AppColors.primaryOrange
-                      : AppColors.outlineVariant,
-                ),
-              ),
+            subtitle: const Text(
+              'Bạn khởi tạo chuyến và chọn số lượng xe, giá ưu đãi theo nhóm',
             ),
+            trailing: Icon(
+              _isGroupTrip ? Icons.check_circle : Icons.circle_outlined,
+              color: _isGroupTrip
+                  ? AppColors.primaryOrange
+                  : AppColors.outlineVariant,
+            ),
+          ),
+        ),
+        if (_isGroupTrip) ...[
+          const SizedBox(height: 10),
+          const Text(
+            'Số lượng xe trong chuyến gom',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final count in [2, 3, 4, 5, 6])
+                ChoiceChip(
+                  key: ValueKey('group-vehicle-count-$count'),
+                  label: Text('$count xe'),
+                  selected: _groupVehicleCount == count,
+                  onSelected: (_) => setState(() {
+                    _groupVehicleCount = count;
+                    _clientRequestId = UniqueKey().toString();
+                  }),
+                ),
+            ],
+          ),
+          if (_selectedOption != null &&
+              _selectedOption!.groupPrices[_groupVehicleCount] == null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Gara này chưa niêm yết giá cho $_groupVehicleCount xe.',
+              style: const TextStyle(fontSize: 12, color: Colors.deepOrange),
+            ),
+          ],
         ],
       ],
     );
@@ -1245,7 +1200,7 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
           setState(() {
             _selectedService = index;
             _selectedOption = null;
-            _selectedBatchTrip = null;
+            _isGroupTrip = false;
             _clientRequestId = UniqueKey().toString();
           });
           _loadServiceOptions();

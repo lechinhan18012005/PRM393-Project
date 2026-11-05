@@ -141,6 +141,57 @@ class ServicePricingServiceTest {
     }
 
     @Test
+    @DisplayName("Chở vượt ngập: lưu đủ bảng giá chuyến gom từ 2 đến 6 xe")
+    void createCrossingService_SavesGroupPriceTiers() {
+        when(garageRepository.findByOwnerId(sampleUser.getId())).thenReturn(Optional.of(sampleGarage));
+        when(serviceItemRepository.existsByGarageIdAndServiceNameIgnoreCaseAndApplicableVehicleTypeAndDeletedFalse(
+                eq(10L), eq("Chở xe vượt ngập"), eq(ApplicableVehicleType.ALL)))
+                .thenReturn(false);
+        when(priceCeilingService.findMaxAllowedPrice(any(), any(), any())).thenReturn(Optional.empty());
+        when(serviceItemRepository.save(any(ServiceItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ServiceItemDto input = crossingPriceDto();
+        ServiceItemDto result = pricingService.createServiceItem(sampleUser, input);
+
+        assertEquals(new BigDecimal("210000"), result.getGroupPrice2Vehicles());
+        assertEquals(new BigDecimal("510000"), result.getGroupPrice6Vehicles());
+    }
+
+    @Test
+    @DisplayName("Chở vượt ngập: chặn bảng giá gom thiếu bậc hoặc không ưu đãi hơn chuyến riêng")
+    void createCrossingService_RejectsInvalidGroupPriceTiers() {
+        when(garageRepository.findByOwnerId(sampleUser.getId())).thenReturn(Optional.of(sampleGarage));
+        when(serviceItemRepository.existsByGarageIdAndServiceNameIgnoreCaseAndApplicableVehicleTypeAndDeletedFalse(
+                eq(10L), eq("Chở xe vượt ngập"), eq(ApplicableVehicleType.ALL)))
+                .thenReturn(false);
+
+        ServiceItemDto input = crossingPriceDto();
+        input.setGroupPrice4Vehicles(null);
+        assertThrows(BadRequestException.class, () -> pricingService.createServiceItem(sampleUser, input));
+
+        input.setGroupPrice4Vehicles(new BigDecimal("480000"));
+        assertThrows(BadRequestException.class, () -> pricingService.createServiceItem(sampleUser, input));
+        verify(serviceItemRepository, never()).save(any());
+    }
+
+    private ServiceItemDto crossingPriceDto() {
+        return ServiceItemDto.builder()
+                .serviceName("Chở xe vượt ngập")
+                .serviceType(ServiceType.CROSSING)
+                .category("VUOT_NGAP")
+                .itemCategoryType(ItemCategoryType.LABOR)
+                .applicableVehicleType(ApplicableVehicleType.ALL)
+                .standardPrice(new BigDecimal("120000"))
+                .groupPrice2Vehicles(new BigDecimal("210000"))
+                .groupPrice3Vehicles(new BigDecimal("300000"))
+                .groupPrice4Vehicles(new BigDecimal("380000"))
+                .groupPrice5Vehicles(new BigDecimal("450000"))
+                .groupPrice6Vehicles(new BigDecimal("510000"))
+                .active(true)
+                .build();
+    }
+
+    @Test
     @DisplayName("BR-PRICE-003: Xóa dịch vụ áp dụng Soft Delete tuyệt đối không gọi repository.delete")
     void deleteServiceItem_PerformsSafeSoftDelete() {
         when(garageRepository.findByOwnerId(sampleUser.getId())).thenReturn(Optional.of(sampleGarage));

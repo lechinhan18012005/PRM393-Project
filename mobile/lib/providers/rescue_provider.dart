@@ -16,6 +16,12 @@ class RescueProvider with ChangeNotifier {
 
   List<CrossingOptionModel> _crossingOptions = [];
   List<CrossingOptionModel> get crossingOptions => _crossingOptions;
+  static const int _optionsPageSize = 10;
+  int _optionsPage = 0;
+  bool _hasMoreOptions = false;
+  bool get hasMoreOptions => _hasMoreOptions;
+  bool _isLoadingMoreOptions = false;
+  bool get isLoadingMoreOptions => _isLoadingMoreOptions;
 
   List<RescueOfferModel> _pendingOffers = [];
   List<RescueOfferModel> get pendingOffers => _pendingOffers;
@@ -50,11 +56,13 @@ class RescueProvider with ChangeNotifier {
   Future<void> loadCrossingOptions({
     double? pickupLatitude,
     double? pickupLongitude,
+    bool loadMore = false,
   }) async {
     return loadRescueOptions(
       serviceType: 'CROSSING',
       pickupLatitude: pickupLatitude,
       pickupLongitude: pickupLongitude,
+      loadMore: loadMore,
     );
   }
 
@@ -62,20 +70,36 @@ class RescueProvider with ChangeNotifier {
     required String serviceType,
     double? pickupLatitude,
     double? pickupLongitude,
+    bool loadMore = false,
   }) async {
-    _isLoading = true;
+    if (loadMore && (_isLoadingMoreOptions || !_hasMoreOptions)) return;
+    if (loadMore) {
+      _isLoadingMoreOptions = true;
+    } else {
+      _isLoading = true;
+      _optionsPage = 0;
+    }
     _errorMessage = null;
     notifyListeners();
     try {
-      _crossingOptions = await _rescueService.getRescueOptions(
+      final nextPage = loadMore ? _optionsPage + 1 : 0;
+      final newOptions = await _rescueService.getRescueOptions(
         serviceType: serviceType,
         pickupLatitude: pickupLatitude,
         pickupLongitude: pickupLongitude,
+        page: nextPage,
+        size: _optionsPageSize,
       );
+      _crossingOptions = loadMore
+          ? [..._crossingOptions, ...newOptions]
+          : newOptions;
+      _optionsPage = nextPage;
+      _hasMoreOptions = newOptions.length == _optionsPageSize;
     } catch (e) {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
     } finally {
       _isLoading = false;
+      _isLoadingMoreOptions = false;
       notifyListeners();
     }
   }
@@ -83,6 +107,7 @@ class RescueProvider with ChangeNotifier {
   // 3. KhÃ¡ch táº¡o Ä‘Æ¡n SOS
   Future<RescueOrderModel> createSingleCrossingOrder({
     String orderType = 'SINGLE_CROSSING',
+    int? groupVehicleCount,
     required int garageId,
     required int serviceItemId,
     required int vehicleId,
@@ -105,6 +130,7 @@ class RescueProvider with ChangeNotifier {
     try {
       final order = await _rescueService.createSingleCrossingOrder(
         orderType: orderType,
+        groupVehicleCount: groupVehicleCount,
         garageId: garageId,
         serviceItemId: serviceItemId,
         vehicleId: vehicleId,

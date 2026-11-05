@@ -1,10 +1,13 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/media_service.dart';
 import '../../core/services/rescue_service.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../home/mechanic_home_screen.dart';
 import 'mechanic_ui.dart';
 
@@ -14,7 +17,8 @@ class CrossingTransportScreen extends StatefulWidget {
   const CrossingTransportScreen({super.key, this.orderId});
 
   @override
-  State<CrossingTransportScreen> createState() => _CrossingTransportScreenState();
+  State<CrossingTransportScreen> createState() =>
+      _CrossingTransportScreenState();
 }
 
 class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
@@ -112,7 +116,9 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = e.toString().replaceFirst('Exception: ', ''));
+        setState(
+          () => _errorMessage = e.toString().replaceFirst('Exception: ', ''),
+        );
       }
     }
   }
@@ -146,12 +152,16 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
     if (targetIndex != currentIndex + 1) {
       if (targetIndex <= currentIndex) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bước này đã được hoàn thành trước đó.')),
+          const SnackBar(
+            content: Text('Bước này đã được hoàn thành trước đó.'),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Vui lòng thực hiện tuần tự, không được nhảy cóc các bước!'),
+            content: Text(
+              'Vui lòng thực hiện tuần tự, không được nhảy cóc các bước!',
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -185,7 +195,9 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi: ${e.toString().replaceFirst("Exception: ", "")}'),
+            content: Text(
+              'Lỗi: ${e.toString().replaceFirst("Exception: ", "")}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -208,7 +220,10 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library, color: AppColors.secondary),
+              leading: const Icon(
+                Icons.photo_library,
+                color: AppColors.secondary,
+              ),
               title: const Text('Chọn ảnh từ Thư viện'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -229,7 +244,11 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
     if (!mounted) return;
     if (picked == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Chưa có ảnh nào được chọn hoặc quyền truy cập bị từ chối.')),
+        const SnackBar(
+          content: Text(
+            'Chưa có ảnh nào được chọn hoặc quyền truy cập bị từ chối.',
+          ),
+        ),
       );
       return;
     }
@@ -265,7 +284,9 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Đã tải ảnh nghiệm thu bàn giao xe an toàn lên hệ thống!'),
+            content: Text(
+              'Đã tải ảnh nghiệm thu bàn giao xe an toàn lên hệ thống!',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -275,7 +296,9 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
         setState(() => _isUploadingPhoto = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi upload ảnh: ${e.toString().replaceFirst("Exception: ", "")}. Vui lòng thử lại.'),
+            content: Text(
+              'Lỗi upload ảnh: ${e.toString().replaceFirst("Exception: ", "")}. Vui lòng thử lại.',
+            ),
             backgroundColor: Colors.red,
             action: SnackBarAction(
               label: 'Thử lại',
@@ -294,7 +317,9 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
     if (_currentStage != 'HANDED_OVER') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Bạn phải hoàn tất bước 5 (Bàn giao xe cho khách) trước khi nghiệm thu!'),
+          content: Text(
+            'Bạn phải hoàn tất bước 5 (Bàn giao xe cho khách) trước khi nghiệm thu!',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -304,7 +329,9 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
     if (_photoUrl == null || _photoUrl!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Bắt buộc phải chụp ảnh nghiệm thu bàn giao trước khi hoàn tất!'),
+          content: Text(
+            'Bắt buộc phải chụp ảnh nghiệm thu bàn giao trước khi hoàn tất!',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -317,7 +344,8 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
         _order!.id,
         _photoUrl!,
         handoverPhotoUrl: _photoUrl,
-        notes: 'Đã chở xe máy qua điểm ngập an toàn và bàn giao đầy đủ cho khách',
+        notes:
+            'Đã chở xe máy qua điểm ngập an toàn và bàn giao đầy đủ cho khách',
       );
 
       if (mounted) {
@@ -335,14 +363,16 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
             content: const Text(
               'Ca chở xe vượt ngập đơn lẻ đã hoàn thành và nghiệm thu thành công!\n\n'
               '• Đơn hàng đã chuyển sang trạng thái CHỜ THANH TOÁN (PAYMENT_PENDING).\n'
-              '• Bạn đã được giải phóng và quay về trạng thái SẴN SÀNG NHẬN ĐƠN (ONLINE).'
+              '• Bạn đã được giải phóng và quay về trạng thái SẴN SÀNG NHẬN ĐƠN (ONLINE).',
             ),
             actions: [
               FilledButton(
                 onPressed: () {
                   Navigator.of(ctx).pop();
                   Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const MechanicHomeScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const MechanicHomeScreen(),
+                    ),
                     (route) => false,
                   );
                 },
@@ -372,13 +402,16 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
 
     return MechanicPage(
       title: 'Vận chuyển chở xe qua ngập',
+      showDemoNotice: widget.orderId == null,
       bottom: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: currentIdx == 5 ? Colors.green.shade700 : Colors.grey,
+              backgroundColor: currentIdx == 5
+                  ? Colors.green.shade700
+                  : Colors.grey,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             onPressed: (_isLoading || currentIdx < 5) ? null : _completeRescue,
@@ -386,7 +419,10 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Icon(Icons.verified),
             label: Text(
@@ -413,7 +449,9 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               MechanicLabel(
-                order != null ? 'ĐƠN HÀNG #${order.orderCode}' : 'CHUYẾN CHỞ RIÊNG',
+                order != null
+                    ? 'ĐƠN HÀNG #${order.orderCode}'
+                    : 'CHUYẾN CHỞ RIÊNG',
                 color: const Color(0xFFFFC09E),
               ),
               const SizedBox(height: 12),
@@ -428,7 +466,7 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Cước thu: ${order != null ? "${order.totalAmount.toStringAsFixed(0)} ₫" : "150.000 ₫"} · Giá niêm yết chốt cố định',
+                'Cước thu: ${formatVnd(order?.totalAmount, fallback: "150.000 ₫")} · Giá niêm yết chốt cố định',
                 style: const TextStyle(color: Color(0xFFB9CEDB), fontSize: 13),
               ),
             ],
@@ -479,16 +517,29 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                       SizedBox(width: 8),
-                      Text('Đang tải ảnh bằng chứng lên Cloudinary...', style: TextStyle(fontSize: 12, color: AppColors.primary)),
+                      Text(
+                        'Đang tải ảnh bằng chứng lên Cloudinary...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primary,
+                        ),
+                      ),
                     ],
                   ),
                 )
               else if (_photoUrl != null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.green.shade50,
                     borderRadius: BorderRadius.circular(8),
@@ -501,7 +552,11 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
                       Expanded(
                         child: Text(
                           'Ảnh bàn giao đã được ghi nhận thành công trên hệ thống',
-                          style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
@@ -509,7 +564,9 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
                 )
               else if (_pickedFile != null && !_isUploadingPhoto) ...[
                 FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.primaryOrange),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryOrange,
+                  ),
                   onPressed: _uploadEvidenceFile,
                   icon: const Icon(Icons.cloud_upload_outlined),
                   label: const Text('Thử lại tải ảnh lên hệ thống'),
@@ -559,15 +616,15 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
               backgroundColor: isCompleted
                   ? Colors.green.shade100
                   : isNext
-                      ? AppColors.primaryContainer
-                      : Colors.grey.shade100,
+                  ? AppColors.primaryContainer
+                  : Colors.grey.shade100,
               child: Icon(
                 icon,
                 color: isCompleted
                     ? Colors.green.shade800
                     : isNext
-                        ? AppColors.primary
-                        : Colors.grey.shade400,
+                    ? AppColors.primary
+                    : Colors.grey.shade400,
                 size: 20,
               ),
             ),
@@ -584,8 +641,8 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
                       color: isCompleted
                           ? Colors.green.shade800
                           : isNext
-                              ? AppColors.primary
-                              : Colors.grey.shade500,
+                          ? AppColors.primary
+                          : Colors.grey.shade500,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -593,7 +650,9 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
                     desc,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isLocked ? Colors.grey.shade400 : AppColors.secondary,
+                      color: isLocked
+                          ? Colors.grey.shade400
+                          : AppColors.secondary,
                     ),
                   ),
                 ],
@@ -604,11 +663,17 @@ class _CrossingTransportScreenState extends State<CrossingTransportScreen> {
             else if (isNext)
               FilledButton.tonal(
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   visualDensity: VisualDensity.compact,
                 ),
                 onPressed: _isLoading ? null : () => _updateStage(stageKey),
-                child: const Text('Bấm xác nhận', style: TextStyle(fontSize: 11)),
+                child: const Text(
+                  'Bấm xác nhận',
+                  style: TextStyle(fontSize: 11),
+                ),
               )
             else
               const Icon(Icons.lock_outline, color: Colors.grey, size: 18),

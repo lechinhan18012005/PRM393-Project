@@ -1,35 +1,53 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/models/rescue_order_model.dart';
+import '../../core/services/distance_trend_tracker.dart';
 import '../../core/services/rescue_service.dart';
+import '../../core/utils/currency_formatter.dart';
+import '../../core/widgets/rescue_tracking_map.dart';
 import '../../core/widgets/rescue_ui.dart';
-import '../../core/widgets/rescue_map_painter.dart';
 import '../../features/quotation/quotation_status_banner.dart';
 import 'vietqr_payment_screen.dart';
 
 class LiveTrackingScreen extends StatefulWidget {
   final int? orderId;
+  final RescueService? rescueService;
 
-  const LiveTrackingScreen({super.key, this.orderId});
+  const LiveTrackingScreen({super.key, this.orderId, this.rescueService});
 
   @override
   State<LiveTrackingScreen> createState() => _LiveTrackingScreenState();
 }
 
 class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
-  final RescueService _rescueService = RescueService();
+  late final RescueService _rescueService;
   Timer? _pollTimer;
 
   RescueOrderModel? _order;
   TrackingSnapshotModel? _snapshot;
   String? _errorMessage;
+  final DistanceTrendTracker _distanceTrendTracker = DistanceTrendTracker();
+  String? _lastTrendSampleKey;
+
+  Future<void> _callMechanic(String phone) async {
+    final normalized = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    final uri = Uri(scheme: 'tel', path: normalized);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể mở ứng dụng gọi điện.')),
+      );
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _rescueService = widget.rescueService ?? RescueService();
     if (widget.orderId != null) {
       _fetchTracking();
       _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
@@ -49,11 +67,21 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     try {
       final order = await _rescueService.getOrderById(widget.orderId!);
       TrackingSnapshotModel? snapshot;
-      try {
-        snapshot = await _rescueService.getTrackingSnapshot(widget.orderId!);
-      } catch (_) {}
+      if (_shouldTrackLocation(order)) {
+        try {
+          snapshot = await _rescueService.getTrackingSnapshot(widget.orderId!);
+        } catch (_) {}
+      }
 
       if (!mounted) return;
+      if (snapshot != null && !snapshot.isStale) {
+        final sampleKey =
+            '${snapshot.lastGpsUpdatedAt}|${snapshot.mechanicLatitude}|${snapshot.mechanicLongitude}';
+        if (sampleKey != _lastTrendSampleKey) {
+          _distanceTrendTracker.addSample(snapshot.distanceToTargetMeters);
+          _lastTrendSampleKey = sampleKey;
+        }
+      }
       setState(() {
         _order = order;
         _snapshot = snapshot;
@@ -75,7 +103,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   @override
   Widget build(BuildContext context) {
     final order = _order;
+    final mechanicPhone = order?.mechanicPhone?.trim();
     final snapshot = _snapshot;
+    final shouldTrackLocation = order == null || _shouldTrackLocation(order);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -103,13 +133,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 RescueIntro(
                   eyebrow: 'ĐƠN CỨU HỘ #${order.orderCode}',
                   title: _getTitleByStatus(order),
-                  description: order.orderType == 'ONSITE_REPAIR'
-                      ? 'Thợ cứu hộ đang kiểm tra và sửa xe ngập nước.'
-                      : order.orderType == 'TOWING'
-                      ? 'Xe đang được tiếp nhận và kéo về garage.'
-                      : order.orderType == 'BATCH_CROSSING'
-                      ? 'Xe đang được phục vụ trong chuyến gom vượt ngập.'
-                      : 'Chở xe vượt ngập đơn lẻ đến điểm khô ráo đã chọn.',
+                  description: _getDescriptionByStatus(order),
                   trailing: RescueLabel(
                     _getStatusBadge(order),
                     color: _getStatusBadgeColor(order),
@@ -121,7 +145,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   title: 'Đội hỗ trợ đang đến',
                   description: 'Luồng theo dõi minh họa.',
                   trailing: RescueLabel(
-                    'Dự kiến mẫu · 6–8 phút',
+                    'Đang cập nhật',
                     color: Color(0xFF76D6B5),
                   ),
                 ),
@@ -129,7 +153,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               const SizedBox(height: 14),
 
               // Cảnh báo mất GPS nếu snapshot?.isStale == true
-              if (snapshot?.isStale == true)
+              if (shouldTrackLocation && snapshot?.isStale == true)
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(12),
@@ -160,45 +184,36 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   ),
                 ),
 
-              // Bản đồ / Sơ đồ
-              RescuePanel(
-                padding: 0,
-                child: SizedBox(
-                  height: 200,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: CustomPaint(painter: RescueMapPainter()),
-                      ),
-                      Positioned(
-                        top: 12,
-                        left: 12,
-                        child: RescueLabel(
-                          order != null
-                              ? 'LỘ TRÌNH ĐANG THEO DÕI'
-                              : 'SƠ ĐỒ MINH HỌA',
-                          color: AppColors.secondary,
+              if (shouldTrackLocation) ...[
+                // Bản đồ theo dõi vị trí thật chỉ dùng khi đơn đang di chuyển.
+                RescuePanel(
+                  padding: 0,
+                  child:
+                      snapshot?.mechanicLatitude != null &&
+                          snapshot?.mechanicLongitude != null &&
+                          snapshot?.targetLatitude != null &&
+                          snapshot?.targetLongitude != null
+                      ? RescueTrackingMap(
+                          key: ValueKey('tracking-map-${order?.id}'),
+                          mechanicLatitude: snapshot!.mechanicLatitude!,
+                          mechanicLongitude: snapshot.mechanicLongitude!,
+                          targetLatitude: snapshot.targetLatitude!,
+                          targetLongitude: snapshot.targetLongitude!,
+                          height: 200,
+                        )
+                      : const SizedBox(
+                          height: 200,
+                          child: Center(
+                            child: Text(
+                              'Đang chờ tọa độ GPS của thợ cứu hộ...',
+                              style: TextStyle(color: AppColors.secondary),
+                            ),
+                          ),
                         ),
-                      ),
-                      const Align(
-                        alignment: Alignment(-.4, .4),
-                        child: CircleAvatar(
-                          backgroundColor: AppColors.tertiary,
-                          child: Icon(Icons.two_wheeler, color: Colors.white),
-                        ),
-                      ),
-                      const Align(
-                        alignment: Alignment(.5, -.2),
-                        child: Icon(
-                          Icons.person_pin_circle,
-                          color: AppColors.primary,
-                          size: 40,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
-              ),
+                const SizedBox(height: 10),
+                DistanceTrendIndicator(trend: _distanceTrendTracker.trend),
+              ],
 
               const RescueSection('Nhân viên hỗ trợ'),
               RescuePanel(
@@ -249,14 +264,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                           order?.pickupAddress ??
                           '85 Huỳnh Tấn Phát, P. Tân Thuận Đông, Quận 7',
                     ),
-                    RescueInfo(
-                      icon: Icons.wb_sunny_outlined,
-                      title: 'Điểm trả khô ráo',
-                      value:
-                          order?.dropoffAddress ??
-                          'Cầu Phú Mỹ (Vùng gò cao khô ráo), Quận 7',
-                    ),
-                    if (snapshot != null) ...[
+                    if (shouldTrackLocation && snapshot != null) ...[
                       RescueInfo(
                         icon: Icons.route_outlined,
                         title: 'Khoảng cách đến điểm đón',
@@ -264,33 +272,15 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                             ? '${(snapshot.distanceToTargetMeters! / 1000).toStringAsFixed(1)} km'
                             : 'Đang cập nhật...',
                       ),
-                      RescueInfo(
-                        icon: Icons.access_time_outlined,
-                        title: 'Thời gian dự kiến',
-                        value: snapshot.estimatedMinutes != null
-                            ? '~ ${snapshot.estimatedMinutes} phút'
-                            : 'Đang tính toán...',
-                      ),
                     ],
                     const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: () =>
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                order?.mechanicPhone != null
-                                    ? 'Gọi hotline thợ: ${order!.mechanicPhone}'
-                                    : 'Liên hệ nhân viên hiện là thao tác mô phỏng.',
-                              ),
-                            ),
-                          ),
-                      icon: const Icon(Icons.call_outlined, size: 18),
-                      label: Text(
-                        order?.mechanicPhone != null
-                            ? 'Gọi thợ (${order!.mechanicPhone})'
-                            : 'Liên hệ nhân viên · Mô phỏng',
+                    if (mechanicPhone?.isNotEmpty == true)
+                      OutlinedButton.icon(
+                        key: const ValueKey('contact-assigned-mechanic'),
+                        onPressed: () => _callMechanic(mechanicPhone!),
+                        icon: const Icon(Icons.call_outlined, size: 18),
+                        label: Text('Liên hệ nhân viên ($mechanicPhone)'),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -368,7 +358,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                         },
                         icon: const Icon(Icons.qr_code_2),
                         label: Text(
-                          'Thanh toán ngay · ${order.totalAmount.toStringAsFixed(0)} ₫',
+                          'Thanh toán ngay · ${formatVnd(order.totalAmount)}',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -408,6 +398,29 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     }
   }
 
+  bool _shouldTrackLocation(RescueOrderModel order) {
+    return order.status == 'DISPATCHED' || order.status == 'IN_PROGRESS';
+  }
+
+  String _getDescriptionByStatus(RescueOrderModel order) {
+    if (order.status == 'COMPLETED') {
+      return 'Đơn cứu hộ đã hoàn tất và được ghi nhận thành công.';
+    }
+    if (order.status == 'CANCELLED') {
+      return 'Đơn cứu hộ đã được hủy.';
+    }
+    if (order.status == 'PAYMENT_PENDING') {
+      return 'Dịch vụ đã hoàn tất. Vui lòng thanh toán để kết thúc đơn.';
+    }
+    return order.orderType == 'ONSITE_REPAIR'
+        ? 'Thợ cứu hộ đang kiểm tra và sửa xe ngập nước.'
+        : order.orderType == 'TOWING'
+        ? 'Xe đang được tiếp nhận và kéo về garage.'
+        : order.orderType == 'BATCH_CROSSING'
+        ? 'Xe đang được phục vụ trong chuyến gom vượt ngập.'
+        : '';
+  }
+
   String _getStatusBadge(RescueOrderModel order) {
     switch (order.status) {
       case 'DISPATCHED':
@@ -416,10 +429,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
         return order.orderType == 'ONSITE_REPAIR'
             ? 'Đang sửa chữa'
             : order.orderType == 'TOWING'
-            ? 'Đang kéo xe (${order.transportStage})'
+            ? 'Đang kéo xe'
             : order.orderType == 'BATCH_CROSSING'
-            ? 'Chuyến gom (${order.transportStage})'
-            : 'Đang chở xe (${order.transportStage})';
+            ? 'Đang thực hiện chuyến gom'
+            : 'Đang chở xe';
       case 'PAYMENT_PENDING':
         return 'Chờ thanh toán';
       case 'COMPLETED':

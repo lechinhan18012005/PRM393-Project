@@ -4,6 +4,8 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,6 +22,10 @@ public class CreateRescueOrderRequest {
 
     // Bỏ trống để tương thích client Luồng 3 cũ.
     private OrderType orderType;
+
+    @Min(value = 2, message = "Chuyến gom phải có ít nhất 2 xe")
+    @Max(value = 6, message = "Chuyến gom chỉ hỗ trợ tối đa 6 xe")
+    private Integer groupVehicleCount;
 
     @NotNull(message = "Vui lòng chọn gara cứu hộ")
     private Long garageId;

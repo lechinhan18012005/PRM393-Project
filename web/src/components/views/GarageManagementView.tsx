@@ -1839,7 +1839,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
         </GarageModal>
       )}
 
-      {/* DRAWER 3: THÊM THỢ CỨU HỘ TRỰC TIẾP (UC-05 Normal Flow) */}
+      {/* DRAWER 3: THÊM THỢ CỨU HỘ TRỰC TIẾP */}
       {drawer === 'createMechanic' && (
         <GarageModal
           maxWidth="max-w-2xl"
@@ -2067,7 +2067,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
         </GarageModal>
       )}
 
-      {/* DRAWER 4: CHỈNH SỬA THÔNG TIN THỢ (UC-05 Alt Flow 5.2) */}
+      {/* DRAWER 4: CHỈNH SỬA THÔNG TIN THỢ */}
       {drawer === 'editMechanic' && selectedMechanic && (
         <GarageModal
           maxWidth="max-w-2xl"

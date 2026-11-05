@@ -1,10 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/models/rescue_order_model.dart';
 import '../../core/services/rescue_service.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../providers/mechanic_provider.dart';
 import 'mechanic_ui.dart';
 import 'route_navigation_screen.dart';
@@ -31,12 +33,13 @@ class IncomingDispatchScreen extends StatefulWidget {
   State<IncomingDispatchScreen> createState() => _IncomingDispatchScreenState();
 }
 
-class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with WidgetsBindingObserver {
+class _IncomingDispatchScreenState extends State<IncomingDispatchScreen>
+    with WidgetsBindingObserver {
   final RescueService _rescueService = RescueService();
   RescueOfferModel? _offer;
   Timer? _countdownTimer;
   Timer? _pollingTimer;
-  int _remainingSeconds = 45;
+  int _remainingSeconds = 120;
   bool _isLoading = false;
   bool _isAccepting = false;
   String? _errorMessage;
@@ -49,14 +52,23 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
     super.initState();
     IncomingDispatchScreen._activeInstance = this;
     WidgetsBinding.instance.addObserver(this);
-    if (widget.initialOffer != null) {
-      _offer = widget.initialOffer;
-      _remainingSeconds = _calculateRemainingSeconds();
-      _startTimer();
-    } else {
-      _loadOffer();
-      _startOfferPolling();
-    }
+    _offer = widget.initialOffer;
+    _remainingSeconds = _calculateRemainingSeconds();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_offer != null) {
+        if (_remainingSeconds > 0) {
+          _startTimer();
+        } else {
+          setState(() => _offer = null);
+          _loadOffer();
+          _startOfferPolling();
+        }
+      } else {
+        _loadOffer();
+        _startOfferPolling();
+      }
+    });
   }
 
   @override
@@ -127,16 +139,16 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
   }
 
   int _calculateRemainingSeconds() {
-    if (_offer == null) return 45;
+    if (_offer == null) return 120;
     if (_offer!.expiresAt != null) {
       final expireTime = DateTime.tryParse(_offer!.expiresAt!);
       if (expireTime != null) {
         final diffMs = expireTime.difference(DateTime.now()).inMilliseconds;
         final seconds = (diffMs + 999) ~/ 1000;
-        return seconds.clamp(0, 45);
+        return seconds.clamp(0, 120);
       }
     }
-    return _offer!.secondsRemaining.clamp(0, 45);
+    return _offer!.secondsRemaining.clamp(0, 120);
   }
 
   void _startTimer() {
@@ -171,7 +183,7 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
       builder: (ctx) => AlertDialog(
         title: const Text('Hết thời gian phản hồi'),
         content: const Text(
-          'Đã quá 45 giây phản hồi. Hệ thống đã tự động chuyển yêu cầu cứu hộ này cho thợ tiếp theo trong danh sách điều phối.',
+          'Đã quá 2 phút phản hồi. Hệ thống đã tự động chuyển yêu cầu cứu hộ này cho thợ tiếp theo trong danh sách điều phối.',
         ),
         actions: [
           FilledButton(
@@ -269,7 +281,9 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Đã tiếp nhận ca cứu hộ! Hãy di chuyển đến điểm đón.'),
+            content: Text(
+              'Đã tiếp nhận ca cứu hộ! Hãy di chuyển đến điểm đón.',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -301,7 +315,9 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
       setState(() => _isAccepting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Lỗi nhận đơn: ${e.toString().replaceFirst("Exception: ", "")}'),
+          content: Text(
+            'Lỗi nhận đơn: ${e.toString().replaceFirst("Exception: ", "")}',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -345,6 +361,7 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
 
     return MechanicPage(
       title: offer != null ? 'Yêu cầu cứu hộ đến' : 'Tiếp nhận điều phối',
+      showDemoNotice: false,
       bottom: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -354,20 +371,25 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
               backgroundColor: AppColors.primaryOrange,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            onPressed: (_isAccepting || _isLoading || offer == null) ? null : _acceptOffer,
+            onPressed: (_isAccepting || _isLoading || offer == null)
+                ? null
+                : _acceptOffer,
             icon: _isAccepting
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Icon(Icons.check_circle_outline, size: 20),
             label: Text(
               _isAccepting
                   ? 'Đang tiếp nhận...'
                   : (offer != null
-                      ? 'Chấp nhận ca cứu hộ ($_remainingSeconds s)'
-                      : 'Đang đợi ca cứu hộ...'),
+                        ? 'Chấp nhận ca cứu hộ ($_remainingSeconds s)'
+                        : 'Đang đợi ca cứu hộ...'),
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
@@ -375,10 +397,14 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
           OutlinedButton(
             onPressed: (_isAccepting || _isLoading)
                 ? null
-                : (offer != null ? _rejectOffer : () => Navigator.of(context).pop()),
+                : (offer != null
+                      ? _rejectOffer
+                      : () => Navigator.of(context).pop()),
             child: Text(
               offer != null ? 'Từ chối nhận đơn' : 'Quay lại trang chủ',
-              style: TextStyle(color: offer != null ? Colors.redAccent : AppColors.secondary),
+              style: TextStyle(
+                color: offer != null ? Colors.redAccent : AppColors.secondary,
+              ),
             ),
           ),
         ],
@@ -390,12 +416,19 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
             child: MechanicPanel(
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                  const Icon(
+                    Icons.error_outline,
+                    color: AppColors.error,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _errorMessage!,
-                      style: const TextStyle(color: AppColors.error, fontSize: 12),
+                      style: const TextStyle(
+                        color: AppColors.error,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                   TextButton(
@@ -413,7 +446,11 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
             child: Column(
               children: [
                 const SizedBox(height: 20),
-                const Icon(Icons.radar, size: 54, color: AppColors.primaryOrange),
+                const Icon(
+                  Icons.radar,
+                  size: 54,
+                  color: AppColors.primaryOrange,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'Đang đợi điều phối ca cứu hộ mới...',
@@ -448,17 +485,23 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
             decoration: BoxDecoration(
-              color: _remainingSeconds > 15 ? Colors.blue.shade50 : Colors.red.shade50,
+              color: _remainingSeconds > 15
+                  ? Colors.blue.shade50
+                  : Colors.red.shade50,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: _remainingSeconds > 15 ? Colors.blue.shade300 : Colors.red.shade300,
+                color: _remainingSeconds > 15
+                    ? Colors.blue.shade300
+                    : Colors.red.shade300,
               ),
             ),
             child: Row(
               children: [
                 Icon(
                   Icons.timer,
-                  color: _remainingSeconds > 15 ? Colors.blue.shade800 : Colors.red.shade800,
+                  color: _remainingSeconds > 15
+                      ? Colors.blue.shade800
+                      : Colors.red.shade800,
                   size: 20,
                 ),
                 const SizedBox(width: 10),
@@ -468,7 +511,9 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: _remainingSeconds > 15 ? Colors.blue.shade900 : Colors.red.shade900,
+                      color: _remainingSeconds > 15
+                          ? Colors.blue.shade900
+                          : Colors.red.shade900,
                     ),
                   ),
                 ),
@@ -497,8 +542,12 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Cước phí chuyến riêng: ${offer.totalAmount.toStringAsFixed(0)} ₫ · Giá niêm yết cố định',
-                  style: const TextStyle(color: Color(0xFFB9CEDB), fontSize: 13, fontWeight: FontWeight.bold),
+                  'Cước phí chuyến riêng: ${formatVnd(offer.totalAmount)} · Giá niêm yết cố định',
+                  style: const TextStyle(
+                    color: Color(0xFFB9CEDB),
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -517,7 +566,8 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
                 MechanicInfo(
                   icon: Icons.two_wheeler_outlined,
                   title: 'Phương tiện cần chở',
-                  value: '${offer.vehiclePlate} · ${offer.vehicleModel ?? "Xe máy"}',
+                  value:
+                      '${offer.vehiclePlate} · ${offer.vehicleModel ?? "Xe máy"}',
                 ),
                 if (offer.waterLevel != null) ...[
                   const Divider(),
@@ -541,17 +591,21 @@ class _IncomingDispatchScreenState extends State<IncomingDispatchScreen> with Wi
                   title: 'Điểm đón khách (đang ngập)',
                   value: offer.pickupAddress,
                 ),
-                const Divider(),
-                MechanicInfo(
-                  icon: Icons.wb_sunny_outlined,
-                  title: 'Điểm trả xe (vùng khô ráo)',
-                  value: offer.dropoffAddress,
-                ),
+                if (offer.orderType != 'ONSITE_REPAIR' &&
+                    offer.orderType != 'TOWING') ...[
+                  const Divider(),
+                  MechanicInfo(
+                    icon: Icons.wb_sunny_outlined,
+                    title: 'Điểm trả xe (vùng khô ráo)',
+                    value: offer.dropoffAddress,
+                  ),
+                ],
                 const Divider(),
                 MechanicInfo(
                   icon: Icons.route_outlined,
                   title: 'Khoảng cách đến điểm đón',
-                  value: '${(offer.distanceMeters / 1000).toStringAsFixed(1)} km (~ 5-8 phút)',
+                  value:
+                      '${(offer.distanceMeters / 1000).toStringAsFixed(1)} km',
                 ),
               ],
             ),

@@ -35,15 +35,19 @@ app:
     hmac-secret: ${APP_SECURITY_HMAC_SECRET:}
     encryption-key: ${APP_SECURITY_ENCRYPTION_KEY:}
   demo:
-    seed-users: ${APP_DEMO_SEED_USERS:false}
+    seed-users: ${APP_DEMO_SEED_USERS:true}
   rescue:
     booking-fee: ${RESCUE_BOOKING_FEE:30000}
     hotline: ${RESCUE_HOTLINE:1900-6868}
-    offer-timeout-seconds: ${RESCUE_OFFER_TIMEOUT_SECONDS:45}
+    offer-timeout-seconds: ${RESCUE_OFFER_TIMEOUT_SECONDS:120}
     arrival-threshold-meters: ${RESCUE_ARRIVAL_THRESHOLD_METERS:30.0}
     heartbeat-valid-minutes: ${RESCUE_HEARTBEAT_VALID_MINUTES:5}
     default-dispatch-radius-km: ${RESCUE_DEFAULT_RADIUS_KM:5.0}
     max-dispatch-radius-km: ${RESCUE_MAX_RADIUS_KM:7.0}
+  geocoding:
+    nominatim-base-url: ${NOMINATIM_BASE_URL:https://nominatim.openstreetmap.org}
+    photon-base-url: ${PHOTON_BASE_URL:https://photon.komoot.io}
+    user-agent: ${GEOCODING_USER_AGENT:HydroRescueVietnam/1.0 (https://github.com/lechinhan18012005/PRM393-Project)}
 
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:demo}

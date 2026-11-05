@@ -28,7 +28,7 @@ export interface ApiResponse<T> {
 }
 
 export interface LoginPayload {
-  identifier: string; // username, email or phone
+  identifier: string; // email or Vietnamese phone number
   password: string;
 }
 

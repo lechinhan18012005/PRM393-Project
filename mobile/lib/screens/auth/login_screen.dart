@@ -15,10 +15,35 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-  String _selectedRole = 'CUSTOMER'; // CUSTOMER, FIELD_MECHANIC
   bool _obscurePassword = true;
+
+  static final RegExp _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+  static final RegExp _phonePattern = RegExp(r'^(?:0|\+84)[35789]\d{8}$');
+
+  String? _validateIdentifier(String? value) {
+    final identifier = value?.trim() ?? '';
+    if (identifier.isEmpty) {
+      return 'Vui lòng nhập số điện thoại hoặc email';
+    }
+    if (identifier.length > 254 ||
+        (!_emailPattern.hasMatch(identifier) &&
+            !_phonePattern.hasMatch(identifier))) {
+      return 'Số điện thoại hoặc email không hợp lệ';
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    final password = value ?? '';
+    if (password.isEmpty) return 'Vui lòng nhập mật khẩu';
+    if (password.length < 6 || password.length > 128) {
+      return 'Mật khẩu phải từ 6 đến 128 ký tự';
+    }
+    return null;
+  }
 
   @override
   void dispose() {
@@ -40,18 +65,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
     final identifier = _identifierController.text.trim();
     final password = _passwordController.text;
-
-    if (identifier.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng nhập tài khoản/số điện thoại và mật khẩu'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-      return;
-    }
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final success = await authProvider.login(identifier, password);
@@ -133,291 +150,213 @@ class _LoginScreenState extends State<LoginScreen> {
               // 3. Main Form Card
               Padding(
                 padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Role Segmented Tabs
-                    const Text(
-                      'Bạn là',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.outline,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainer,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          _buildRoleTab('CUSTOMER', 'Chủ xe', Icons.person),
-                          _buildRoleTab(
-                            'FIELD_MECHANIC',
-                            'Thợ cơ động',
-                            Icons.build,
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Identifier input
+                      TextFormField(
+                        key: const Key('login-identifier'),
+                        controller: _identifierController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        validator: _validateIdentifier,
+                        decoration: InputDecoration(
+                          labelText: 'Số điện thoại hoặc Email',
+                          prefixIcon: const Icon(Icons.account_circle_outlined),
+                          filled: true,
+                          fillColor: AppColors.surfaceContainerLowest,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Identifier input
-                    TextField(
-                      controller: _identifierController,
-                      decoration: InputDecoration(
-                        labelText: 'Số điện thoại hoặc Email',
-                        hintText: _selectedRole == 'CUSTOMER'
-                            ? 'customer@hydrorescue.vn hoặc 0900000005'
-                            : 'mechanic@hydrorescue.vn hoặc 0900000004',
-                        prefixIcon: const Icon(Icons.account_circle_outlined),
-                        filled: true,
-                        fillColor: AppColors.surfaceContainerLowest,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Password input
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'Mật khẩu',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
                         ),
-                        filled: true,
-                        fillColor: AppColors.surfaceContainerLowest,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-
-                    // Submit Button
-                    ElevatedButton(
-                      onPressed: authProvider.isLoading ? null : _handleLogin,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryOrange,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 2,
-                      ),
-                      child: authProvider.isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              _selectedRole == 'CUSTOMER'
-                                  ? 'Đăng nhập'
-                                  : _selectedRole == 'FIELD_MECHANIC'
-                                  ? 'Đăng nhập'
-                                  : 'Đăng nhập',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    if (const bool.fromEnvironment('DEMO_MODE')) ...[
-                      // Demo Shortcuts Divider
-                      const Row(
-                        children: [
-                          Expanded(child: Divider()),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 10),
-                            child: Text(
-                              'HOẶC ĐĂNG NHẬP NHANH (DEMO)',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.outline,
-                              ),
-                            ),
-                          ),
-                          Expanded(child: Divider()),
-                        ],
                       ),
                       const SizedBox(height: 14),
 
-                      // Demo buttons row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => _handleDemoLogin('CUSTOMER'),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
+                      // Password input
+                      TextFormField(
+                        key: const Key('login-password'),
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _handleLogin(),
+                        validator: _validatePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Mật khẩu',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
+                          filled: true,
+                          fillColor: AppColors.surfaceContainerLowest,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Submit Button
+                      ElevatedButton(
+                        onPressed: authProvider.isLoading ? null : _handleLogin,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryOrange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: authProvider.isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                              )
+                            : Text(
+                                'Đăng nhập',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              child: const Text(
-                                'Khách xe SH',
-                                style: TextStyle(fontSize: 12),
+                      ),
+                      const SizedBox(height: 24),
+
+                      if (const bool.fromEnvironment('DEMO_MODE')) ...[
+                        // Demo Shortcuts Divider
+                        const Row(
+                          children: [
+                            Expanded(child: Divider()),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 10),
+                              child: Text(
+                                'HOẶC ĐĂNG NHẬP NHANH (DEMO)',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.outline,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () =>
-                                  _handleDemoLogin('FIELD_MECHANIC'),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
+                            Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Demo buttons row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => _handleDemoLogin('CUSTOMER'),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                child: const Text(
+                                  'Khách xe SH',
+                                  style: TextStyle(fontSize: 12),
                                 ),
                               ),
-                              child: const Text(
-                                'Thợ cơ động',
-                                style: TextStyle(fontSize: 12),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    _handleDemoLogin('FIELD_MECHANIC'),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Thợ cơ động',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
+                      TextButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const RegisterScreen(invitation: true),
+                          ),
+                        ),
+                        child: const Text(
+                          'Kích hoạt tài khoản Thợ cứu hộ được mời',
+                        ),
+                      ),
+                      // Link to Register
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          const Text(
+                            'Chưa có tài khoản? ',
+                            style: TextStyle(
+                              color: AppColors.secondary,
+                              fontSize: 13,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const RegisterScreen(),
+                                ),
+                              );
+                            },
+                            child: const Text(
+                              'Đăng ký ngay',
+                              style: TextStyle(
+                                color: AppColors.primaryOrange,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
                     ],
-
-                    TextButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const RegisterScreen(invitation: true),
-                        ),
-                      ),
-                      child: const Text(
-                        'Kích hoạt tài khoản Thợ cứu hộ được mời',
-                      ),
-                    ),
-                    // Link to Register
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        const Text(
-                          'Chưa có tài khoản? ',
-                          style: TextStyle(
-                            color: AppColors.secondary,
-                            fontSize: 13,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const RegisterScreen(),
-                              ),
-                            );
-                          },
-                          child: const Text(
-                            'Đăng ký ngay',
-                            style: TextStyle(
-                              color: AppColors.primaryOrange,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRoleTab(String role, String label, IconData icon) {
-    final isSelected = _selectedRole == role;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _selectedRole = role;
-          });
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: isSelected
-                ? [
-                    const BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 4,
-                      offset: Offset(0, 1),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 20,
-                color: isSelected
-                    ? AppColors.primaryOrange
-                    : AppColors.secondary,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected
-                      ? AppColors.primaryOrange
-                      : AppColors.secondary,
+                  ),
                 ),
               ),
             ],

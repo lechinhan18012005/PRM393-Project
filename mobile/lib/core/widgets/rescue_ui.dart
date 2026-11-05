@@ -144,15 +144,17 @@ class RescueIntro extends StatelessWidget {
             height: 1.2,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          description,
-          style: const TextStyle(
-            color: Color(0xFFB9CEDB),
-            fontSize: 12,
-            height: 1.6,
+        if (description.trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: const TextStyle(
+              color: Color(0xFFB9CEDB),
+              fontSize: 12,
+              height: 1.6,
+            ),
           ),
-        ),
+        ],
         if (trailing != null) ...[const SizedBox(height: 14), trailing!],
       ],
     ),
