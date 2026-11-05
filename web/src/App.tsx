@@ -429,20 +429,25 @@ function MainDashboard() {
               }
             />
             <Route
-              path="/owner/services-pricing"
+              path="/owner/services"
               element={<GarageServicesPricingView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
             />
             <Route
-              path="/owner/garage-management"
+              path="/owner/garage-team"
               element={<GarageManagementView onShowToast={showToast} />}
             />
             <Route
-              path="/owner/garage-operations"
+              path="/owner/garage-transport"
               element={<GarageOperationsView mode="transport" />}
             />
             <Route
               path="/owner/garage-finance"
               element={<GarageOperationsView mode="finance" />}
+            />
+            {/* Alias tương thích ngược */}
+            <Route path="/owner/garage-management" element={<Navigate to="/owner/garage-team" replace />} />
+            <Route path="/owner/garage-operations" element={<Navigate to="/owner/garage-transport" replace />} />
+            <Route path="/owner/services-pricing" element={<Navigate to="/owner/services" replace />}
             />
 
             {/* Điều hướng mặc định nếu URL không khớp */}
