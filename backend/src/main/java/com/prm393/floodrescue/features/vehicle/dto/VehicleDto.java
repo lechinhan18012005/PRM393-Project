@@ -1,5 +1,6 @@
 package com.prm393.floodrescue.features.vehicle.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,5 +19,7 @@ public class VehicleDto {
     private String vehicleType; // SCOOTER, MANUAL, CLUTCH, ELECTRIC
     private String engineCapacity;
     private String color;
+
+    @JsonProperty("isDefault")
     private boolean isDefault;
 }
