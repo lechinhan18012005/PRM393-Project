@@ -428,22 +428,53 @@ function MainDashboard() {
                 />
               }
             />
+            {/* Chi nhánh & Đội ngũ thợ kỹ thuật */}
             <Route
-              path="/owner/services-pricing"
-              element={<GarageServicesPricingView onSelectScreen={handleSelectScreen} onShowToast={showToast} />}
+              path="/owner/garage-team"
+              element={<GarageManagementView onShowToast={showToast} />}
             />
             <Route
               path="/owner/garage-management"
               element={<GarageManagementView onShowToast={showToast} />}
             />
-            <Route
-              path="/owner/garage-operations"
-              element={<GarageOperationsView mode="transport" />}
-            />
+            {/* Doanh thu & Ví Gara */}
             <Route
               path="/owner/garage-finance"
               element={<GarageOperationsView mode="finance" />}
             />
+            {/* Chuyến chở xe vượt ngập */}
+            <Route
+              path="/owner/garage-transport"
+              element={<GarageOperationsView mode="transport" />}
+            />
+            <Route
+              path="/owner/garage-operations"
+              element={<GarageOperationsView mode="transport" />}
+            />
+            {/* Danh mục dịch vụ & Bảng giá cứu hộ */}
+            <Route
+              path="/owner/services"
+              element={
+                <GarageServicesPricingView
+                  onSelectScreen={handleSelectScreen}
+                  onShowToast={showToast}
+                />
+              }
+            />
+            <Route
+              path="/owner/services-pricing"
+              element={
+                <GarageServicesPricingView
+                  onSelectScreen={handleSelectScreen}
+                  onShowToast={showToast}
+                />
+              }
+            />
+
+            {/* Điều hướng mặc định khi chỉ gõ tên phân hệ trên URL */}
+            <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
+            <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
+            <Route path="/owner" element={<Navigate to="/owner/owner-dashboard" replace />} />
 
             {/* Điều hướng mặc định nếu URL không khớp */}
             <Route path="*" element={<Navigate to={getDefaultPath(user.role)} replace />} />

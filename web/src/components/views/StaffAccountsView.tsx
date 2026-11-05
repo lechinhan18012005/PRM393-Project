@@ -219,7 +219,7 @@ export function StaffAccountsView() {
       `Thông tin đăng nhập hệ thống RescueOps (Phân hệ Staff):`,
       `- Họ tên: ${createdAccount.fullName}`,
       `- Email đăng nhập: ${createdAccount.email}`,
-      `- Tên đăng nhập (Username): ${createdAccount.username}`,
+      `- Tên đăng nhập: ${createdAccount.username}`,
       `- Mật khẩu mặc định: ${createdAccount.defaultPassword}`
     ].join('\n');
 
@@ -314,7 +314,7 @@ export function StaffAccountsView() {
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl font-bold text-on-surface">
-              Quản lý Tài khoản Nhân viên Điều phối (Staff)
+              Quản lý Tài khoản Nhân viên Điều phối
             </h1>
             <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase">
               Chỉ dành cho Admin
@@ -553,16 +553,6 @@ export function StaffAccountsView() {
               <option value={20}>20 dòng/trang</option>
             </select>
           </div>
-
-          {/* Nút tải lại danh sách từ Database */}
-          <button
-            type="button"
-            disabled={isLoading || busy}
-            onClick={() => void loadStaffAccounts()}
-            className="h-9 px-3 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-xs font-semibold text-on-surface transition-colors cursor-pointer"
-          >
-            {isLoading ? 'Đang tải...' : 'Làm mới'}
-          </button>
         </div>
       </div>
 

@@ -68,6 +68,8 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
   // State phục vụ Tìm kiếm (Search) và Lọc trạng thái Gara (Filter)
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  // Bộ lọc theo trạng thái cấu hình chiết khấu: ALL | UNCONFIGURED | CONFIGURED
+  const [configStatusFilter, setConfigStatusFilter] = useState<'ALL' | 'UNCONFIGURED' | 'CONFIGURED'>('ALL');
 
   // ==========================================================================
   // HÀM TẢI DỮ LIỆU TỪ DATABASE
@@ -97,7 +99,7 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
         // Khởi tạo giá trị nháp (draft) cho ô input chiết khấu của từng Gara bằng đúng tỷ lệ trong DB
         const initialDrafts: Record<number, string> = {};
         list.forEach((g) => {
-          initialDrafts[g.garageId] = String(Number(g.commissionRate ?? 10));
+          initialDrafts[g.garageId] = g.commissionRate !== null && g.commissionRate !== undefined ? String(Number(g.commissionRate)) : '';
         });
         setDraftRates(initialDrafts);
       } else if (garageListRes.status === 'rejected') {
@@ -145,12 +147,22 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
    */
   const kpiMetrics = useMemo(() => {
     const totalGarages = garages.length;
+    const unconfiguredGarages = garages.filter(
+      (g) => g.commissionRate === null || g.commissionRate === undefined || g.isConfigured === false
+    );
+    const unconfiguredCount = unconfiguredGarages.length;
+    const configuredGarages = garages.filter(
+      (g) => g.commissionRate !== null && g.commissionRate !== undefined && g.isConfigured !== false
+    );
+    const configuredCount = configuredGarages.length;
+
     const avgCommissionRate =
-      totalGarages > 0
+      configuredCount > 0
         ? (
-            garages.reduce((sum, g) => sum + Number(g.commissionRate ?? 0), 0) / totalGarages
+            configuredGarages.reduce((sum, g) => sum + Number(g.commissionRate ?? 0), 0) /
+            configuredCount
           ).toFixed(1)
-        : globalRate.toFixed(1);
+        : '---';
 
     const totalServices = garages.reduce(
       (sum, g) => sum + Number(g.serviceCount ?? (g.services ? g.services.length : 0)),
@@ -159,10 +171,12 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
 
     return {
       totalGarages,
+      unconfiguredCount,
+      configuredCount,
       avgCommissionRate,
       totalServices
     };
-  }, [garages, globalRate]);
+  }, [garages]);
 
   /**
    * Lọc danh sách Gara theo từ khóa tìm kiếm (Tên Gara, Số điện thoại, Địa chỉ)
@@ -172,12 +186,22 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
     const q = searchTerm.trim().toLowerCase();
 
     return garages.filter((g) => {
-      // Lọc theo trạng thái Gara nếu Admin chọn khác 'ALL'
+      // 1. Lọc theo trạng thái hồ sơ Gara nếu chọn khác 'ALL'
       if (statusFilter !== 'ALL' && g.status !== statusFilter) {
         return false;
       }
 
-      // Nếu không có từ khóa tìm kiếm thì hiển thị
+      // 2. Lọc theo trạng thái cấu hình chiết khấu
+      const isUnconfigured =
+        g.commissionRate === null || g.commissionRate === undefined || g.isConfigured === false;
+      if (configStatusFilter === 'UNCONFIGURED' && !isUnconfigured) {
+        return false;
+      }
+      if (configStatusFilter === 'CONFIGURED' && isUnconfigured) {
+        return false;
+      }
+
+      // 3. Tìm kiếm theo từ khóa
       if (!q) return true;
 
       const matchName = (g.garageName || '').toLowerCase().includes(q);
@@ -187,7 +211,7 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
 
       return matchName || matchPhone || matchAddress || matchId;
     });
-  }, [garages, searchTerm, statusFilter]);
+  }, [garages, searchTerm, statusFilter, configStatusFilter]);
 
   // ==========================================================================
   // XỬ LÝ LƯU TỶ LỆ CHIẾT KHẤU CHO TỪNG GARA CỤ THỂ (UC-24)
@@ -303,30 +327,16 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
 
   return (
     <div className="flex flex-col w-full space-y-6">
-      {/* Header & Huy hiệu khẳng định quyền hạn duy nhất của ADMIN */}
-      <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      {/* Header màn hình Quản lý Phí Chiết Khấu Gara */}
+      <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container">
         <div className="space-y-1.5">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-on-surface">
-              Quản lý Phí Chiết Khấu Gara Đối Tác
-            </h1>
-            <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold border border-primary/20">
-              Quyền hạn: Chỉ Quản trị viên (ADMIN) mới được phép điều chỉnh tỷ lệ chiết khấu
-            </span>
-          </div>
+          <h1 className="text-2xl font-bold text-on-surface">
+            Quản lý Phí Chiết Khấu Gara Đối Tác
+          </h1>
           <p className="text-sm text-secondary">
-            Toàn bộ thông tin Gara, danh mục dịch vụ niêm yết và tỷ lệ phần trăm chiết khấu dưới đây được truy xuất trực tiếp từ Cơ sở dữ liệu (Database). Khi giao dịch cứu hộ hoàn tất, hệ thống tự động khấu trừ theo đúng tỷ lệ chiết khấu của từng Gara.
+            Quản lý tỷ lệ chiết khấu nền tảng và danh mục dịch vụ áp dụng cho từng gara đối tác cứu hộ ngập nước.
           </p>
         </div>
-
-        <button
-          type="button"
-          disabled={isLoading}
-          onClick={() => void loadAllCommissionData()}
-          className="self-start lg:self-auto px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-sm font-semibold text-on-surface transition-colors cursor-pointer"
-        >
-          {isLoading ? 'Đang đồng bộ DB...' : 'Làm mới dữ liệu từ DB'}
-        </button>
       </div>
 
       {/* Thông báo lỗi nếu có */}
@@ -338,8 +348,9 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
 
       {/* 4 Thẻ KPI tổng hợp trực tiếp từ Database */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* KPI 1: Tổng số Gara */}
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
-          <div className="text-xs font-bold uppercase text-secondary">Tổng số Gara đối tác (DB)</div>
+          <div className="text-xs font-bold uppercase text-secondary">Tổng số Gara đối tác</div>
           <div className="text-2xl font-bold font-mono text-on-surface mt-1">
             {kpiMetrics.totalGarages} Gara
           </div>
@@ -348,39 +359,60 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
           </div>
         </div>
 
+        {/* KPI 2: Chờ cấu hình chiết khấu (Nổi bật màu cam nếu có Gara chưa cấu hình) */}
+        <div
+          onClick={() => setConfigStatusFilter(kpiMetrics.unconfiguredCount > 0 ? 'UNCONFIGURED' : 'ALL')}
+          className={`p-5 rounded-xl border shadow-xs transition-all cursor-pointer ${
+            kpiMetrics.unconfiguredCount > 0
+              ? 'bg-amber-50/50 border-amber-300 hover:border-amber-400'
+              : 'bg-surface-container-lowest border-surface-container'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase text-amber-800">
+              Chờ cấu hình chiết khấu
+            </span>
+            {kpiMetrics.unconfiguredCount > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900">
+                Cần Admin nhập
+              </span>
+            )}
+          </div>
+          <div className={`text-2xl font-bold font-mono mt-1 ${
+            kpiMetrics.unconfiguredCount > 0 ? 'text-amber-700' : 'text-emerald-700'
+          }`}>
+            {kpiMetrics.unconfiguredCount} Gara
+          </div>
+          <div className="text-xs text-secondary mt-1">
+            {kpiMetrics.unconfiguredCount > 0
+              ? 'Nhấp để lọc danh sách cần nhập chiết khấu'
+              : 'Tất cả Gara đã có tỷ lệ chiết khấu'}
+          </div>
+        </div>
+
+        {/* KPI 3: Chiết khấu mặc định hệ thống */}
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
             Chiết khấu mặc định hệ thống
           </div>
           <div className="text-2xl font-bold font-mono text-primary mt-1">
-            {globalRate.toFixed(1)}%
+            {globalRate > 0 ? `${globalRate.toFixed(1)}%` : 'Chưa thiết lập'}
           </div>
           <div className="text-xs text-secondary mt-1">
-            Áp dụng mặc định cho Gara mới ({versionCode})
+            {versionCode ? `Phiên bản áp dụng: ${versionCode}` : 'Cần Admin lưu cấu hình toàn sàn'}
           </div>
         </div>
 
+        {/* KPI 4: Chiết khấu trung bình các Gara đã cấu hình */}
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            Chiết khấu trung bình các Gara
+            Chiết khấu TB các Gara
           </div>
           <div className="text-2xl font-bold font-mono text-tertiary mt-1">
-            {kpiMetrics.avgCommissionRate}%
+            {kpiMetrics.avgCommissionRate}{kpiMetrics.avgCommissionRate !== '---' ? '%' : ''}
           </div>
           <div className="text-xs text-secondary mt-1">
-            Tính trung bình cộng từ {kpiMetrics.totalGarages} Gara trong DB
-          </div>
-        </div>
-
-        <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
-          <div className="text-xs font-bold uppercase text-secondary">
-            Tổng số dịch vụ đang cung cấp
-          </div>
-          <div className="text-2xl font-bold font-mono text-on-surface mt-1">
-            {kpiMetrics.totalServices} dịch vụ
-          </div>
-          <div className="text-xs text-secondary mt-1">
-            Tổng hợp từ bảng dịch vụ của các Gara
+            Tính từ {kpiMetrics.configuredCount} Gara đã được Admin thiết lập
           </div>
         </div>
       </div>
@@ -393,18 +425,60 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
               Bảng Cấu Hình Chiết Khấu &amp; Danh Mục Dịch Vụ Theo Từng Gara
             </h2>
             <p className="text-xs text-secondary mt-0.5">
-              Admin điều chỉnh trực tiếp tỷ lệ phần trăm chiết khấu của từng Gara và nhấn <strong>Lưu chiết khấu</strong> để cập nhật vào Database.
+              Điều chỉnh tỷ lệ phần trăm chiết khấu cho từng gara đối tác và lưu thay đổi vào hệ thống.
             </p>
           </div>
 
-          {/* Thanh tìm kiếm & lọc trạng thái Gara */}
+          {/* Thanh tìm kiếm & bộ lọc */}
           <div className="flex flex-wrap items-center gap-3">
+            {/* Bộ lọc trạng thái cấu hình chiết khấu */}
+            <div className="flex items-center rounded-lg bg-surface-container-low p-1 border border-surface-container text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setConfigStatusFilter('ALL')}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  configStatusFilter === 'ALL'
+                    ? 'bg-surface-container-lowest text-on-surface shadow-xs font-bold'
+                    : 'text-secondary hover:text-on-surface'
+                }`}
+              >
+                Tất cả ({garages.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfigStatusFilter('UNCONFIGURED')}
+                className={`px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
+                  configStatusFilter === 'UNCONFIGURED'
+                    ? 'bg-amber-100 text-amber-900 shadow-xs font-bold'
+                    : 'text-amber-700 hover:text-amber-900'
+                }`}
+              >
+                Chờ cấu hình
+                {kpiMetrics.unconfiguredCount > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-amber-600 text-white text-[11px] flex items-center justify-center font-bold">
+                    {kpiMetrics.unconfiguredCount}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfigStatusFilter('CONFIGURED')}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  configStatusFilter === 'CONFIGURED'
+                    ? 'bg-surface-container-lowest text-on-surface shadow-xs font-bold'
+                    : 'text-secondary hover:text-on-surface'
+                }`}
+              >
+                Đã cấu hình ({kpiMetrics.configuredCount})
+              </button>
+            </div>
+
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Tìm tên Gara, SĐT, địa chỉ..."
-              className="h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary w-64"
+              className="h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary w-56"
             />
             <select
               aria-label="Lọc trạng thái Gara"
@@ -412,10 +486,10 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
               onChange={(e) => setStatusFilter(e.target.value)}
               className="h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-sm text-on-surface font-semibold"
             >
-              <option value="ALL">Tất cả trạng thái ({garages.length})</option>
-              <option value="APPROVED">Đã duyệt (APPROVED)</option>
-              <option value="PENDING">Chờ duyệt (PENDING)</option>
-              <option value="SUSPENDED">Đình chỉ (SUSPENDED)</option>
+              <option value="ALL">Tất cả trạng thái hồ sơ</option>
+              <option value="APPROVED">Đã duyệt</option>
+              <option value="PENDING">Chờ duyệt</option>
+              <option value="SUSPENDED">Đình chỉ</option>
             </select>
           </div>
         </div>
@@ -426,10 +500,10 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
               <tr className="bg-surface-container-low border-b border-surface-container text-xs font-bold text-secondary uppercase tracking-wider">
                 <th className="py-3 px-4">Mã &amp; Tên Gara</th>
                 <th className="py-3 px-4">Địa chỉ &amp; Điện thoại</th>
-                <th className="py-3 px-4">Danh mục dịch vụ của Gara (Từ DB)</th>
+                <th className="py-3 px-4">Danh mục dịch vụ của Gara</th>
                 <th className="py-3 px-4 text-right">Số dư ví hiện tại</th>
                 <th className="py-3 px-4 text-center">Chiết khấu hiện hành</th>
-                <th className="py-3 px-4 text-right">Điều chỉnh chiết khấu (Chỉ Admin)</th>
+                <th className="py-3 px-4 text-right">Điều chỉnh chiết khấu</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container text-sm">
@@ -509,26 +583,41 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
                       {Number(garage.walletBalance ?? 0).toLocaleString('vi-VN')} ₫
                     </td>
 
-                    {/* Cột 5: Tỷ lệ chiết khấu hiện hành trong DB */}
+                    {/* Cột 5: Tỷ lệ chiết khấu hiện hành */}
                     <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                      <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary font-mono font-bold text-sm">
-                        {Number(garage.commissionRate ?? 0).toFixed(1)}%
-                      </span>
-                      <div className="text-[11px] text-secondary mt-1">
-                        Gara nhận {(100 - Number(garage.commissionRate ?? 0)).toFixed(1)}%
-                      </div>
+                      {garage.commissionRate !== null && garage.commissionRate !== undefined && garage.isConfigured !== false ? (
+                        <div>
+                          <span className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-mono font-bold text-sm">
+                            {Number(garage.commissionRate).toFixed(1)}%
+                          </span>
+                          <div className="text-[11px] text-secondary mt-1">
+                            Gara nhận {(100 - Number(garage.commissionRate)).toFixed(1)}%
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-bold text-xs">
+                            <span className="material-symbols-outlined text-[14px]">warning</span>
+                            Chưa thiết lập
+                          </span>
+                          <div className="text-[11px] text-amber-700 font-medium mt-1">
+                            Chờ Admin cấu hình
+                          </div>
+                        </div>
+                      )}
                     </td>
 
-                    {/* Cột 6: Ô nhập chỉnh sửa trực tiếp & nút Lưu chiết khấu */}
+                    {/* Cột 6: Ô nhập trực tiếp & nút Lưu chiết khấu do Admin nhập */}
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <div className="flex flex-col items-end gap-2">
                         <div className="flex items-center gap-2">
-                          <div className="relative w-24">
+                          <div className="relative w-28">
                             <input
                               type="number"
                               min={0}
                               max={100}
                               step={0.5}
+                              placeholder="Nhập %..."
                               aria-label={`Tỷ lệ chiết khấu của ${garage.garageName}`}
                               value={currentDraft}
                               onChange={(e) =>
@@ -537,7 +626,11 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
                                   [garage.garageId]: e.target.value
                                 }))
                               }
-                              className="w-full h-9 pl-2.5 pr-6 rounded-lg border border-surface-container bg-surface-container-low font-mono font-bold text-sm text-right text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                              className={`w-full h-9 pl-2.5 pr-6 rounded-lg border font-mono font-bold text-sm text-right text-on-surface focus:outline-none focus:ring-2 ${
+                                garage.commissionRate === null || garage.commissionRate === undefined || garage.isConfigured === false
+                                  ? 'border-amber-400 bg-amber-50/50 focus:ring-amber-500'
+                                  : 'border-surface-container bg-surface-container-low focus:ring-primary'
+                              }`}
                             />
                             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-mono text-secondary">
                               %
@@ -546,11 +639,19 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
 
                           <button
                             type="button"
-                            disabled={isSavingThisRow}
+                            disabled={isSavingThisRow || !currentDraft}
                             onClick={() => void handleSaveGarageCommission(garage)}
-                            className="h-9 px-3.5 rounded-lg bg-primary text-on-primary text-xs font-bold hover:bg-primary-container transition-colors cursor-pointer disabled:opacity-60"
+                            className={`h-9 px-3.5 rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 ${
+                              garage.commissionRate === null || garage.commissionRate === undefined || garage.isConfigured === false
+                                ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs'
+                                : 'bg-primary text-on-primary hover:bg-primary-container'
+                            }`}
                           >
-                            {isSavingThisRow ? 'Đang lưu...' : 'Lưu chiết khấu'}
+                            {isSavingThisRow
+                              ? 'Đang lưu...'
+                              : (garage.commissionRate === null || garage.commissionRate === undefined || garage.isConfigured === false
+                                  ? 'Thiết lập'
+                                  : 'Lưu thay đổi')}
                           </button>
                         </div>
 
@@ -563,8 +664,8 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
                               [garage.garageId]: e.target.value
                             }))
                           }
-                          placeholder="Ghi chú lý do điều chỉnh (tùy chọn)..."
-                          className="w-60 h-7 px-2 rounded border border-surface-container bg-surface text-xs text-on-surface"
+                          placeholder="Lý do điều chỉnh (tùy chọn)..."
+                          className="w-64 h-7 px-2 rounded border border-surface-container bg-surface text-xs text-on-surface"
                         />
                       </div>
                     </td>
@@ -576,7 +677,7 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
                 <tr>
                   <td colSpan={6} className="py-8 px-4 text-center text-sm text-secondary">
                     {isLoading
-                      ? 'Đang tải danh sách chiết khấu Gara từ cơ sở dữ liệu...'
+                      ? 'Đang tải danh sách chiết khấu Gara...'
                       : 'Không có Gara đối tác nào khớp với bộ lọc hiện tại.'}
                   </td>
                 </tr>
@@ -645,10 +746,10 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
           <div className="flex items-center justify-between border-b border-surface-container pb-3">
             <div>
               <h3 className="text-base font-bold text-on-surface">
-                Lịch Sử Thay Đổi Chiết Khấu (Audit Log từ DB)
+                Lịch Sử Thay Đổi Chiết Khấu
               </h3>
               <p className="text-xs text-secondary mt-0.5">
-                Ghi nhận toàn bộ lịch sử điều chỉnh tỷ lệ chiết khấu bởi Quản trị viên trong cơ sở dữ liệu.
+                Ghi nhận toàn bộ lịch sử điều chỉnh tỷ lệ chiết khấu bởi Quản trị viên.
               </p>
             </div>
             <span className="text-xs font-mono px-2.5 py-1 rounded bg-surface-container text-secondary font-semibold">
@@ -697,7 +798,7 @@ export const CommissionSettingsView: React.FC<CommissionSettingsViewProps> = ({ 
                 {auditLogs.length === 0 && (
                   <tr>
                     <td colSpan={4} className="py-6 text-center text-secondary">
-                      Chưa có bản ghi lịch sử thay đổi chiết khấu nào trong Database.
+                      Chưa có bản ghi lịch sử thay đổi chiết khấu nào.
                     </td>
                   </tr>
                 )}

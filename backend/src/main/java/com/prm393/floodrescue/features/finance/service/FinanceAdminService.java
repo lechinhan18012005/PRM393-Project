@@ -205,7 +205,7 @@ public class FinanceAdminService {
                 // Tự động đánh số phiên bản tiếp theo nếu Admin không nhập versionCode thủ công
                 .versionCode(request.getVersionCode() != null && !request.getVersionCode().isBlank()
                         ? request.getVersionCode()
-                        : "v2." + (existingConfigs.size() + 4))
+                        : (existingConfigs.isEmpty() ? "v1.0" : "v1." + existingConfigs.size()))
                 // Ghi nhận tóm tắt nội dung thay đổi phục vụ tra cứu lịch sử
                 .changeSummary(request.getChangeSummary() != null && !request.getChangeSummary().isBlank()
                         ? request.getChangeSummary()
@@ -807,9 +807,8 @@ public class FinanceAdminService {
      * Ánh xạ thực thể `Garage` cùng danh mục dịch vụ và chi nhánh sang `GarageCommissionDto`.
      */
     private GarageCommissionDto mapToGarageCommissionDto(Garage garage, BigDecimal fallbackGlobalRate) {
-        BigDecimal effectiveRate = garage.getCommissionRate() != null
-                ? garage.getCommissionRate()
-                : (fallbackGlobalRate != null ? fallbackGlobalRate : new BigDecimal("12.50"));
+        boolean isConfigured = garage.getCommissionRate() != null;
+        BigDecimal effectiveRate = garage.getCommissionRate();
 
         List<ServiceItem> rawServices = (serviceItemRepository != null && garage.getId() != null)
                 ? serviceItemRepository.findByGarageIdAndDeletedFalseOrderByCreatedAtAsc(garage.getId())
@@ -844,6 +843,7 @@ public class FinanceAdminService {
                 .status(garage.getStatus() != null ? garage.getStatus().name() : GarageStatus.PENDING.name())
                 .isVerified(garage.getStatus() == GarageStatus.APPROVED)
                 .isOnline(isOnline)
+                .isConfigured(isConfigured)
                 .commissionRate(effectiveRate)
                 .walletBalance(garage.getWalletBalance() != null ? garage.getWalletBalance() : BigDecimal.ZERO)
                 .serviceCount(serviceDtos.size())

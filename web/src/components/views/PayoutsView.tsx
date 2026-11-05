@@ -286,7 +286,7 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
   return (
     <div className="flex flex-col w-full space-y-6">
       {/* Header màn hình Rút tiền */}
-      <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container">
         <div>
           <h1 className="text-2xl font-bold text-on-surface">
             Quản Lý Yêu Cầu Rút Tiền Ví Gara
@@ -295,15 +295,6 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
             Kiểm tra thông tin tài khoản ngân hàng thụ hưởng của Gara đối tác, xác nhận đã chuyển khoản giải ngân hoặc từ chối để hoàn tiền lại vào ví Gara.
           </p>
         </div>
-
-        <button
-          type="button"
-          disabled={isLoading}
-          onClick={() => void loadPayoutsFromDb()}
-          className="self-start lg:self-auto px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-sm font-semibold text-on-surface transition-colors cursor-pointer"
-        >
-          {isLoading ? 'Đang tải...' : 'Làm mới từ Database'}
-        </button>
       </div>
 
       {errorMsg && (
@@ -317,7 +308,7 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
         {/* KPI 1: Yêu cầu chờ duyệt */}
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            1. Yêu cầu chờ duyệt (PENDING / PROCESSING)
+            1. Yêu cầu chờ duyệt
           </div>
           <div className="text-2xl font-bold font-mono text-amber-600 mt-1.5">
             {kpiSummary.pendingCount} lệnh ({kpiSummary.pendingAmount.toLocaleString('vi-VN')} ₫)
@@ -330,7 +321,7 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
         {/* KPI 2: Đã giải ngân thành công */}
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            2. Đã giải ngân thành công (COMPLETED)
+            2. Đã giải ngân thành công
           </div>
           <div className="text-2xl font-bold font-mono text-emerald-700 mt-1.5">
             {kpiSummary.completedCount} lệnh ({kpiSummary.completedAmount.toLocaleString('vi-VN')} ₫)
@@ -343,7 +334,7 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
         {/* KPI 3: Đã từ chối hoàn ví */}
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            3. Đã từ chối &amp; hoàn ví (REJECTED)
+            3. Đã từ chối &amp; hoàn ví
           </div>
           <div className="text-2xl font-bold font-mono text-red-600 mt-1.5">
             {kpiSummary.rejectedCount} lệnh ({kpiSummary.rejectedAmount.toLocaleString('vi-VN')} ₫)
@@ -360,10 +351,10 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
           {(
             [
               { id: 'ALL', label: `Tất cả (${payoutList.length})` },
-              { id: 'PENDING', label: 'Chờ duyệt (PENDING)' },
-              { id: 'PROCESSING', label: 'Đang xử lý (PROCESSING)' },
-              { id: 'COMPLETED', label: 'Đã giải ngân (COMPLETED)' },
-              { id: 'REJECTED', label: 'Đã từ chối (REJECTED)' }
+              { id: 'PENDING', label: 'Chờ duyệt' },
+              { id: 'PROCESSING', label: 'Đang xử lý' },
+              { id: 'COMPLETED', label: 'Đã giải ngân' },
+              { id: 'REJECTED', label: 'Đã từ chối' }
             ] as { id: PayoutTabFilter; label: string }[]
           ).map((tab) => (
             <button
@@ -462,7 +453,7 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-sm text-secondary">
                       {isLoading
-                        ? 'Đang tải danh sách yêu cầu rút tiền từ Database...'
+                        ? 'Đang tải danh sách yêu cầu rút tiền...'
                         : 'Không có yêu cầu rút tiền nào khớp với điều kiện lọc.'}
                     </td>
                   </tr>
@@ -544,7 +535,7 @@ export const PayoutsView: React.FC<PayoutsViewProps> = ({ onShowToast }) => {
                     <div className="space-y-3 pt-1">
                       <div>
                         <label className="block text-xs font-bold uppercase text-secondary mb-1">
-                          Mã tham chiếu giao dịch ngân hàng (UNC / FT)
+                          Mã tham chiếu giao dịch ngân hàng
                         </label>
                         <input
                           type="text"

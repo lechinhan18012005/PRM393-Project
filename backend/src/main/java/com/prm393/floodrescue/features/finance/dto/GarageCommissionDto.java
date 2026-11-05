@@ -72,6 +72,13 @@ public class GarageCommissionDto {
     private Boolean isOnline;
 
     /**
+     * Cờ đánh dấu Gara đã được Admin thiết lập tỷ lệ chiết khấu chính thức hay chưa.
+     * `true`: Admin đã thiết lập riêng (`commissionRate != null`).
+     * `false`: Chưa thiết lập (`commissionRate == null`).
+     */
+    private Boolean isConfigured;
+
+    /**
      * Tỷ lệ phần trăm (%) hoa hồng nền tảng đang áp dụng riêng cho Gara này (ví dụ: 12.50 tương ứng 12.5%).
      * Cơ chế ưu tiên (Override Mechanism):
      *   - Nếu Gara đã được Admin thiết lập mức `commissionRate` riêng khác null trong bảng `garages`, hệ thống
