@@ -116,6 +116,7 @@ public class DataInitializer implements CommandLineRunner {
         User garageOwner2 = seedUserIfNotExists("garage_thanhcong", "thanhcong.garage@floodrescue.vn", "0900000032", "Password@123", "Đỗ Minh Thành (Chủ Trạm Sửa Xe Thành Công)", Role.GARAGE_OWNER);
         User garageOwner3 = seedUserIfNotExists("garage_saigon247", "saigon247.garage@floodrescue.vn", "0900000033", "Password@123", "Võ Quốc Bảo (Chủ Gara Lưu Động Sài Gòn 24/7)", Role.GARAGE_OWNER);
         User garageOwner4 = seedUserIfNotExists("garage_tuankiet", "tuankiet.garage@floodrescue.vn", "0900000034", "Password@123", "Phan Tuấn Kiệt (Chủ Gara Tuấn Kiệt Thủ Đức)", Role.GARAGE_OWNER);
+        User garageOwner5 = seedUserIfNotExists("garage_tanphu", "tanphu.garage@floodrescue.vn", "0900000035", "Password@123", "Trương Văn Dũng (Chủ Gara Hùng Dũng Tân Phú)", Role.GARAGE_OWNER);
 
         User fieldMechanic = seedUserIfNotExists("field_mechanic", "mechanic@floodrescue.vn", "0900000004", "Password@123", "Phạm Thợ Cứu Hộ (Đội Cơ Động 01)", Role.FIELD_MECHANIC);
         User customer = seedUserIfNotExists("customer", "customer@floodrescue.vn", "0900000005", "Password@123", "Hoàng Văn Khách (Chủ xe máy Honda SH)", Role.CUSTOMER);
@@ -143,18 +144,13 @@ public class DataInitializer implements CommandLineRunner {
                         .businessLicenseUrl("https://res.cloudinary.com/demo/image/upload/sample_license.jpg")
                         .idCardUrl("https://res.cloudinary.com/demo/image/upload/sample_cccd.jpg")
                         .status(GarageStatus.APPROVED)
-                        .commissionRate(new BigDecimal("12.50"))
+                        .commissionRate(null)
                         .walletBalance(new BigDecimal("24850000.00"))
                         .build();
                 newGara = garageRepository.save(newGara);
                 log.info("Seeded Garage profile: {} for owner: {}", newGara.getGarageName(), garageOwner.getUsername());
                 return newGara;
             });
-
-            if (garage1.getCommissionRate() == null) {
-                garage1.setCommissionRate(new BigDecimal("12.50"));
-                garage1 = garageRepository.save(garage1);
-            }
 
             // 3. Seed initial branches for garage 1
             List<GarageBranch> existingBranches = branchRepository.findByGarageIdOrderByCreatedAtAsc(garage1.getId());
@@ -236,7 +232,7 @@ public class DataInitializer implements CommandLineRunner {
                 garageOwner2,
                 "Trạm Sửa Xe Ngập Nước Thành Công",
                 "0900000032",
-                new BigDecimal("10.00"),
+                null,
                 new BigDecimal("18400000.00"),
                 "Trụ sở Quận 3 (Nguyễn Thị Minh Khai)",
                 "112 Nguyễn Thị Minh Khai, Phường Võ Thị Sáu, Quận 3, TP.HCM",
@@ -249,7 +245,7 @@ public class DataInitializer implements CommandLineRunner {
                 garageOwner3,
                 "Gara Lưu Động Sài Gòn 24/7",
                 "0900000033",
-                new BigDecimal("15.00"),
+                null,
                 new BigDecimal("14250000.00"),
                 "Trạm Cứu Hộ Khu Đông (Võ Văn Ngân)",
                 "218 Võ Văn Ngân, Phường Bình Thọ, TP. Thủ Đức, TP.HCM",
@@ -262,13 +258,26 @@ public class DataInitializer implements CommandLineRunner {
                 garageOwner4,
                 "Gara Tuấn Kiệt Thủ Đức",
                 "0900000034",
-                new BigDecimal("12.00"),
+                null,
                 new BigDecimal("9600000.00"),
                 "Chi nhánh Hiệp Bình Chánh (Kha Vạn Cân)",
                 "56 Kha Vạn Cân, Phường Hiệp Bình Chánh, TP. Thủ Đức, TP.HCM",
                 10.8280, 106.7235,
                 "Cứu hộ xe ngập nước tận nơi", ServiceType.CROSSING, new BigDecimal("150000"),
                 "Sấy khô hệ thống đánh lửa & ECU", ServiceType.REPAIR_ONSITE, new BigDecimal("250000")
+        );
+
+        Garage garage5 = seedPartnerGarageWithBranchAndServices(
+                garageOwner5,
+                "Gara Cứu Hộ Hùng Dũng Tân Phú (Mới duyệt eKYC)",
+                "0900000035",
+                null,
+                BigDecimal.ZERO,
+                "Trụ sở Tân Phú (Lũy Bán Bích)",
+                "789 Lũy Bán Bích, Phường Hòa Thạnh, Quận Tân Phú, TP.HCM",
+                10.7712, 106.6345,
+                "Chở xe ngập nước qua vùng ngập", ServiceType.CROSSING, new BigDecimal("130000"),
+                "Xử lý bugi & nổ máy xe ngập", ServiceType.REPAIR_ONSITE, new BigDecimal("160000")
         );
 
         // 7. Seed Finance, Payment, Dispute & Rating records for Web Admin dashboards
@@ -317,11 +326,6 @@ public class DataInitializer implements CommandLineRunner {
             return garageRepository.save(g);
         });
 
-        if (garage.getCommissionRate() == null) {
-            garage.setCommissionRate(commissionRate);
-            garage = garageRepository.save(garage);
-        }
-
         if (branchRepository.findByGarageIdOrderByCreatedAtAsc(garage.getId()).isEmpty()) {
             branchRepository.save(GarageBranch.builder()
                     .garage(garage)
@@ -367,58 +371,7 @@ public class DataInitializer implements CommandLineRunner {
                 ? g1CrossingService
                 : serviceItemRepository.findByGarageIdOrderByCreatedAtAsc(garage1.getId()).stream().findFirst().orElse(null);
         ServiceItem repairService = g1RepairService != null ? g1RepairService : defaultService;
-
-        // A. Seed CommissionConfig history (3 versions) if empty
-        if (commissionConfigRepository != null && commissionConfigRepository.count() == 0) {
-            commissionConfigRepository.save(CommissionConfig.builder()
-                    .globalRate(new BigDecimal("15.00"))
-                    .singleCrossingRate(new BigDecimal("15.00"))
-                    .batchCrossingRate(new BigDecimal("12.00"))
-                    .waterloggedRepairRate(new BigDecimal("16.00"))
-                    .surgeHoursRate(new BigDecimal("10.00"))
-                    .subsidyRate(new BigDecimal("12.00"))
-                    .baseFee(new BigDecimal("25000.00"))
-                    .perKmFee(new BigDecimal("10000.00"))
-                    .versionCode("v2.2")
-                    .changeSummary("Cấu hình phí hoa hồng giai đoạn vận hành đầu mùa mưa")
-                    .approvalReason("Quyết định phê duyệt khung phí ban đầu của Ban Giám đốc")
-                    .active(false)
-                    .updatedBy(admin)
-                    .build());
-
-            commissionConfigRepository.save(CommissionConfig.builder()
-                    .globalRate(new BigDecimal("13.50"))
-                    .singleCrossingRate(new BigDecimal("13.50"))
-                    .batchCrossingRate(new BigDecimal("10.50"))
-                    .waterloggedRepairRate(new BigDecimal("15.00"))
-                    .surgeHoursRate(new BigDecimal("9.00"))
-                    .subsidyRate(new BigDecimal("14.00"))
-                    .baseFee(new BigDecimal("25000.00"))
-                    .perKmFee(new BigDecimal("10000.00"))
-                    .versionCode("v2.3")
-                    .changeSummary("Điều chỉnh giảm 1.5% phí sàn hỗ trợ Gara đối tác mở rộng đội xe cứu hộ")
-                    .approvalReason("Biên bản họp điều hành tài chính quý III/2026")
-                    .active(false)
-                    .updatedBy(admin)
-                    .build());
-
-            commissionConfigRepository.save(CommissionConfig.builder()
-                    .globalRate(new BigDecimal("12.50"))
-                    .singleCrossingRate(new BigDecimal("12.50"))
-                    .batchCrossingRate(new BigDecimal("10.00"))
-                    .waterloggedRepairRate(new BigDecimal("15.00"))
-                    .surgeHoursRate(new BigDecimal("8.00"))
-                    .subsidyRate(new BigDecimal("15.00"))
-                    .baseFee(new BigDecimal("25000.00"))
-                    .perKmFee(new BigDecimal("10000.00"))
-                    .versionCode("v2.4")
-                    .changeSummary("Khởi tạo cấu hình hoa hồng chuẩn 12.5% cao điểm triều cường & mưa ngập")
-                    .approvalReason("Triển khai đồng bộ toàn hệ sinh thái cứu hộ TP.HCM")
-                    .active(true)
-                    .updatedBy(admin)
-                    .build());
-            log.info("Seeded 3 CommissionConfig history entries");
-        }
+        // A. CommissionConfig history is kept clean so Admin must configure it
 
         // B. Seed sample RescueOrders & PaymentTransactions if paymentTransactionRepository is empty
         if (paymentTransactionRepository != null && rescueOrderRepository != null

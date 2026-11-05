@@ -90,7 +90,8 @@ export interface GarageCommissionDto {
   // Cờ trạng thái Gara đang mở cửa trực tuyến nhận đơn cứu hộ
   isOnline: boolean;
   // Tỷ lệ phí chiết khấu nền tảng áp dụng riêng cho Gara này (ví dụ: 12.5 tương ứng 12.5%)
-  commissionRate: number;
+  isConfigured?: boolean;
+  commissionRate?: number | null;
   // Số dư hiện tại trong ví điện tử của Gara trên hệ thống (VNĐ)
   walletBalance: number;
   // Tổng số dịch vụ mà Gara này đã đăng ký cung cấp

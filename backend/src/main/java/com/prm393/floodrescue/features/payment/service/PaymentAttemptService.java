@@ -186,9 +186,13 @@ public class PaymentAttemptService {
             commissionRate = garage.getCommissionRate();
         } else {
             var cfg = financeAdminService.getActiveCommissionConfig();
-            commissionRate = order.getOrderType() == OrderType.SINGLE_CROSSING
-                    ? (cfg.getSingleCrossingRate() != null ? cfg.getSingleCrossingRate() : cfg.getGlobalRate())
-                    : (cfg.getWaterloggedRepairRate() != null ? cfg.getWaterloggedRepairRate() : cfg.getGlobalRate());
+            if (cfg != null && (cfg.getGlobalRate() != null || cfg.getSingleCrossingRate() != null)) {
+                commissionRate = order.getOrderType() == OrderType.SINGLE_CROSSING
+                        ? (cfg.getSingleCrossingRate() != null ? cfg.getSingleCrossingRate() : cfg.getGlobalRate())
+                        : (cfg.getWaterloggedRepairRate() != null ? cfg.getWaterloggedRepairRate() : cfg.getGlobalRate());
+            } else {
+                commissionRate = BigDecimal.ZERO;
+            }
         }
 
         // Công thức tính phí hoa hồng nền tảng: platformFee = ROUND(amount * commissionRate / 100, 2)

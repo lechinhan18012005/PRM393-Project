@@ -376,23 +376,14 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
       <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-on-surface">
-            Báo Cáo Tài Chính &amp; Kết Quả Kinh Doanh (Dữ Liệu Thực Từ Database)
+            Báo Cáo Tài Chính &amp; Kết Quả Kinh Doanh
           </h1>
           <p className="text-sm text-secondary mt-1">
-            Tổng hợp trực tiếp từ các bảng Giao dịch thanh toán, Cấu hình chiết khấu Gara, Yêu cầu rút tiền và Hồ sơ hoàn tiền trong Cơ sở dữ liệu.
+            Tổng hợp doanh thu GMV, hoa hồng nền tảng, hoàn tiền khiếu nại và số dư ví đối tác gara.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 self-start lg:self-auto">
-          <button
-            type="button"
-            disabled={isLoading}
-            onClick={() => void loadFinancialReportData()}
-            className="px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-sm font-semibold text-on-surface transition-colors cursor-pointer"
-          >
-            {isLoading ? 'Đang đồng bộ DB...' : 'Làm mới số liệu'}
-          </button>
-
           <button
             type="button"
             onClick={handleExportCsv}
@@ -413,7 +404,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            1. Tổng doanh thu (GMV)
+            1. Tổng doanh thu
           </div>
           <div className="text-xl font-bold font-mono text-on-surface mt-1.5">
             {pnlSummary.totalGmv.toLocaleString('vi-VN')} ₫
@@ -437,7 +428,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
 
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            3. Tổng hoàn trả khách (Refunds)
+            3. Tổng hoàn trả khách
           </div>
           <div className="text-xl font-bold font-mono text-red-600 mt-1.5">
             {pnlSummary.totalRefunds.toLocaleString('vi-VN')} ₫
@@ -461,13 +452,13 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
 
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            5. Giải ngân &amp; Số dư ví Gara
+            5. Thanh toán &amp; Số dư đối tác
           </div>
           <div className="text-base font-bold font-mono text-emerald-700 mt-1.5">
-            Đã rút: {pnlSummary.totalDisbursedPayouts.toLocaleString('vi-VN')} ₫
+            Đã giải ngân: {pnlSummary.totalDisbursedPayouts.toLocaleString('vi-VN')} ₫
           </div>
-          <div className="text-xs font-mono text-on-surface mt-1">
-            Số dư ví: <strong>{pnlSummary.totalGarageWalletBalances.toLocaleString('vi-VN')} ₫</strong>
+          <div className="text-xs text-secondary mt-1">
+            Số dư ví Gara: <strong className="font-mono text-on-surface">{pnlSummary.totalGarageWalletBalances.toLocaleString('vi-VN')} ₫</strong>
           </div>
         </div>
       </div>
@@ -480,7 +471,7 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
               Bảng Tổng Hợp Kết Quả Kinh Doanh (P&amp;L Summary)
             </h2>
             <p className="text-xs text-secondary mt-0.5">
-              Số liệu được tính toán tự động 100% từ các giao dịch thực tế trong cơ sở dữ liệu.
+              Số liệu được tính toán tự động từ các giao dịch hoàn tất trên nền tảng.
             </p>
           </div>
           <span className="font-mono text-xs px-2.5 py-1 rounded bg-surface-container text-on-surface font-bold">
@@ -490,12 +481,12 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
 
         <div className="space-y-2.5 text-sm">
           <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-surface-container-low font-bold text-on-surface">
-            <span>1. Tổng giá trị giao dịch cứu hộ thành công (GMV - {pnlSummary.paidOrdersCount} đơn)</span>
+            <span>1. Tổng giá trị giao dịch cứu hộ thành công ({pnlSummary.paidOrdersCount} đơn)</span>
             <span className="font-mono text-base">{pnlSummary.totalGmv.toLocaleString('vi-VN')} ₫</span>
           </div>
 
           <div className="flex items-center justify-between py-2 px-3 text-secondary border-b border-surface-container">
-            <span>2. Doanh thu phí chiết khấu nền tảng (Platform Commission)</span>
+            <span>2. Doanh thu phí chiết khấu nền tảng</span>
             <span className="font-mono font-bold text-primary">
               +{pnlSummary.platformCommission.toLocaleString('vi-VN')} ₫
             </span>
@@ -509,18 +500,32 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
           </div>
 
           <div className="flex items-center justify-between py-2 px-3 text-secondary border-b border-surface-container">
-            <span>4. Thực thu ròng phân bổ về ví Gara đối tác (Garage Net Revenue)</span>
+            <span>4. Thực thu ròng phân bổ về ví Gara đối tác</span>
             <span className="font-mono font-bold text-tertiary">
               {pnlSummary.garageNetRevenue.toLocaleString('vi-VN')} ₫
             </span>
           </div>
 
-          <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-emerald-50 border border-emerald-200 font-bold text-emerald-900">
-            <span>
-              5. Tổng đã giải ngân về ngân hàng Gara ({pnlSummary.completedPayoutsCount} lệnh) / Tổng số dư còn giữ trong ví Gara
+          <div className="flex items-center justify-between py-2 px-3 text-secondary border-b border-surface-container">
+            <div>
+              <span className="font-medium text-on-surface">5. Tổng đã giải ngân về tài khoản ngân hàng Gara</span>
+              <span className="text-xs text-secondary block">
+                Đã chuyển khoản thực tế ({pnlSummary.completedPayoutsCount} lệnh)
+              </span>
+            </div>
+            <span className="font-mono font-bold text-emerald-700">
+              {pnlSummary.totalDisbursedPayouts.toLocaleString('vi-VN')} ₫
             </span>
-            <span className="font-mono">
-              {pnlSummary.totalDisbursedPayouts.toLocaleString('vi-VN')} ₫ /{' '}
+          </div>
+
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-surface-container-low font-bold text-on-surface">
+            <div>
+              <span>6. Tổng số dư còn lưu giữ trong ví Gara</span>
+              <span className="text-xs text-secondary font-normal block">
+                Tiền của đối tác đang lưu trên nền tảng, chưa tạo lệnh rút
+              </span>
+            </div>
+            <span className="font-mono text-base text-primary">
               {pnlSummary.totalGarageWalletBalances.toLocaleString('vi-VN')} ₫
             </span>
           </div>
@@ -592,8 +597,8 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-sm text-secondary">
                     {isLoading
-                      ? 'Đang tổng hợp dữ liệu báo cáo từ Database...'
-                      : 'Chưa có dữ liệu Gara hoặc giao dịch trong Database.'}
+                      ? 'Đang tổng hợp dữ liệu báo cáo...'
+                      : 'Chưa có dữ liệu giao dịch hoặc gara đối tác.'}
                   </td>
                 </tr>
               )}
