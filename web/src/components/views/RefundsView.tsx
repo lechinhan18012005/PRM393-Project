@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // MÀN HÌNH QUYẾT ĐỊNH & THỰC THI HOÀN TIỀN KHIẾU NẠI (REFUNDS VIEW - UC-27)
 // Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Quản trị Tài chính & Hệ thống Admin
 // Mục đích (Yêu cầu #7):
@@ -37,8 +37,6 @@ interface RefundsViewProps {
 type RefundStatusTab =
   | 'ALL'
   | 'ESCALATED_TO_ADMIN'
-  | 'OPEN'
-  | 'UNDER_REVIEW'
   | 'RESOLVED_REFUND'
   | 'REJECTED';
 
@@ -206,10 +204,22 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
   /**
    * Lọc danh sách hồ sơ theo Tab trạng thái (`statusTab`) và từ khóa tìm kiếm (`searchQuery`).
    */
+  // Chỉ lọc các hồ sơ thuộc quyền Admin (chờ duyệt, đã hoàn tiền, đã từ chối), loại bỏ hoàn toàn UNDER_REVIEW và OPEN
+  const adminEligibleCases = useMemo(() => {
+    return refundCases.filter((c) => {
+      const f = extractDisputeFields(c);
+      return (
+        f.normalizedStatus === 'ESCALATED_TO_ADMIN' ||
+        f.normalizedStatus === 'RESOLVED_REFUND' ||
+        f.normalizedStatus === 'REJECTED'
+      );
+    });
+  }, [refundCases]);
+
   const filteredCases = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
-    return refundCases.filter((c) => {
+    return adminEligibleCases.filter((c) => {
       const f = extractDisputeFields(c);
 
       if (statusTab !== 'ALL' && f.normalizedStatus !== statusTab) {
@@ -228,17 +238,17 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
         (c.garageName || '').toLowerCase().includes(q)
       );
     });
-  }, [refundCases, statusTab, searchQuery]);
+  }, [adminEligibleCases, statusTab, searchQuery]);
 
   // Hồ sơ đang được chọn để hiển thị ở khung Phán quyết bên phải
   const selectedCase = useMemo(() => {
     return (
       filteredCases.find((c) => c.id === selectedId) ||
-      refundCases.find((c) => c.id === selectedId) ||
+      adminEligibleCases.find((c) => c.id === selectedId) ||
       filteredCases[0] ||
       null
     );
-  }, [filteredCases, refundCases, selectedId]);
+  }, [filteredCases, adminEligibleCases, selectedId]);
 
   /**
    * Đồng bộ giá trị mặc định của form phán quyết khi Admin chọn một hồ sơ khác.
@@ -353,9 +363,6 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
           <div className="text-2xl font-bold font-mono text-amber-600 mt-1.5">
             {kpiStats.pendingCount} hồ sơ
           </div>
-          <div className="text-xs text-secondary mt-1">
-            Bao gồm OPEN, UNDER_REVIEW và ESCALATED_TO_ADMIN
-          </div>
         </div>
 
         {/* KPI 2: Đã duyệt hoàn tiền */}
@@ -390,10 +397,8 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
         <div className="flex flex-wrap items-center gap-1.5 bg-surface-container-low p-1 rounded-lg border border-surface-container">
           {(
             [
-              { id: 'ALL', label: `Tất cả (${refundCases.length})` },
-              { id: 'ESCALATED_TO_ADMIN', label: 'Chờ Admin duyệt' },
-              { id: 'OPEN', label: 'Mới mở' },
-              { id: 'UNDER_REVIEW', label: 'Staff đang xem' },
+              { id: 'ALL', label: `Tất cả (${adminEligibleCases.length})` },
+              { id: 'ESCALATED_TO_ADMIN', label: 'Chưa xử lý' },
               { id: 'RESOLVED_REFUND', label: 'Đã hoàn tiền' },
               { id: 'REJECTED', label: 'Đã từ chối' }
             ] as { id: RefundStatusTab; label: string }[]
