@@ -187,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({
           <img src={logoImg} alt="HydroRescue Logo" className="w-8 h-8 rounded-lg object-contain" />
         </span>
         <span className="brand-text">
-          rescue<span className="text-primary font-bold">ops</span>
+          Hydro<span className="text-primary font-bold">Rescue</span>
           <small>ĐIỀU HÀNH CỨU HỘ</small>
         </span>
       </a>
@@ -240,7 +240,7 @@ export const Header: React.FC<HeaderProps> = ({
             className="demo-label"
             title="Dữ liệu mẫu phục vụ kiểm thử; kết nối backend theo môi trường"
           >
-            Bản demo
+
           </span>
         )}
 
