@@ -18,6 +18,9 @@ import com.prm393.floodrescue.features.garage.service.GarageService;
 import com.prm393.floodrescue.features.kyc.service.SecureStorageService;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
 
+import com.prm393.floodrescue.features.notification.entity.NotificationLevel;
+import com.prm393.floodrescue.features.notification.entity.NotificationType;
+import com.prm393.floodrescue.features.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -40,6 +43,9 @@ public class GarageServiceImpl implements GarageService {
     private final MechanicStaffRepository mechanicRepository;
     private final UserRepository userRepository;
     private final SecureStorageService secureStorageService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private NotificationService notificationService;
 
     /**
      * Trích xuất storageKey thực tế nếu URL là link Pre-signed KYC (/api/v1/kyc/files/view?key=...)
@@ -160,6 +166,21 @@ public class GarageServiceImpl implements GarageService {
                 "Garage registered successfully with id: {} by user: {}",
                 garage.getId(),
                 user.getUsername());
+        if (notificationService != null) {
+            try {
+                notificationService.sendToRole(
+                        Role.STAFF,
+                        "Hồ sơ đối tác Gara mới nộp eKYC: " + garage.getGarageName(),
+                        "Chủ Gara " + user.getFullName() + " vừa nộp hồ sơ đăng ký đối tác. Vui lòng thẩm định eKYC.",
+                        NotificationType.KYC_SUBMITTED,
+                        NotificationLevel.INFO,
+                        "kyc",
+                        garage.getId()
+                );
+            } catch (Exception e) {
+                // Ignore auxiliary notification failure
+            }
+        }
         return mapToResponse(garage);
     }
 
@@ -236,6 +257,21 @@ public class GarageServiceImpl implements GarageService {
             garage = garageRepository.save(garage);
         }
 
+        if (notificationService != null) {
+            try {
+                notificationService.sendToRole(
+                        Role.STAFF,
+                        "Hồ sơ đối tác Gara mới nộp eKYC: " + garage.getGarageName(),
+                        "Chủ Gara " + user.getFullName() + " vừa nộp hồ sơ đăng ký đối tác. Vui lòng thẩm định eKYC.",
+                        NotificationType.KYC_SUBMITTED,
+                        NotificationLevel.INFO,
+                        "kyc",
+                        garage.getId()
+                );
+            } catch (Exception e) {
+                // Ignore auxiliary notification failure
+            }
+        }
         return mapToResponse(garage);
     }
 
@@ -303,6 +339,33 @@ public class GarageServiceImpl implements GarageService {
 
         garage = garageRepository.save(garage);
         log.info("Garage id: {} moderated to status: {}", garageId, request.getStatus());
+        if (notificationService != null && garage.getOwner() != null) {
+            try {
+                if (request.getStatus() == GarageStatus.APPROVED) {
+                    notificationService.sendToUser(
+                            garage.getOwner().getId(),
+                            "Hồ sơ đối tác Gara đã được phê duyệt!",
+                            "Chúc mừng bạn! Hồ sơ eKYC của Gara " + garage.getGarageName() + " đã được xác minh thành công. Gara hiện có thể tiếp nhận các yêu cầu cứu hộ.",
+                            NotificationType.KYC_STATUS_CHANGED,
+                            NotificationLevel.INFO,
+                            "owner-dashboard",
+                            garage.getId()
+                    );
+                } else if (request.getStatus() == GarageStatus.REJECTED || request.getStatus() == GarageStatus.SUSPENDED) {
+                    notificationService.sendToUser(
+                            garage.getOwner().getId(),
+                            "Hồ sơ đối tác Gara " + (request.getStatus() == GarageStatus.REJECTED ? "bị từ chối" : "bị tạm đình chỉ"),
+                            "Lý do: " + request.getNote(),
+                            NotificationType.KYC_STATUS_CHANGED,
+                            NotificationLevel.CRITICAL,
+                            "owner-dashboard",
+                            garage.getId()
+                    );
+                }
+            } catch (Exception e) {
+                // Ignore auxiliary notification failure
+            }
+        }
         return mapToResponse(garage);
     }
 

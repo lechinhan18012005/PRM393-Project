@@ -17,6 +17,10 @@ import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
 import com.prm393.floodrescue.features.rescue.entity.TransportStage;
 import com.prm393.floodrescue.features.rescue.repository.RescueOrderEvidenceRepository;
 import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
+import com.prm393.floodrescue.features.auth.entity.Role;
+import com.prm393.floodrescue.features.notification.entity.NotificationLevel;
+import com.prm393.floodrescue.features.notification.entity.NotificationType;
+import com.prm393.floodrescue.features.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,6 +44,9 @@ public class RescueExecutionService {
     private final CloudinaryService cloudinaryService;
     private final RescueDispatchService dispatchService;
     private final MechanicAssignmentLifecycleService mechanicLifecycle;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private NotificationService notificationService;
 
     @Value("${app.rescue.arrival-threshold-meters:30.0}")
     private double arrivalThresholdMeters;
@@ -83,6 +90,19 @@ public class RescueExecutionService {
 
         if (distance > arrivalThresholdMeters) {
             long distRounded = Math.round(distance);
+            try {
+                notificationService.sendToRole(
+                        Role.STAFF,
+                        "Cảnh báo cự ly tiếp cận thợ > 30m #" + order.getOrderCode(),
+                        "Thợ " + mechanicUser.getUsername() + " cố xác nhận đến nơi nhưng còn cách điểm đón " + distRounded + "m.",
+                        NotificationType.MECHANIC_DISTANCE_WARNING,
+                        NotificationLevel.WARNING,
+                        "dashboard",
+                        order.getId()
+                );
+            } catch (Exception e) {
+                log.warn("Không thể gửi cảnh báo cự ly thợ: {}", e.getMessage());
+            }
             throw new BadRequestException(
                     "Bạn còn cách điểm đón " + distRounded + " mét, chưa đủ gần (<30m) để xác nhận đến nơi!"
             );

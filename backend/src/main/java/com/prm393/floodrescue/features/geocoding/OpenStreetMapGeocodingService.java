@@ -79,6 +79,82 @@ public class OpenStreetMapGeocodingService {
         return result;
     }
 
+    public GeocodingResult reverse(double latitude, double longitude) {
+        if (latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0) {
+            throw new BadRequestException("Tọa độ không hợp lệ");
+        }
+
+        String cacheKey = String.format(Locale.ROOT, "rev:%.5f,%.5f", latitude, longitude);
+        GeocodingResult cached = cache.get(cacheKey);
+        if (cached != null) return cached;
+
+        GeocodingResult result;
+        synchronized (rateLimitLock) {
+            cached = cache.get(cacheKey);
+            if (cached != null) return cached;
+            waitForPublicApiRateLimit();
+            lastUpstreamRequestAt = System.currentTimeMillis();
+            try {
+                result = reverseNominatim(latitude, longitude);
+            } catch (RestClientException ignored) {
+                result = null;
+            }
+            if (result == null) {
+                try {
+                    result = reversePhoton(latitude, longitude);
+                } catch (RestClientException photonError) {
+                    throw new BadRequestException(
+                            "Dịch vụ bản đồ OpenStreetMap đang tạm thời không khả dụng");
+                }
+            }
+        }
+
+        if (result == null) return null;
+        if (cache.size() >= MAX_CACHE_ENTRIES) cache.clear();
+        cache.put(cacheKey, result);
+        return result;
+    }
+
+    private GeocodingResult reverseNominatim(double latitude, double longitude) {
+        NominatimPlace place = nominatimClient.get()
+                .uri("/reverse?lat={lat}&lon={lon}&format=jsonv2&addressdetails=1",
+                        latitude, longitude)
+                .retrieve()
+                .body(NominatimPlace.class);
+        if (place == null || place.displayName() == null || place.displayName().isBlank()) {
+            return null;
+        }
+        double resLat = latitude;
+        double resLon = longitude;
+        if (place.latitude() != null && place.longitude() != null) {
+            try {
+                resLat = Double.parseDouble(place.latitude());
+                resLon = Double.parseDouble(place.longitude());
+            } catch (NumberFormatException ignored) {}
+        }
+        return GeocodingResult.builder()
+                .displayName(place.displayName())
+                .latitude(resLat)
+                .longitude(resLon)
+                .build();
+    }
+
+    private GeocodingResult reversePhoton(double latitude, double longitude) {
+        PhotonResponse response = photonClient.get()
+                .uri("/reverse?lat={lat}&lon={lon}", latitude, longitude)
+                .retrieve()
+                .body(PhotonResponse.class);
+        if (response == null || response.features() == null || response.features().length == 0) {
+            return null;
+        }
+        PhotonFeature feature = response.features()[0];
+        return GeocodingResult.builder()
+                .displayName(photonDisplayName(feature.properties()))
+                .latitude(latitude)
+                .longitude(longitude)
+                .build();
+    }
+
     private GeocodingResult searchNominatim(String query) {
         NominatimPlace[] places = nominatimClient.get()
                         .uri(
@@ -144,7 +220,7 @@ public class OpenStreetMapGeocodingService {
         }
     }
 
-    private record NominatimPlace(
+    record NominatimPlace(
             @JsonProperty("display_name") String displayName,
             @JsonProperty("lat") String latitude,
             @JsonProperty("lon") String longitude) {}

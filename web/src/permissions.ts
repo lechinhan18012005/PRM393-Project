@@ -24,6 +24,7 @@ export const screenModule: Record<ScreenId, ModuleType> = {
   'staff-accounts': 'admin',
   // Quản lý chi nhánh và đội ngũ thợ kỹ thuật - Thuộc phân hệ Chủ Gara (Owner)
   'garage-team': 'owner',
+  'garage-attendance': 'owner',
   // Quản lý doanh thu và số dư ví Gara - Thuộc phân hệ Chủ Gara (Owner)
   'garage-finance': 'owner',
   // Quản lý điều phối chuyến chở xe vượt ngập của Gara - Thuộc phân hệ Chủ Gara (Owner)

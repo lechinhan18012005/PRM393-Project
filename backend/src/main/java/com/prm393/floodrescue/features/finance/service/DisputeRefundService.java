@@ -17,6 +17,10 @@ import com.prm393.floodrescue.features.payment.entity.PaymentTransaction;
 import com.prm393.floodrescue.features.payment.repository.PaymentTransactionRepository;
 import com.prm393.floodrescue.features.rescue.entity.RescueOrder;
 import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
+import com.prm393.floodrescue.features.auth.entity.Role;
+import com.prm393.floodrescue.features.notification.entity.NotificationLevel;
+import com.prm393.floodrescue.features.notification.entity.NotificationType;
+import com.prm393.floodrescue.features.notification.service.NotificationService;
 import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +46,9 @@ public class DisputeRefundService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final GarageRepository garageRepository;
     private final WalletTransactionRepository walletTransactionRepository;
+
+    @Autowired(required = false)
+    private NotificationService notificationService;
 
     @Autowired(required = false)
     private SimpMessagingTemplate messagingTemplate;
@@ -173,6 +180,19 @@ public class DisputeRefundService {
 
         ServiceDispute saved = serviceDisputeRepository.save(dispute);
         log.info("Dispute {} created by customer {} for rescueOrder #{}", saved.getDisputeCode(), customer.getUsername(), rescueOrderId);
+        try {
+            notificationService.sendToRole(
+                    Role.STAFF,
+                    "Khiếu nại dịch vụ mới #" + saved.getDisputeCode(),
+                    "Khách hàng khiếu nại đơn #" + saved.getRescueCode() + ". Lý do: " + saved.getCustomerReason(),
+                    NotificationType.DISPUTE_NEW,
+                    NotificationLevel.CRITICAL,
+                    "fraud-disputes",
+                    saved.getId()
+            );
+        } catch (Exception e) {
+            log.warn("Không thể gửi thông báo khiếu nại mới tới Staff: {}", e.getMessage());
+        }
         DisputeResponse response = mapToResponse(saved);
         broadcastDisputeUpdate("/topic/staff/disputes", response);
         if (saved.getCustomer() != null) {
@@ -223,6 +243,21 @@ public class DisputeRefundService {
 
         ServiceDispute saved = serviceDisputeRepository.save(dispute);
         DisputeResponse response = mapToResponse(saved);
+        if (saved.getStatus() == DisputeStatus.ADMIN_APPROVAL) {
+            try {
+                notificationService.sendToRole(
+                        Role.ADMIN,
+                        "Hồ sơ khiếu nại chờ hoàn tiền #" + saved.getDisputeCode(),
+                        "Staff đã thẩm tra và đề xuất hoàn " + saved.getProposedRefundAmount() + " VND cho đơn #" + saved.getRescueCode() + ". Chờ Admin duyệt giải ngân.",
+                        NotificationType.DISPUTE_NEW,
+                        NotificationLevel.CRITICAL,
+                        "refunds",
+                        saved.getId()
+                );
+            } catch (Exception e) {
+                log.warn("Không thể gửi thông báo khiếu nại tới Admin: {}", e.getMessage());
+            }
+        }
         broadcastDisputeUpdate("/topic/admin/refunds", response);
         if (saved.getCustomer() != null) {
             broadcastDisputeUpdate("/topic/customer/disputes/" + saved.getCustomer().getId(), response);
@@ -274,7 +309,22 @@ public class DisputeRefundService {
             ServiceDispute saved = serviceDisputeRepository.save(dispute);
             DisputeResponse response = mapToResponse(saved);
             broadcastDisputeUpdate("/topic/staff/disputes", response);
-            broadcastDisputeUpdate("/topic/admin/refunds", response);
+            if (saved.getStatus() == DisputeStatus.ADMIN_APPROVAL) {
+            try {
+                notificationService.sendToRole(
+                        Role.ADMIN,
+                        "Hồ sơ khiếu nại chờ hoàn tiền #" + saved.getDisputeCode(),
+                        "Staff đã thẩm tra và đề xuất hoàn " + saved.getProposedRefundAmount() + " VND cho đơn #" + saved.getRescueCode() + ". Chờ Admin duyệt giải ngân.",
+                        NotificationType.DISPUTE_NEW,
+                        NotificationLevel.CRITICAL,
+                        "refunds",
+                        saved.getId()
+                );
+            } catch (Exception e) {
+                log.warn("Không thể gửi thông báo khiếu nại tới Admin: {}", e.getMessage());
+            }
+        }
+        broadcastDisputeUpdate("/topic/admin/refunds", response);
             if (saved.getCustomer() != null) {
                 broadcastDisputeUpdate("/topic/customer/disputes/" + saved.getCustomer().getId(), response);
             }
@@ -343,12 +393,53 @@ public class DisputeRefundService {
                 admin.getUsername(), refundAmount, saved.getDisputeCode(), source, refCode);
         DisputeResponse response = mapToResponse(saved);
         broadcastDisputeUpdate("/topic/staff/disputes", response);
+        if (saved.getStatus() == DisputeStatus.ADMIN_APPROVAL) {
+            try {
+                notificationService.sendToRole(
+                        Role.ADMIN,
+                        "Hồ sơ khiếu nại chờ hoàn tiền #" + saved.getDisputeCode(),
+                        "Staff đã thẩm tra và đề xuất hoàn " + saved.getProposedRefundAmount() + " VND cho đơn #" + saved.getRescueCode() + ". Chờ Admin duyệt giải ngân.",
+                        NotificationType.DISPUTE_NEW,
+                        NotificationLevel.CRITICAL,
+                        "refunds",
+                        saved.getId()
+                );
+            } catch (Exception e) {
+                log.warn("Không thể gửi thông báo khiếu nại tới Admin: {}", e.getMessage());
+            }
+        }
         broadcastDisputeUpdate("/topic/admin/refunds", response);
         if (saved.getCustomer() != null) {
             broadcastDisputeUpdate("/topic/customer/disputes/" + saved.getCustomer().getId(), response);
         }
         if (saved.getGarage() != null) {
             broadcastDisputeUpdate("/topic/garage/wallet/" + saved.getGarage().getId(), response);
+            try {
+                if (saved.getGarage().getOwner() != null && source == RefundSource.GARAGE_WALLET) {
+                    notificationService.sendToUser(
+                            saved.getGarage().getOwner().getId(),
+                            "Biến động ví Gara: Khấu trừ hoàn tiền khiếu nại #" + saved.getDisputeCode(),
+                            "Ví Gara bị trừ " + refundAmount + " VND do Admin duyệt hoàn tiền cho khách đơn #" + saved.getRescueCode() + ".",
+                            NotificationType.WALLET_BALANCE_CHANGED,
+                            NotificationLevel.WARNING,
+                            "owner-dashboard",
+                            saved.getId()
+                    );
+                }
+                if (saved.getCustomer() != null) {
+                    notificationService.sendToUser(
+                            saved.getCustomer().getId(),
+                            "Khiếu nại #" + saved.getDisputeCode() + " đã được hoàn tiền",
+                            "Yêu cầu hoàn tiền số tiền " + refundAmount + " VND của bạn đã được Admin phê duyệt thành công.",
+                            NotificationType.DISPUTE_REFUND_APPROVED,
+                            NotificationLevel.INFO,
+                            null,
+                            saved.getId()
+                    );
+                }
+            } catch (Exception e) {
+                log.warn("Không thể gửi thông báo hoàn tiền: {}", e.getMessage());
+            }
         }
         return response;
     }

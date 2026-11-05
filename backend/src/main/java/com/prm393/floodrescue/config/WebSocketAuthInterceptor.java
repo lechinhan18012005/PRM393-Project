@@ -34,6 +34,9 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
     private static final Pattern ORDER_TRACKING_TOPIC_PATTERN = Pattern.compile("^/topic/orders/(\\d+)/tracking$");
     private static final Pattern MECHANIC_OFFER_TOPIC_PATTERN = Pattern.compile("^/topic/mechanics/(\\d+)/offers$");
+    private static final Pattern NOTIFICATION_USER_TOPIC_PATTERN = Pattern.compile("^/topic/notifications/user/(\\d+)$");
+    private static final Pattern NOTIFICATION_ROLE_TOPIC_PATTERN = Pattern.compile("^/topic/notifications/role/([A-Za-z0-9_]+)$");
+    private static final String NOTIFICATION_BROADCAST_TOPIC = "/topic/notifications";
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -107,6 +110,11 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                 return message;
             }
 
+            if (destination.startsWith("/topic/notifications")) {
+                validateNotificationSubscription(accessor, destination);
+                return message;
+            }
+
             log.warn("Subscription to disallowed destination: {}", destination);
             throw new AccessDeniedException("Destination không được phép đăng ký: " + destination);
         }
@@ -169,5 +177,63 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             log.warn("User {} denied subscription to mechanic {} offers", user.getUsername(), mechanicStaffId);
             throw new AccessDeniedException("Bạn không có quyền nhận offer của thợ khác!");
         }
+    }
+
+    private void validateNotificationSubscription(StompHeaderAccessor accessor, String destination) {
+        if (accessor.getUser() == null) {
+            log.warn("Anonymous user attempted to subscribe to notifications: {}", destination);
+            throw new AccessDeniedException("Yêu cầu đăng nhập để nhận thông báo!");
+        }
+
+        Object authObj = accessor.getUser();
+        Object principal = authObj;
+        if (authObj instanceof org.springframework.security.core.Authentication auth) {
+            principal = auth.getPrincipal();
+        }
+
+        if (!(principal instanceof User user)) {
+            throw new AccessDeniedException("Không xác định được danh tính người dùng!");
+        }
+
+        // 1. Kênh thông báo chung toàn hệ thống: /topic/notifications
+        if (NOTIFICATION_BROADCAST_TOPIC.equals(destination)) {
+            return;
+        }
+
+        // 2. Kênh thông báo theo User: /topic/notifications/user/{userId}
+        Matcher userMatcher = NOTIFICATION_USER_TOPIC_PATTERN.matcher(destination);
+        if (userMatcher.matches()) {
+            Long targetUserId = Long.parseLong(userMatcher.group(1));
+            if (user.getRole() == com.prm393.floodrescue.features.auth.entity.Role.ADMIN
+                    || user.getRole() == com.prm393.floodrescue.features.auth.entity.Role.SUPER_ADMIN
+                    || user.getRole() == com.prm393.floodrescue.features.auth.entity.Role.STAFF
+                    || (user.getId() != null && user.getId().equals(targetUserId))) {
+                return;
+            }
+            log.warn("User {} (id: {}) denied subscription to user {} notifications",
+                    user.getUsername(), user.getId(), targetUserId);
+            throw new AccessDeniedException("Bạn không có quyền nhận thông báo của người dùng khác!");
+        }
+
+        // 3. Kênh thông báo theo Role: /topic/notifications/role/{role}
+        Matcher roleMatcher = NOTIFICATION_ROLE_TOPIC_PATTERN.matcher(destination);
+        if (roleMatcher.matches()) {
+            String targetRole = roleMatcher.group(1).toUpperCase();
+            String currentRole = user.getRole() != null ? user.getRole().name().toUpperCase() : "";
+
+            if (currentRole.equals(targetRole)) {
+                return;
+            }
+            if (user.getRole() == com.prm393.floodrescue.features.auth.entity.Role.SUPER_ADMIN && "ADMIN".equals(targetRole)) {
+                return;
+            }
+
+            log.warn("User {} with role {} denied subscription to role {} notifications",
+                    user.getUsername(), currentRole, targetRole);
+            throw new AccessDeniedException("Bạn không có quyền đăng ký kênh thông báo của vai trò khác!");
+        }
+
+        log.warn("Disallowed notification destination: {}", destination);
+        throw new AccessDeniedException("Kênh thông báo không hợp lệ: " + destination);
     }
 }

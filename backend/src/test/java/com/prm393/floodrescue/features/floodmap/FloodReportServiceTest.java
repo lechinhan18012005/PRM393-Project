@@ -280,6 +280,116 @@ class FloodReportServiceTest {
     }
 
     @Test
+    @DisplayName("UC-20 (4.2.4 Consensus): Chính người tạo báo cáo xác nhận nước rút -> Giải tỏa ngay EXPIRED")
+    void reportWaterRecededByCommunity_AuthorVotes_ResolvesImmediately() {
+        FloodReportPoint activePoint = FloodReportPoint.builder()
+                .id(422L)
+                .reportedBy(customer1)
+                .latitude(10.7420)
+                .longitude(106.7020)
+                .address("Đường Huỳnh Tấn Phát, Q.7")
+                .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
+                .moderationStatus(FloodStatus.APPROVED)
+                .recededConfirmCount(0)
+                .build();
+
+        when(floodReportRepository.findById(422L)).thenReturn(Optional.of(activePoint));
+        when(floodReportRepository.save(any(FloodReportPoint.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FloodReportResponse res = floodReportService.reportWaterRecededByCommunity(customer1, 422L);
+
+        assertNotNull(res);
+        assertEquals(FloodStatus.EXPIRED, res.getModerationStatus());
+        assertTrue(res.getModeratorNote().contains("Người tạo báo cáo"));
+        assertTrue(res.getModeratorNote().contains("Lê Hoàng Nam"));
+    }
+
+    @Test
+    @DisplayName("UC-20 (4.2.4 Consensus): Tác giả báo nước rút trên cụm nhiều người (clusterCount >= 2) -> Tính 1 phiếu, chờ đồng thuận")
+    void reportWaterRecededByCommunity_AuthorVotesOnClusteredPoint_RequiresConsensus() {
+        FloodReportPoint clusteredPoint = FloodReportPoint.builder()
+                .id(423L)
+                .reportedBy(customer1)
+                .latitude(10.7420)
+                .longitude(106.7020)
+                .address("Đường Huỳnh Tấn Phát, Q.7")
+                .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
+                .moderationStatus(FloodStatus.APPROVED)
+                .clusterCount(3) // Điểm ngập có 3 tin báo từ cộng đồng
+                .recededConfirmCount(0)
+                .build();
+
+        when(floodReportRepository.findById(423L)).thenReturn(Optional.of(clusteredPoint));
+        when(floodReportRepository.save(any(FloodReportPoint.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FloodReportResponse res = floodReportService.reportWaterRecededByCommunity(customer1, 423L);
+
+        assertNotNull(res);
+        assertEquals(FloodStatus.APPROVED, res.getModerationStatus());
+        assertEquals(1, res.getRecededConfirmCount());
+        assertTrue(res.getModeratorNote().contains("cụm ngập có 3 tin báo"));
+    }
+
+    @Test
+    @DisplayName("UC-20: Tác giả rút lại / hủy báo cáo khi đang PENDING -> Chuyển REJECTED thành công")
+    void cancelPendingReportByAuthor_AuthorCancels_Success() {
+        FloodReportPoint pendingPoint = FloodReportPoint.builder()
+                .id(424L)
+                .reportedBy(customer1)
+                .latitude(10.7420)
+                .longitude(106.7020)
+                .address("Đường Huỳnh Tấn Phát, Q.7")
+                .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
+                .moderationStatus(FloodStatus.PENDING)
+                .build();
+
+        when(floodReportRepository.findById(424L)).thenReturn(Optional.of(pendingPoint));
+        when(floodReportRepository.save(any(FloodReportPoint.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FloodReportResponse res = floodReportService.cancelPendingReportByAuthor(customer1, 424L);
+
+        assertNotNull(res);
+        assertEquals(FloodStatus.REJECTED, res.getModerationStatus());
+        assertTrue(res.getModeratorNote().contains("chủ động rút lại tin báo"));
+    }
+
+    @Test
+    @DisplayName("UC-20: Người khác cố tình hủy báo cáo không phải của mình -> Quăng lỗi BadRequestException")
+    void cancelPendingReportByAuthor_NotAuthor_ThrowsBadRequest() {
+        FloodReportPoint pendingPoint = FloodReportPoint.builder()
+                .id(425L)
+                .reportedBy(customer2)
+                .latitude(10.7420)
+                .longitude(106.7020)
+                .address("Đường Huỳnh Tấn Phát, Q.7")
+                .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
+                .moderationStatus(FloodStatus.PENDING)
+                .build();
+
+        when(floodReportRepository.findById(425L)).thenReturn(Optional.of(pendingPoint));
+
+        assertThrows(BadRequestException.class, () -> floodReportService.cancelPendingReportByAuthor(customer1, 425L));
+    }
+
+    @Test
+    @DisplayName("UC-20: Báo cáo đã APPROVED cố tình hủy -> Quăng lỗi BadRequestException")
+    void cancelPendingReportByAuthor_AlreadyApproved_ThrowsBadRequest() {
+        FloodReportPoint approvedPoint = FloodReportPoint.builder()
+                .id(426L)
+                .reportedBy(customer1)
+                .latitude(10.7420)
+                .longitude(106.7020)
+                .address("Đường Huỳnh Tấn Phát, Q.7")
+                .waterDepthLevel(DepthLevel.HALF_WHEEL_40CM)
+                .moderationStatus(FloodStatus.APPROVED)
+                .build();
+
+        when(floodReportRepository.findById(426L)).thenReturn(Optional.of(approvedPoint));
+
+        assertThrows(BadRequestException.class, () -> floodReportService.cancelPendingReportByAuthor(customer1, 426L));
+    }
+
+    @Test
     @DisplayName("UC-21: Staff thẩm định và duyệt điểm ngập (PENDING -> APPROVED) kèm ghi chú điều phối")
     void moderateReport_StaffApprovesReport_Success() {
         FloodReportPoint pendingPoint = FloodReportPoint.builder()

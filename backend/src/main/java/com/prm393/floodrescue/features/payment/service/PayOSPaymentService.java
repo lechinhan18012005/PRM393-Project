@@ -22,6 +22,10 @@ import com.prm393.floodrescue.features.payment.entity.PaymentMethod;
 import com.prm393.floodrescue.features.payment.entity.PaymentStatus;
 import com.prm393.floodrescue.features.payment.entity.PaymentTransaction;
 import com.prm393.floodrescue.features.payment.repository.PaymentTransactionRepository;
+import com.prm393.floodrescue.features.auth.entity.Role;
+import com.prm393.floodrescue.features.notification.entity.NotificationLevel;
+import com.prm393.floodrescue.features.notification.entity.NotificationType;
+import com.prm393.floodrescue.features.notification.service.NotificationService;
 import com.prm393.floodrescue.features.rescue.entity.OrderType;
 import com.prm393.floodrescue.features.rescue.entity.RescueOrder;
 import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
@@ -68,6 +72,9 @@ public class PayOSPaymentService {
     private final GatewayProvisionService gatewayProvisionService;
     private final PaymentSettlementService settlementService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private NotificationService notificationService;
+
     // =========================================================================
     // UC-18: Create Payment Link (PayOS VietQR or Cash) & Split Calculation
     // =========================================================================
@@ -93,6 +100,21 @@ public class PayOSPaymentService {
         String expectedSignature = payOSConfig.createWebhookDataSignature(dataMap);
 
         if (payload.getSignature() == null || !expectedSignature.equalsIgnoreCase(payload.getSignature().trim())) {
+            if (notificationService != null) {
+                try {
+                    notificationService.sendToRole(
+                            Role.ADMIN,
+                            "Cảnh báo bảo mật: Sai chữ ký Webhook PayOS",
+                            "Phát hiện yêu cầu Webhook PayOS có chữ ký HMAC không hợp lệ cho mã đơn: " + (data != null ? data.getOrderCode() : "N/A"),
+                            NotificationType.PAYMENT_WEBHOOK_FRAUD,
+                            NotificationLevel.CRITICAL,
+                            "reconciliation",
+                            null
+                    );
+                } catch (Exception e) {
+                    // Ignore auxiliary notification failure
+                }
+            }
             throw new BadRequestException("Chữ ký bảo mật Webhook PayOS (HMAC-SHA256) không hợp lệ");
         }
 

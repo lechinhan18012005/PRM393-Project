@@ -66,4 +66,16 @@ public class FloodReportController {
         FloodReportResponse response = floodReportService.reportWaterRecededByCommunity(user, id);
         return ResponseEntity.ok(ApiResponse.success("Đã ghi nhận báo cáo nước rút! Cảm ơn bạn đã đóng góp cho cộng đồng.", response));
     }
+
+    // UC-20: Tác giả rút lại / hủy báo cáo khi chưa được duyệt (PENDING)
+    @DeleteMapping("/{id}")
+    @Operation(summary = "UC-20: Tác giả rút lại / hủy báo cáo khi chưa được duyệt (PENDING)")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<ApiResponse<FloodReportResponse>> cancelReport(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id
+    ) {
+        FloodReportResponse response = floodReportService.cancelPendingReportByAuthor(user, id);
+        return ResponseEntity.ok(ApiResponse.success("Đã hủy và rút lại báo cáo điểm ngập thành công.", response));
+    }
 }

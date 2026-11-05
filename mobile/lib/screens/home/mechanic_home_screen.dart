@@ -363,7 +363,17 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   }
 
   Future<void> _toggleAvailability() async {
-    await changeMechanicAvailability(context);
+    final profile = _mechanicProviderSafe?.myProfile;
+    final isOnline = profile?.isOnline ?? false;
+    String? pauseReason;
+    if (isOnline) {
+      pauseReason = await showPauseReasonDialog(context);
+      if (pauseReason == null || !mounted) {
+        // Tho bam Huy hoac dong popup, giu nguyen trang thai truc tuyen
+        return;
+      }
+    }
+    await changeMechanicAvailability(context, pauseReason: pauseReason);
     if (mounted && _isAppForeground) {
       _syncTimers();
       _pollOffersOnce();
@@ -654,7 +664,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
                         ? 'Đang bận'
                         : profile.isOnline
                         ? 'Đang nhận yêu cầu'
-                        : 'Tạm nghỉ',
+                        : (profile.isPaused ? 'Đang tạm nghỉ' : 'Tạm nghỉ'),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -666,7 +676,9 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
                         ? (_gpsUnavailable
                               ? 'GPS không khả dụng · Cần bật vị trí để nhận cuốc'
                               : 'Đang trực tuyến · Tọa độ GPS đã đồng bộ')
-                        : 'Trạng thái đồng bộ với gara',
+                        : (profile?.isPaused == true && profile?.pauseReason != null
+                              ? 'Lý do: ${profile!.pauseReason}'
+                              : 'Trạng thái đồng bộ với gara'),
                     style: TextStyle(
                       fontSize: 11,
                       color: _gpsUnavailable && profile?.isOnline == true

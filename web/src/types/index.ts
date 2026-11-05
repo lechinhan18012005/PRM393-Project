@@ -18,6 +18,7 @@ export type ScreenId =
   | 'owner-dashboard'
   | 'services'
   | 'garage-team'
+  | 'garage-attendance'
   | 'garage-finance'
   | 'garage-transport'
   | 'staff-accounts';
@@ -111,6 +112,7 @@ export interface FloodPoint {
   depthCm: number;
   level: 1 | 2 | 3;
   severity: 'RED' | 'ORANGE' | 'YELLOW';
+  moderationStatus?: 'PENDING' | 'APPROVED' | 'EXPIRED' | 'REJECTED';
   reportsCount: number;
   confidenceScore: number;
   coords: { lat: number; lng: number };

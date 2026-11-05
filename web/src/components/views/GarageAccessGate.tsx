@@ -128,7 +128,7 @@ export function GarageAccessGate({ children, screen }: { children: React.ReactNo
             kết nối mọi hành trình.
           </h2>
           <p>
-            Hồ sơ pháp lý được thẩm định chặt chẽ trước khi gara có thể thêm chi nhánh, mời thợ sửa xe và niêm yết bảng giá cứu hộ ngập nước.
+            Hồ sơ pháp lý được thẩm định chặt chẽ trước khi gara có thể thêm chi nhánh, thêm thợ cứu hộ và niêm yết bảng giá cứu hộ ngập nước.
           </p>
           <ol>
             <li>Điền thông tin pháp lý của gara</li>

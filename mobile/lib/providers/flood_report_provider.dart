@@ -164,16 +164,45 @@ class FloodReportProvider with ChangeNotifier {
   }
 
   // UC-20 (4.2.4): Cộng đồng gửi phản hồi nước đã rút tại điểm ngập
-  Future<bool> reportWaterReceded(int id) async {
+  Future<FloodReportModel?> reportWaterReceded(int id) async {
     try {
       final updated = await _floodService.reportWaterReceded(id);
       final index = _floodPoints.indexWhere((p) => p.id == id);
       if (index != -1) {
-        _floodPoints.removeAt(index);
+        if (updated.moderationStatus == 'EXPIRED') {
+          _floodPoints.removeAt(index);
+        } else {
+          _floodPoints[index] = updated;
+        }
       }
       final myIndex = _myFloodReports.indexWhere((p) => p.id == id);
       if (myIndex != -1) {
         _myFloodReports[myIndex] = updated;
+      }
+      notifyListeners();
+      return updated;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<String> uploadPhoto(List<int> bytes, String fileName) async {
+    return await _floodService.uploadImageBytes(bytes, fileName);
+  }
+
+  // UC-20: Tác giả rút lại / hủy báo cáo khi đang chờ duyệt PENDING
+  Future<bool> cancelPendingReport(int id) async {
+    try {
+      final updated = await _floodService.cancelPendingReport(id);
+      final myIndex = _myFloodReports.indexWhere((p) => p.id == id);
+      if (myIndex != -1) {
+        _myFloodReports[myIndex] = updated;
+      }
+      final activeIndex = _floodPoints.indexWhere((p) => p.id == id);
+      if (activeIndex != -1) {
+        _floodPoints.removeAt(activeIndex);
       }
       notifyListeners();
       return true;
@@ -182,9 +211,5 @@ class FloodReportProvider with ChangeNotifier {
       notifyListeners();
       return false;
     }
-  }
-
-  Future<String> uploadPhoto(List<int> bytes, String fileName) async {
-    return await _floodService.uploadImageBytes(bytes, fileName);
   }
 }

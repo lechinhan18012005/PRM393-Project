@@ -49,6 +49,36 @@ class OpenStreetMapGeocodingServiceTest {
     }
 
     @Test
+    void reversesCoordinatesToAddressAndCachesResult() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(queryParam("lat", "10.849298"))
+                .andExpect(queryParam("lon", "106.812682"))
+                .andExpect(queryParam("format", "jsonv2"))
+                .andExpect(header("User-Agent", "HydroRescueVietnam-Test/1.0"))
+                .andRespond(withSuccess("""
+                        {"display_name":"Đường Lê Văn Việt, Phường Tăng Nhơn Phú A, Thành phố Thủ Đức, Thành phố Hồ Chí Minh, Việt Nam",
+                         "lat":"10.849298","lon":"106.812682"}
+                        """, MediaType.APPLICATION_JSON));
+
+        OpenStreetMapGeocodingService service = new OpenStreetMapGeocodingService(
+                builder,
+                "https://nominatim.openstreetmap.org",
+                "https://photon.komoot.io",
+                "HydroRescueVietnam-Test/1.0");
+
+        GeocodingResult first = service.reverse(10.849298, 106.812682);
+        GeocodingResult cached = service.reverse(10.849298, 106.812682);
+
+        assertEquals(10.849298, first.getLatitude());
+        assertEquals(106.812682, first.getLongitude());
+        assertEquals("Đường Lê Văn Việt, Phường Tăng Nhơn Phú A, Thành phố Thủ Đức, Thành phố Hồ Chí Minh, Việt Nam",
+                first.getDisplayName());
+        assertEquals(first, cached);
+        server.verify();
+    }
+
+    @Test
     void fallsBackToPhotonWhenNominatimIsUnavailable() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

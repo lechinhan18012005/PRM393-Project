@@ -114,6 +114,11 @@ export interface Mechanic {
   shiftName: string;
   workingStatus: string;
   active: boolean;
+  isManualOverride?: boolean;
+  pausedAt?: string | null;
+  pauseReason?: string | null;
+  lastHeartbeatAt?: string | null;
+  lastGpsUpdatedAt?: string | null;
 }
 
 /**

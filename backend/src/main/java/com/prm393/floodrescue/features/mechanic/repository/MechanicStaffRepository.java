@@ -24,6 +24,7 @@ public interface MechanicStaffRepository extends JpaRepository<MechanicStaff, Lo
     @Query("SELECT m FROM MechanicStaff m WHERE m.id = :id")
     Optional<MechanicStaff> findByIdWithLock(@Param("id") Long id);
 
+    List<MechanicStaff> findByGarageId(Long garageId);
     List<MechanicStaff> findByGarageIdOrderByCreatedAtDesc(Long garageId);
     List<MechanicStaff> findByBranchId(Long branchId);
     List<MechanicStaff> findByWorkingStatus(MechanicStatus status);
