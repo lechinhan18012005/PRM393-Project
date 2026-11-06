@@ -225,9 +225,25 @@ void main() {
     await tester.ensureVisible(find.byType(Switch));
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
+    expect(find.text('Xác nhận nghỉ'), findsOneWidget);
+    await tester.tap(find.text('Xác nhận nghỉ'));
+    await tester.pumpAndSettle();
     expect(p.status, 'OFFLINE');
     expect(p.calls, 1);
     expect(find.text('Đã chuyển sang trạng thái tạm nghỉ.'), findsOneWidget);
+  });
+
+  testWidgets('Cancelling pause dialog retains online status and skips server call', (tester) async {
+    final p = _Mechanic();
+    await _show(tester, mechanic: p);
+    await tester.ensureVisible(find.byType(Switch));
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(find.text('Vui lòng chọn lý do tạm nghỉ trong ca trực:'), findsOneWidget);
+    await tester.tap(find.text('Hủy'));
+    await tester.pumpAndSettle();
+    expect(p.status, 'AVAILABLE');
+    expect(p.calls, 0);
   });
   testWidgets('Mechanic tools expose real rescue order history', (
     tester,
@@ -256,6 +272,9 @@ void main() {
     await _show(tester, mechanic: p);
     await tester.ensureVisible(find.byType(Switch));
     await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(find.text('Xác nhận nghỉ'), findsOneWidget);
+    await tester.tap(find.text('Xác nhận nghỉ'));
     await tester.pumpAndSettle();
     expect(p.status, 'AVAILABLE');
     expect(p.calls, 1);

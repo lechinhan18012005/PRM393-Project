@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/core/services/geocoding_service.dart';
 import 'package:mobile/providers/flood_report_provider.dart';
 import 'package:mobile/screens/customer/community_flood_report_screen.dart';
 import 'package:provider/provider.dart';
@@ -204,4 +205,42 @@ void main() {
     // Verify validation snackbar
     expect(find.text('Vui lòng nhập tên đường / địa chỉ điểm ngập!'), findsOneWidget);
   });
+
+  testWidgets('UC-20 Widget Test: Tapping map pin triggers reverse geocoding to auto-fill address', (WidgetTester tester) async {
+    final mockGeocoding = _MockGeocodingService();
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => FloodReportProvider()),
+        ],
+        child: MaterialApp(
+          home: CommunityFloodReportScreen(geocodingService: mockGeocoding),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify initial address field is empty
+    final addressField = find.widgetWithText(TextField, 'Tên đường / Số nhà / Địa chỉ chi tiết *');
+    expect(addressField, findsOneWidget);
+
+    // Tap on the FlutterMap
+    await tester.tap(find.byType(FlutterMap));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    // Verify address field is automatically populated with the reverse geocoded address
+    expect(find.text('Đường Lê Văn Việt, Phường Tăng Nhơn Phú A, TP. Thủ Đức'), findsOneWidget);
+  });
+}
+
+class _MockGeocodingService extends GeocodingService {
+  @override
+  Future<GeocodingResult?> reverse(double latitude, double longitude) async {
+    return GeocodingResult(
+      displayName: 'Đường Lê Văn Việt, Phường Tăng Nhơn Phú A, TP. Thủ Đức',
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
 }

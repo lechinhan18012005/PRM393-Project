@@ -2,7 +2,11 @@ package com.prm393.floodrescue.features.finance.service;
 
 import com.prm393.floodrescue.common.exception.BadRequestException;
 import com.prm393.floodrescue.common.exception.ResourceNotFoundException;
+import com.prm393.floodrescue.features.auth.entity.Role;
 import com.prm393.floodrescue.features.auth.entity.User;
+import com.prm393.floodrescue.features.notification.entity.NotificationLevel;
+import com.prm393.floodrescue.features.notification.entity.NotificationType;
+import com.prm393.floodrescue.features.notification.service.NotificationService;
 import com.prm393.floodrescue.features.finance.dto.*;
 import com.prm393.floodrescue.features.finance.entity.*;
 import com.prm393.floodrescue.features.finance.repository.CommissionConfigRepository;
@@ -116,6 +120,9 @@ public class FinanceAdminService {
      */
     @Autowired(required = false)
     private ServiceDisputeRepository serviceDisputeRepository;
+
+    @Autowired(required = false)
+    private NotificationService notificationService;
 
     // =========================================================================
     // UC-24: Configure Platform Commission Rate (Cấu hình Hoa hồng Nền tảng)
@@ -535,6 +542,21 @@ public class FinanceAdminService {
 
         // Lưu phiếu rút tiền và tính lại số dư khả dụng mới sau khi khoản tiền này được phong tỏa tạm thời
         PayoutRequest saved = payoutRequestRepository.save(payout);
+        if (notificationService != null) {
+            try {
+                notificationService.sendToRole(
+                        Role.ADMIN,
+                        "Yêu cầu rút tiền ví Gara mới #" + saved.getRequestCode(),
+                        "Gara " + (garage.getGarageName() != null ? garage.getGarageName() : "Đối tác") + " đề nghị rút " + saved.getRequestedAmount() + " VND về tài khoản " + saved.getAccountNumber() + " (" + saved.getBankName() + ").",
+                        NotificationType.PAYOUT_REQUEST_NEW,
+                        NotificationLevel.WARNING,
+                        "payouts",
+                        saved.getId()
+                );
+            } catch (Exception e) {
+                // Ignore auxiliary notification failure
+            }
+        }
         BigDecimal newAvailableBalance = availableBalance.subtract(request.getRequestedAmount());
         return mapToPayoutResponse(saved, newAvailableBalance.max(BigDecimal.ZERO));
     }
@@ -655,6 +677,33 @@ public class FinanceAdminService {
 
         // Lưu cập nhật PayoutRequest và trả về kết quả kèm số dư khả dụng mới nhất của Gara
         PayoutRequest saved = payoutRequestRepository.save(payout);
+        if (notificationService != null && garage.getOwner() != null) {
+            try {
+                if (targetStatus == PayoutStatus.TRANSFERRED) {
+                    notificationService.sendToUser(
+                            garage.getOwner().getId(),
+                            "Yêu cầu rút tiền #" + saved.getRequestCode() + " đã được giải ngân",
+                            "Số tiền " + saved.getRequestedAmount() + " VND đã được chuyển khoản tới tài khoản ngân hàng của bạn (" + saved.getBankName() + ").",
+                            NotificationType.PAYOUT_STATUS_CHANGED,
+                            NotificationLevel.INFO,
+                            "owner-dashboard",
+                            saved.getId()
+                    );
+                } else if (targetStatus == PayoutStatus.REJECTED) {
+                    notificationService.sendToUser(
+                            garage.getOwner().getId(),
+                            "Yêu cầu rút tiền #" + saved.getRequestCode() + " bị từ chối",
+                            "Lý do từ chối: " + saved.getAdminNote(),
+                            NotificationType.PAYOUT_STATUS_CHANGED,
+                            NotificationLevel.CRITICAL,
+                            "owner-dashboard",
+                            saved.getId()
+                    );
+                }
+            } catch (Exception e) {
+                // Ignore auxiliary notification failure
+            }
+        }
         return mapToPayoutResponse(saved, calculateAvailableBalance(garage));
     }
 

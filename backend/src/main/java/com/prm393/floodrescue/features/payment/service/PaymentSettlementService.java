@@ -10,6 +10,9 @@ import com.prm393.floodrescue.features.payment.repository.PaymentTransactionRepo
 import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
 import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
 import com.prm393.floodrescue.features.rescue.service.*;
+import com.prm393.floodrescue.features.notification.entity.NotificationLevel;
+import com.prm393.floodrescue.features.notification.entity.NotificationType;
+import com.prm393.floodrescue.features.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +29,9 @@ public class PaymentSettlementService {
     private final WalletTransactionRepository ledger;
     private final RescueExecutionService execution;
     private final RescueDispatchService dispatch;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private NotificationService notificationService;
 
     // Global lock order: rescue order -> payment -> garage wallet. No network I/O here.
     @Transactional
@@ -88,6 +94,21 @@ public class PaymentSettlementService {
                 .balanceAfter(garage.getWalletBalance()).transactionType(WalletTransactionType.ORDER_INCOME)
                 .referenceCode("PAYOS-" + code).description("Thu hộ PayOS đơn " + tx.getRescueCode()).build());
         payments.save(tx);
+        if (notificationService != null && garage.getOwner() != null) {
+            try {
+                notificationService.sendToUser(
+                        garage.getOwner().getId(),
+                        "Biến động ví Gara: +" + tx.getNetGarageAmount() + " VND",
+                        "Tiền cứu hộ đơn #" + tx.getRescueCode() + " đã được cộng vào ví thành công.",
+                        NotificationType.WALLET_BALANCE_CHANGED,
+                        NotificationLevel.INFO,
+                        "owner-dashboard",
+                        tx.getId()
+                );
+            } catch (Exception e) {
+                // Ignore auxiliary notification failure
+            }
+        }
         execution.markPaymentSuccessful(orderId, tx.getId(), code, "PAYOS", tx.getAmount(), now);
         return PayOSPaymentService.mapToResponse(tx);
     }

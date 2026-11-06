@@ -24,4 +24,15 @@ public class GeocodingController {
                 : "Đã tìm thấy địa chỉ trên OpenStreetMap";
         return ResponseEntity.ok(ApiResponse.ok(result, message));
     }
+
+    @GetMapping("/reverse")
+    public ResponseEntity<ApiResponse<GeocodingResult>> reverse(
+            @RequestParam("lat") double lat,
+            @RequestParam("lon") double lon) {
+        GeocodingResult result = geocodingService.reverse(lat, lon);
+        String message = result == null
+                ? "Không tìm thấy địa chỉ cho tọa độ này"
+                : "Đã tìm thấy địa chỉ từ tọa độ";
+        return ResponseEntity.ok(ApiResponse.ok(result, message));
+    }
 }

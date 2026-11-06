@@ -40,8 +40,11 @@ import {
 } from './permissions';
 import { financeApi } from './services/financeApi';
 import { rescueApi } from './services/rescueApi';
+import { notificationApi, NotificationItem } from './services/notificationApi';
+import { connectNotificationSocket } from './services/notificationSocket';
 import { GarageAccessGate } from './components/views/GarageAccessGate';
 import { GarageManagementView } from './components/views/GarageManagementView';
+import { GarageAttendanceView } from './components/views/GarageAttendanceView';
 import { StaffAccountsView } from './components/views/StaffAccountsView';
 import { InvitationActivationView } from './components/views/InvitationActivationView';
 import { GarageOperationsView } from './components/views/GarageOperationsView';
@@ -77,13 +80,94 @@ interface ToastItem {
 
 export interface SystemAlert {
   id: string;
+  dbId?: number;
   title: string;
   desc: string;
   time: string;
   level: 'CRITICAL' | 'WARNING' | 'INFO';
   isRead?: boolean;
   targetScreen?: ScreenId;
+  type?: string;
+  targetId?: number | null;
 }
+
+const mapNotificationToAlert = (item: NotificationItem, userRole?: string): SystemAlert => {
+  let targetScreen: ScreenId = 'dashboard';
+  if (item.targetScreen) {
+    targetScreen = item.targetScreen as ScreenId;
+  } else {
+    switch (item.type) {
+      case 'SOS_NEW_ORDER':
+      case 'DISPATCH_FAILED':
+      case 'MECHANIC_DISTANCE_WARNING':
+        targetScreen = 'dashboard';
+        break;
+      case 'ORDER_ASSIGNED':
+      case 'ORDER_COMPLETED':
+        targetScreen = 'owner-dashboard';
+        break;
+      case 'DISPUTE_NEW':
+        targetScreen = userRole === 'STAFF' ? 'disputes' : 'refunds';
+        break;
+      case 'DISPUTE_REFUND_APPROVED':
+        targetScreen = userRole === 'ADMIN' ? 'refunds' : 'garage-finance';
+        break;
+      case 'PAYOUT_REQUEST_NEW':
+        targetScreen = 'payouts';
+        break;
+      case 'PAYOUT_STATUS_CHANGED':
+        targetScreen = 'garage-finance';
+        break;
+      case 'WALLET_BALANCE_CHANGED':
+        targetScreen = 'garage-finance';
+        break;
+      case 'KYC_SUBMITTED':
+        targetScreen = 'verification';
+        break;
+      case 'KYC_STATUS_CHANGED':
+        targetScreen = 'owner-dashboard';
+        break;
+      case 'PRICE_CEILING_EXCEEDED':
+        targetScreen = userRole === 'STAFF' ? 'verification' : 'services';
+        break;
+      case 'PAYMENT_WEBHOOK_FRAUD':
+        targetScreen = 'payos-reconciliation';
+        break;
+      default:
+        targetScreen =
+          userRole === 'GARAGE_OWNER'
+            ? 'owner-dashboard'
+            : userRole === 'STAFF'
+              ? 'dashboard'
+              : 'overview';
+    }
+  }
+
+  const timeStr = item.createdAt
+    ? new Date(item.createdAt).toLocaleTimeString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }) +
+      ' - ' +
+      new Date(item.createdAt).toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit'
+      })
+    : 'Vừa xong';
+
+  return {
+    id: `DB-${item.id}`,
+    dbId: item.id,
+    title: item.title,
+    desc: item.message,
+    time: timeStr,
+    level: item.level,
+    isRead: item.isRead,
+    targetScreen,
+    type: item.type,
+    targetId: item.targetId
+  };
+};
 
 const getDefaultPath = (role: Role): string => {
   return ROLE_DEFAULT_ROUTE[role] || '/login';
@@ -105,21 +189,30 @@ function MainDashboard() {
   // Dữ liệu cho các màn hình duyệt hồ sơ Gara của phân hệ Staff
   const [applicants] = useState(INITIAL_GARAGE_APPLICANTS);
 
-  // Đồng bộ cảnh báo thời gian thực từ Backend Orders & Finance APIs
+  // Đồng bộ cảnh báo thời gian thực từ Database Notification API & WebSocket STOMP
   useEffect(() => {
     if (!isAuthenticated || !user) return;
     let isMounted = true;
 
     const loadLiveAlerts = async () => {
       try {
+        // 1. Tải danh sách thông báo chính thức được lưu trong Database
+        const dbNotifs = await notificationApi.getNotifications(false, 0, 30).catch(() => []);
+        if (!isMounted) return;
+
+        const dbAlerts: SystemAlert[] = dbNotifs.map((item) => mapNotificationToAlert(item, user.role));
+
+        // 2. Dự phòng (Fallback): Đồng bộ thêm dữ liệu trạng thái đơn trực tiếp khi cần
+        const liveFallbackAlerts: SystemAlert[] = [];
+
         if (user.role === 'STAFF' || user.role === 'ADMIN') {
           const orders = await rescueApi.getStaffOrders().catch(() => []);
           if (!isMounted) return;
           const pending = orders.filter(
-            (o) => o.status === 'REQUESTED' || o.status === 'SEARCHING_MECHANIC'
+            (o) => o.status === 'REQUESTED' || o.status === 'DISPATCH_PENDING'
           );
           if (pending.length > 0) {
-            const liveAlert: SystemAlert = {
+            liveFallbackAlerts.push({
               id: `LIVE-ORD-${pending[0].id}`,
               title: `Có ${pending.length} đơn cứu hộ mới cần điều phối`,
               desc: `Đơn gần nhất #${pending[0].orderCode} tại ${pending[0].pickupAddress || 'chưa rõ vị trí'}.`,
@@ -127,10 +220,6 @@ function MainDashboard() {
               level: 'CRITICAL',
               isRead: false,
               targetScreen: 'dashboard'
-            };
-            setAlerts((prev) => {
-              if (prev.some((a) => a.id === liveAlert.id)) return prev;
-              return [liveAlert, ...prev];
             });
           }
 
@@ -143,7 +232,7 @@ function MainDashboard() {
               ]);
               if (!isMounted) return;
               if (payouts.length > 0) {
-                const payoutAlert: SystemAlert = {
+                liveFallbackAlerts.push({
                   id: `LIVE-PAYOUT-${payouts[0].id}`,
                   title: `Có ${payouts.length} yêu cầu rút tiền ví Gara đang chờ duyệt`,
                   desc: `Gara đề nghị giải ngân gần nhất: ${payouts[0].garageName || 'Đối tác'}.`,
@@ -151,14 +240,10 @@ function MainDashboard() {
                   level: 'WARNING',
                   isRead: false,
                   targetScreen: 'payouts'
-                };
-                setAlerts((prev) => {
-                  if (prev.some((a) => a.id === payoutAlert.id)) return prev;
-                  return [payoutAlert, ...prev];
                 });
               }
               if (disputes.length > 0) {
-                const disputeAlert: SystemAlert = {
+                liveFallbackAlerts.push({
                   id: `LIVE-DISPUTE-${disputes[0].id}`,
                   title: `Có ${disputes.length} hồ sơ khiếu nại chờ Admin hoàn tiền`,
                   desc: `Đã có biên bản xác minh từ nhân viên CSKH.`,
@@ -166,10 +251,6 @@ function MainDashboard() {
                   level: 'CRITICAL',
                   isRead: false,
                   targetScreen: 'refunds'
-                };
-                setAlerts((prev) => {
-                  if (prev.some((a) => a.id === disputeAlert.id)) return prev;
-                  return [disputeAlert, ...prev];
                 });
               }
             } catch {
@@ -179,9 +260,12 @@ function MainDashboard() {
         } else if (user.role === 'GARAGE_OWNER') {
           const orders = await rescueApi.getGarageOrders().catch(() => []);
           if (!isMounted) return;
-          const pending = orders.filter((o) => o.status === 'ASSIGNED' || o.status === 'ACCEPTED');
+          // Sửa lỗi: Lọc đúng các trạng thái đơn cứu hộ của Gara trên hệ thống Backend
+          const pending = orders.filter((o) =>
+            ['REQUESTED', 'DISPATCHED', 'IN_PROGRESS', 'CONFIRMED'].includes(o.status)
+          );
           if (pending.length > 0) {
-            const liveAlert: SystemAlert = {
+            liveFallbackAlerts.push({
               id: `LIVE-GARAGE-${pending[0].id}`,
               title: `Gara có ${pending.length} đơn cứu hộ đang xử lý`,
               desc: `Đơn #${pending[0].orderCode} đang chờ thợ cơ động tiếp nhận và xử lý.`,
@@ -189,13 +273,21 @@ function MainDashboard() {
               level: 'WARNING',
               isRead: false,
               targetScreen: 'owner-dashboard'
-            };
-            setAlerts((prev) => {
-              if (prev.some((a) => a.id === liveAlert.id)) return prev;
-              return [liveAlert, ...prev];
             });
           }
         }
+
+        // Hợp nhất: ưu tiên DB Alerts, bổ sung Fallback alerts nếu chưa có
+        setAlerts((prev) => {
+          const merged = [...dbAlerts];
+          for (const fallback of liveFallbackAlerts) {
+            if (!merged.some((a) => a.id === fallback.id)) {
+              const existingInPrev = prev.find((p) => p.id === fallback.id);
+              merged.push(existingInPrev ? { ...fallback, isRead: existingInPrev.isRead } : fallback);
+            }
+          }
+          return merged;
+        });
       } catch {
         // Ignored when offline
       }
@@ -203,9 +295,27 @@ function MainDashboard() {
 
     loadLiveAlerts();
     const timer = setInterval(loadLiveAlerts, 30000);
+
+    // Kết nối WebSocket STOMP nhận thông báo thời gian thực tức thì
+    const numericUserId = typeof user.id === 'number' ? user.id : parseInt(String(user.id), 10) || 0;
+    const disconnectSocket = connectNotificationSocket(numericUserId, user.role, (incomingNotif) => {
+      const incomingAlert = mapNotificationToAlert(incomingNotif, user.role);
+      setAlerts((prev) => [incomingAlert, ...prev.filter((a) => a.id !== incomingAlert.id)]);
+
+      // Hiển thị toast popup trực quan
+      if (incomingNotif.level === 'CRITICAL') {
+        showToast(incomingNotif.title, incomingNotif.message, 'error');
+      } else if (incomingNotif.level === 'WARNING') {
+        showToast(incomingNotif.title, incomingNotif.message, 'warning');
+      } else {
+        showToast(incomingNotif.title, incomingNotif.message, 'info');
+      }
+    });
+
     return () => {
       isMounted = false;
       clearInterval(timer);
+      disconnectSocket();
     };
   }, [isAuthenticated, user]);
 
@@ -433,6 +543,11 @@ function MainDashboard() {
               path="/owner/garage-team"
               element={<GarageManagementView onShowToast={showToast} />}
             />
+            {/* Chấm công & Hoạt động thợ cứu hộ */}
+            <Route
+              path="/owner/garage-attendance"
+              element={<GarageAttendanceView onShowToast={showToast} />}
+            />
             {/* Doanh thu & Ví Gara */}
             <Route
               path="/owner/garage-ratings"
@@ -475,7 +590,7 @@ function MainDashboard() {
 
       {/* Hộp thoại (Modal) hiển thị danh sách thông báo & cảnh báo */}
       {showAlertsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
           <div className="bg-surface-container-lowest rounded-2xl border border-surface-container max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between p-space-lg border-b border-surface-container bg-surface-container-low">
               <div className="flex items-center gap-2">
@@ -503,10 +618,12 @@ function MainDashboard() {
                 alerts.map((alt) => (
                   <div
                     key={alt.id}
-                    onClick={() => {
-                      setAlerts((prev) =>
-                        prev.map((a) => (a.id === alt.id ? { ...a, isRead: true } : a))
-                      );
+                    onClick={async () => {
+                      // Tự động xóa thông báo khỏi danh sách ngay sau khi user xem
+                      setAlerts((prev) => prev.filter((a) => a.id !== alt.id));
+                      if (alt.dbId) {
+                        notificationApi.markAsRead(alt.dbId).catch(() => {});
+                      }
                       if (alt.targetScreen) {
                         handleSelectScreen(alt.targetScreen);
                         setShowAlertsModal(false);
@@ -524,17 +641,34 @@ function MainDashboard() {
                         )}
                         {alt.title}
                       </span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-label-xs font-bold ${
-                          alt.level === 'CRITICAL'
-                            ? 'bg-red-100 text-red-800'
-                            : alt.level === 'WARNING'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        {alt.level}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`px-2 py-0.5 rounded text-label-xs font-bold ${
+                            alt.level === 'CRITICAL'
+                              ? 'bg-red-100 text-red-800'
+                              : alt.level === 'WARNING'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          {alt.level}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAlerts((prev) => prev.filter((a) => a.id !== alt.id));
+                            if (alt.dbId) {
+                              notificationApi.deleteNotification(alt.dbId).catch(() => {});
+                            }
+                            showToast('Đã xóa', 'Đã xóa thông báo', 'info');
+                          }}
+                          className="p-1 rounded text-secondary/60 hover:text-error hover:bg-error-container/20 transition-colors"
+                          title="Xóa thông báo này"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      </div>
                     </div>
                     <p className="text-body-sm text-secondary">{alt.desc}</p>
                     <div className="text-label-xs text-secondary font-data-mono pt-1">{alt.time}</div>
@@ -546,15 +680,16 @@ function MainDashboard() {
             <div className="p-space-md bg-surface-container-low border-t border-surface-container flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => {
-                  setAlerts((prev) => prev.map((a) => ({ ...a, isRead: true })));
-                  showToast('Đã đánh dấu', 'Đã đọc toàn bộ thông báo khẩn', 'info');
+                onClick={async () => {
+                  setAlerts([]);
+                  notificationApi.markAllAsRead().catch(() => {});
+                  showToast('Đã dọn dẹp', 'Đã xóa toàn bộ thông báo đã xem', 'info');
                   setShowAlertsModal(false);
                 }}
-                disabled={alerts.length === 0 || unreadAlertsCount === 0}
+                disabled={alerts.length === 0}
                 className="px-space-md py-1.5 rounded font-label-md text-label-md text-secondary hover:text-on-surface disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Đánh dấu đã đọc tất cả
+                Đã xem tất cả & Xóa
               </button>
               <button
                 type="button"

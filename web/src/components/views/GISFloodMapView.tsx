@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { FloodPoint } from '../../types';
 import { floodMapApi } from '../../services/floodMapApi';
-import { garageApi, GarageBackendResponse } from '../../services/garageApi';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -78,14 +77,21 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
   const [loadError, setLoadError] = useState<string | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
 
-  // Modal Điều động Gara lập chốt
-  const [showDispatchModal, setShowDispatchModal] = useState<boolean>(false);
-  const [garagesList, setGaragesList] = useState<GarageBackendResponse[]>([]);
-  const [isLoadingGarages, setIsLoadingGarages] = useState<boolean>(false);
-  const [selectedGarageId, setSelectedGarageId] = useState<number | null>(null);
-  const [vehicleType, setVehicleType] = useState<string>('XE_SAN_NANG');
-  const [dispatchNote, setDispatchNote] = useState<string>('');
-  const [isDispatchingChot, setIsDispatchingChot] = useState<boolean>(false);
+  // Modal Phê duyệt & Phát cảnh báo khẩn cấp
+  const [showBroadcastModal, setShowBroadcastModal] = useState<boolean>(false);
+  const [selectedSeverity, setSelectedSeverity] = useState<'RED' | 'ORANGE' | 'YELLOW'>('RED');
+  const [broadcastRadius, setBroadcastRadius] = useState<'500m' | '1km' | '2km'>('1km');
+  const [broadcastNote, setBroadcastNote] = useState<string>('');
+
+  // Modal Bác bỏ tin giả mạo / spam
+  const [showSpamModal, setShowSpamModal] = useState<boolean>(false);
+  const [spamReason, setSpamReason] = useState<string>('Tin giả mạo / Hiện trường không ngập');
+  const [spamCustomNote, setSpamCustomNote] = useState<string>('');
+  const [isRejectingSpam, setIsRejectingSpam] = useState<boolean>(false);
+
+  // Modal Xác nhận nước rút
+  const [showClearWaterModal, setShowClearWaterModal] = useState<boolean>(false);
+  const [isResolvingWater, setIsResolvingWater] = useState<boolean>(false);
 
   // Leaflet Map Refs & States
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -142,8 +148,29 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
           return { level: 1, severity: 'YELLOW', label: 'Ngập 20cm (Ngập mắt cá chân)', depthCm: 20 };
         };
 
+        const rejectedIds: string[] = (() => {
+          try {
+            return JSON.parse(localStorage.getItem('rejected_flood_report_ids') || '[]');
+          } catch {
+            return [];
+          }
+        })();
+
+        const resolvedRecededIds: string[] = (() => {
+          try {
+            return JSON.parse(localStorage.getItem('resolved_receded_report_ids') || '[]');
+          } catch {
+            return [];
+          }
+        })();
+
         const mapped: FloodPoint[] = liveReports
-          .filter((item) => item.moderationStatus !== 'REJECTED')
+          .filter((item) => {
+            if (item.moderationStatus === 'REJECTED' || item.moderationStatus === 'EXPIRED') return false;
+            if (rejectedIds.includes(String(item.id)) || rejectedIds.includes(`FL-${item.id}`)) return false;
+            if (resolvedRecededIds.includes(String(item.id)) || resolvedRecededIds.includes(`FL-${item.id}`)) return false;
+            return true;
+          })
           .map((item) => {
             const meta = depthToLevel(item.waterDepthLevel);
             const normalizedConfidence = item.confidenceScore != null
@@ -176,6 +203,7 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
               depthCm: item.moderationStatus === 'EXPIRED' ? 10 : meta.depthCm,
               level: (item.moderationStatus === 'EXPIRED' ? 1 : meta.level) as 1 | 2 | 3,
               severity: (item.moderationStatus === 'EXPIRED' ? 'YELLOW' : meta.severity) as 'RED' | 'ORANGE' | 'YELLOW',
+              moderationStatus: item.moderationStatus,
               reportsCount: item.clusterCount || 1,
               confidenceScore: normalizedConfidence,
               coords: { lat: item.latitude, lng: item.longitude },
@@ -441,9 +469,38 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
     }
   }, [selectedPointId]);
 
-  const handleBroadcastAlert = async () => {
+  useEffect(() => {
+    if (selectedPoint) {
+      setSelectedSeverity(selectedPoint.severity || 'RED');
+      setBroadcastNote(
+        selectedPoint.severity === 'RED'
+          ? `Cảnh báo ngập sâu (>60cm) tại ${selectedPoint.name}. Các phương tiện ô tô gầm thấp và xe máy hạn chế đi vào.`
+          : `Khu vực ${selectedPoint.name} ghi nhận ngập úng (${selectedPoint.waterLevel}). Chú ý giảm tốc độ khi di chuyển qua.`
+      );
+    }
+  }, [selectedPointId, selectedPoint?.severity]);
+
+  const handleOpenBroadcastModal = () => {
+    if (!selectedPoint) return;
+    setSelectedSeverity(selectedPoint.severity || 'RED');
+    setBroadcastNote(
+      selectedPoint.severity === 'RED'
+        ? `Cảnh báo ngập sâu (>60cm) tại ${selectedPoint.name}. Các phương tiện ô tô gầm thấp và xe máy hạn chế đi vào.`
+        : `Khu vực ${selectedPoint.name} ghi nhận ngập úng (${selectedPoint.waterLevel}). Chú ý giảm tốc độ khi di chuyển qua.`
+    );
+    setShowBroadcastModal(true);
+  };
+
+  const handleConfirmBroadcastAlert = async () => {
     if (!selectedPoint) return;
     setIsBroadcasting(true);
+    const depthMeta =
+      selectedSeverity === 'RED'
+        ? { level: 3 as const, waterLevel: 'Ngập sâu > 60cm (Lút yên xe)', depthCm: 65 }
+        : selectedSeverity === 'ORANGE'
+        ? { level: 2 as const, waterLevel: 'Ngập 40cm (Nửa bánh xe)', depthCm: 40 }
+        : { level: 1 as const, waterLevel: 'Ngập 20cm (Ngập mắt cá chân)', depthCm: 20 };
+
     try {
       const rawId = selectedPoint.id.replace('FL-', '');
       const numId = parseInt(rawId, 10);
@@ -451,7 +508,10 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
         await floodMapApi.moderateFloodReport(
           numId,
           'APPROVED',
-          'Phát cảnh báo khẩn cấp bán kính 1km',
+          broadcastNote.trim() ||
+            (selectedSeverity === 'RED'
+              ? 'Phát cảnh báo khẩn cấp bán kính 1km'
+              : `Duyệt mức ngập ${depthMeta.waterLevel}`),
           'Đã kích hoạt các gara ứng cứu lân cận'
         );
       }
@@ -459,22 +519,39 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
       console.warn('Backend moderate report:', err);
     } finally {
       setIsBroadcasting(false);
+      setShowBroadcastModal(false);
       setPointsList((prev) =>
-        prev.map((p) => (p.id === selectedPoint.id ? { ...p, severity: 'RED', level: 3 } : p))
+        prev.map((p) =>
+          p.id === selectedPoint.id
+            ? {
+                ...p,
+                severity: selectedSeverity,
+                level: depthMeta.level,
+                waterLevel: depthMeta.waterLevel,
+                depthCm: depthMeta.depthCm,
+                moderationStatus: 'APPROVED'
+              }
+            : p
+        )
       );
       addAuditLog({
-        text: `Đã duyệt & phát cảnh báo đỏ #${selectedPoint.id} (${selectedPoint.name})`,
+        text: `Đã duyệt & phát cảnh báo ${
+          selectedSeverity === 'RED' ? 'ĐỎ' : selectedSeverity === 'ORANGE' ? 'CAM' : 'VÀNG'
+        } #${selectedPoint.id} (${selectedPoint.name})`,
         time: nowTimeStr()
       });
       onShowToast(
-        'Đã Phát Cảnh Báo Đỏ!',
-        `Phát lệnh cảnh báo ngập sâu (>60cm) tới người dân trong bán kính 1km quanh ${selectedPoint.name}.`
+        selectedSeverity === 'RED' ? 'Đã Phát Cảnh Báo Đỏ!' : 'Đã Phê Duyệt Điểm Ngập',
+        selectedSeverity === 'RED'
+          ? `Phát lệnh cảnh báo ngập sâu (>60cm) tới người dân trong bán kính ${broadcastRadius} quanh ${selectedPoint.name}.`
+          : `Đã cập nhật mức ngập ${depthMeta.waterLevel} tại ${selectedPoint.name} lên bản đồ.`
       );
     }
   };
 
-  const handleClearWater = async () => {
+  const handleConfirmClearWater = async () => {
     if (!selectedPoint) return;
+    setIsResolvingWater(true);
     try {
       const rawId = selectedPoint.id.replace('FL-', '');
       const numId = parseInt(rawId, 10);
@@ -483,98 +560,56 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
       }
     } catch (err) {
       console.warn('Backend resolve water:', err);
-    }
-    setPointsList((prev) =>
-      prev.map((p) =>
-        p.id === selectedPoint.id ? { ...p, severity: 'YELLOW', level: 1, waterLevel: 'Nước đã rút (< 15cm)' } : p
-      )
-    );
-    addAuditLog({
-      text: `Đã hạ cảnh báo #${selectedPoint.id} (${selectedPoint.name}) → Nước rút`,
-      time: nowTimeStr()
-    });
-    onShowToast(
-      'Hạ Cảnh Báo',
-      `Đã ghi nhận nước rút tại ${selectedPoint.name}. Bản đồ dân cư đã chuyển sang mức lưu thông an toàn.`
-    );
-  };
-
-  const handleReportSpam = async () => {
-    if (!selectedPoint) return;
-    try {
-      const rawId = selectedPoint.id.replace('FL-', '');
-      const numId = parseInt(rawId, 10);
-      if (!isNaN(numId)) {
-        await floodMapApi.moderateFloodReport(numId, 'REJECTED', 'Báo cáo spam/không chính xác');
-      }
-    } catch (err) {
-      console.warn('Backend spam report:', err);
-    }
-    setPointsList((prev) => prev.filter((p) => p.id !== selectedPoint.id));
-    addAuditLog({
-      text: `Đánh dấu spam & loại trừ điểm #${selectedPoint.id}`,
-      time: nowTimeStr(),
-      isDanger: true
-    });
-    onShowToast('Báo Cáo Spam', `Đã đánh dấu rác và loại trừ các tin báo giả mạo tại điểm ${selectedPoint.id}.`);
-  };
-
-  // Mở modal điều động trạm chốt
-  const handleOpenDispatchModal = async () => {
-    if (!selectedPoint) return;
-    setShowDispatchModal(true);
-    setIsLoadingGarages(true);
-    setDispatchNote(`Điều động trạm xe tải sàn nâng chốt hỗ trợ vượt ngập tại ${selectedPoint.name}`);
-    try {
-      const list = await garageApi.getAllGarages();
-      const approved = list.filter((g) => g.status === 'APPROVED');
-      const finalGarages = approved.length > 0 ? approved : list;
-      setGaragesList(finalGarages);
-      if (finalGarages.length > 0) {
-        setSelectedGarageId(finalGarages[0].id);
-      }
-    } catch (err) {
-      console.warn('Failed to load garages:', err);
     } finally {
-      setIsLoadingGarages(false);
-    }
-  };
-
-  // Xác nhận điều động chốt vượt ngập và gọi API cập nhật
-  const handleConfirmDispatchChot = async () => {
-    if (!selectedPoint || !selectedGarageId) return;
-    setIsDispatchingChot(true);
-    const selectedGarage = garagesList.find((g) => g.id === selectedGarageId);
-    const garageName = selectedGarage?.garageName || `Gara #${selectedGarageId}`;
-    const vehicleLabel = vehicleType === 'XE_SAN_NANG' ? 'Trạm Xe sàn nâng' : 'Trạm Xe cứu hộ cơ động';
-    const note = dispatchNote.trim() || `Điều động ${vehicleLabel} chốt tại ${selectedPoint.name}`;
-
-    try {
-      const rawId = selectedPoint.id.replace('FL-', '');
-      const numId = parseInt(rawId, 10);
-      if (!isNaN(numId)) {
-        await floodMapApi.moderateFloodReport(
-          numId,
-          'APPROVED',
-          note,
-          `${garageName} (${vehicleLabel})`
-        );
-      }
-    } catch (err) {
-      console.warn('Dispatch chot note update:', err);
-    } finally {
-      setIsDispatchingChot(false);
-      setShowDispatchModal(false);
+      setIsResolvingWater(false);
+      setShowClearWaterModal(false);
+      try {
+        const existing: string[] = JSON.parse(localStorage.getItem('resolved_receded_report_ids') || '[]');
+        const updated = Array.from(new Set([...existing, String(selectedPoint.id), selectedPoint.id.replace('FL-', '')]));
+        localStorage.setItem('resolved_receded_report_ids', JSON.stringify(updated));
+      } catch {}
+      setPointsList((prev) => prev.filter((p) => p.id !== selectedPoint.id));
       addAuditLog({
-        text: `Đã điều động [${garageName}] lập chốt tại #${selectedPoint.id} (${selectedPoint.name})`,
+        text: `Đã giải tỏa điểm ngập #${selectedPoint.id} (${selectedPoint.name}) → Nước đã rút`,
         time: nowTimeStr()
       });
       onShowToast(
-        'Điều Động Chốt Thành Công',
-        `Đã điều động ${garageName} thiết lập ${vehicleLabel} hỗ trợ phương tiện qua đoạn ${selectedPoint.name}.`
+        'Đã Giải Tỏa Điểm Ngập',
+        `Đã ghi nhận nước rút hoàn toàn tại ${selectedPoint.name}. Điểm cảnh báo đã được gỡ bỏ khỏi bản đồ.`
       );
     }
   };
+
+  const handleConfirmReportSpam = async () => {
+    if (!selectedPoint) return;
+    setIsRejectingSpam(true);
+    const finalReason = spamCustomNote.trim() ? `${spamReason}: ${spamCustomNote.trim()}` : spamReason;
+    try {
+      const rawId = selectedPoint.id.replace('FL-', '');
+      const numId = parseInt(rawId, 10);
+      if (!isNaN(numId)) {
+        await floodMapApi.moderateFloodReport(numId, 'REJECTED', finalReason);
+      }
+    } catch (err) {
+      console.warn('Backend spam report:', err);
+    } finally {
+      setIsRejectingSpam(false);
+      setShowSpamModal(false);
+      try {
+        const existing: string[] = JSON.parse(localStorage.getItem('rejected_flood_report_ids') || '[]');
+        const updated = Array.from(new Set([...existing, String(selectedPoint.id), selectedPoint.id.replace('FL-', '')]));
+        localStorage.setItem('rejected_flood_report_ids', JSON.stringify(updated));
+      } catch {}
+      setPointsList((prev) => prev.filter((p) => p.id !== selectedPoint.id));
+      addAuditLog({
+        text: `Bác bỏ tin giả & loại trừ điểm #${selectedPoint.id} (${spamReason})`,
+        time: nowTimeStr(),
+        isDanger: true
+      });
+      onShowToast('Đã Bác Bỏ Tin Báo', `Đã loại trừ tin báo giả mạo/spam tại điểm ${selectedPoint.id}.`);
+    }
+  };
+
 
   // Sao chép tọa độ GPS vào bộ nhớ tạm
   const handleCopyCoords = () => {
@@ -806,12 +841,12 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
         {/* LEFT PANE: Real Leaflet Map */}
         <div className="lg:col-span-7 flex flex-col gap-space-md">
-          <div className="relative bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden h-[740px] flex flex-col border border-surface-container">
+          <div className="relative isolate z-0 bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden h-[740px] flex flex-col border border-surface-container">
             {/* Interactive Leaflet Map Container */}
-            <div ref={mapContainerRef} className="w-full h-full z-0" style={{ minHeight: '600px' }} />
+            <div ref={mapContainerRef} className="w-full h-full relative z-0" style={{ minHeight: '600px' }} />
 
             {/* Upper Map HUD Info Bar */}
-            <div className="absolute top-3 left-3 right-3 z-[500] flex flex-wrap items-center justify-between p-space-sm bg-surface-container-lowest/90 backdrop-blur rounded-xl shadow-sm border border-surface-container gap-2 pointer-events-auto">
+            <div className="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between p-space-sm bg-surface-container-lowest/90 backdrop-blur rounded-xl shadow-sm border border-surface-container gap-2 pointer-events-auto">
               <div className="flex items-center gap-space-sm">
                 <span className={`h-2.5 w-2.5 rounded-full ${pointsList.length > 0 ? 'bg-error animate-ping' : 'bg-emerald-500'}`}></span>
                 <div>
@@ -864,7 +899,7 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
             </div>
 
             {/* Lower Map Legends */}
-            <div className="relative z-[500] p-space-md bg-surface-container-lowest/95 backdrop-blur flex flex-wrap items-center justify-between gap-space-md border-t border-surface-container pointer-events-auto">
+            <div className="relative z-10 p-space-md bg-surface-container-lowest/95 backdrop-blur flex flex-wrap items-center justify-between gap-space-md border-t border-surface-container pointer-events-auto">
               <div className="flex items-center gap-space-md text-body-sm font-body-sm">
                 <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-full bg-error inline-block"></span>
@@ -1092,54 +1127,106 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
               )}
 
               {/* OPERATOR MODERATION ACTION BOX */}
-              <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-space-sm border border-surface-container">
-                <div className="font-label-md text-label-md uppercase text-secondary font-bold mb-1">
-                  Bảng Điều Khiển Can Thiệp Khẩn Cấp
-                </div>
+              {(() => {
+                const isWaterReceded =
+                  selectedPoint.moderationStatus === 'EXPIRED' || selectedPoint.waterLevel?.includes('Nước đã rút');
+                const isApprovedRed =
+                  selectedPoint.moderationStatus === 'APPROVED' && selectedPoint.severity === 'RED';
 
-                {/* Primary CTA: Broadcast Push Alert */}
-                <button
-                  onClick={handleBroadcastAlert}
-                  disabled={isBroadcasting}
-                  className="w-full py-2.5 px-space-md rounded-lg bg-primary text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-space-xs shadow-md hover:bg-primary-container transition-all cursor-pointer font-bold disabled:opacity-75"
-                >
-                  <span className={`material-symbols-outlined text-[20px] ${isBroadcasting ? 'animate-spin' : ''}`}>
-                    {isBroadcasting ? 'sync' : 'notification_important'}
-                  </span>
-                  <span>{isBroadcasting ? 'ĐANG PHÁT LỆNH TOÀN MẠNG...' : 'KÍCH HOẠT CẢNH BÁO ĐỎ (PUSH 1KM)'}</span>
-                </button>
-
-                <div className="grid grid-cols-2 gap-space-xs mt-1">
-                  <button
-                    onClick={handleClearWater}
-                    className="py-2 px-space-sm rounded-lg bg-surface-container-lowest text-tertiary hover:bg-surface-container hover:text-on-surface font-label-md text-label-md flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">water_drop</span>
-                    <span>Hạ Cảnh Báo / Nước Đã Rút</span>
-                  </button>
-                  <button
-                    onClick={handleReportSpam}
-                    className="py-2 px-space-sm rounded-lg bg-surface-container-lowest text-error hover:bg-error-container hover:text-on-error-container font-label-md text-label-md flex items-center justify-center gap-1 shadow-sm transition-colors cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">delete_forever</span>
-                    <span>Báo Cáo Rác / Giả Mạo</span>
-                  </button>
-                </div>
-
-                {/* Emergency Multi-Garage Dispatch: Opens Real Garage Dispatch Modal */}
-                <div className="pt-space-xs">
-                  <button
-                    onClick={handleOpenDispatchModal}
-                    className="w-full py-2 px-space-md rounded-lg bg-secondary text-on-secondary hover:bg-on-surface font-label-md text-label-md flex items-center justify-between shadow-sm transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[16px]">hub</span>
-                      <span>Điều động Gara Lập Chốt Vượt Ngập</span>
+                return (
+                  <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-space-sm border border-surface-container shadow-xs">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <div className="font-label-md text-label-md uppercase text-on-surface font-bold flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[18px] text-primary">crisis_alert</span>
+                        <span>Bảng Điều Khiển Can Thiệp</span>
+                      </div>
+                      <span
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                          isWaterReceded
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : selectedPoint.severity === 'RED'
+                            ? 'bg-red-100 text-red-800 animate-pulse'
+                            : selectedPoint.severity === 'ORANGE'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}
+                      >
+                        {isWaterReceded
+                          ? 'Nước đã rút'
+                          : selectedPoint.severity === 'RED'
+                          ? 'Cảnh báo đỏ'
+                          : selectedPoint.severity === 'ORANGE'
+                          ? 'Cảnh báo cam'
+                          : 'Cảnh báo vàng'}
+                      </span>
                     </div>
-                    <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-                  </button>
-                </div>
-              </div>
+
+                    {/* Primary Emergency Action */}
+                    <button
+                      type="button"
+                      onClick={handleOpenBroadcastModal}
+                      disabled={isBroadcasting || isWaterReceded}
+                      className={`w-full py-2.5 px-space-md rounded-lg font-headline-sm text-headline-sm flex items-center justify-center gap-space-xs shadow-md transition-all cursor-pointer font-bold ${
+                        isWaterReceded
+                          ? 'bg-surface-container-high text-secondary/60 cursor-not-allowed shadow-none'
+                          : isApprovedRed
+                          ? 'bg-red-700 hover:bg-red-800 text-white'
+                          : 'bg-red-600 hover:bg-red-700 active:scale-[0.99] text-white'
+                      }`}
+                      title={
+                        isWaterReceded
+                          ? 'Nước đã rút, không cần phát cảnh báo'
+                          : 'Phát cảnh báo khẩn cấp tới người dân trong khu vực'
+                      }
+                    >
+                      <span className={`material-symbols-outlined text-[20px] ${isBroadcasting ? 'animate-spin' : ''}`}>
+                        {isBroadcasting ? 'sync' : isApprovedRed ? 'campaign' : 'notification_important'}
+                      </span>
+                      <span>
+                        {isBroadcasting
+                          ? 'ĐANG PHÁT LỆNH TOÀN MẠNG...'
+                          : isApprovedRed
+                          ? 'ĐÃ PHÁT CẢNH BÁO ĐỎ (BẤM ĐỂ CẬP NHẬT)'
+                          : 'PHÁT CẢNH BÁO KHẨN CẤP (PUSH 1KM)'}
+                      </span>
+                    </button>
+
+                    {/* Secondary Balanced Actions: 2 columns, perfectly balanced without orphan words */}
+                    <div className="grid grid-cols-2 gap-space-sm mt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowClearWaterModal(true)}
+                        disabled={isWaterReceded}
+                        className={`py-2 px-space-sm rounded-lg font-label-md text-label-md flex items-center justify-center gap-1.5 shadow-xs transition-colors border ${
+                          isWaterReceded
+                            ? 'bg-surface-container text-secondary/50 border-surface-container cursor-not-allowed'
+                            : 'bg-surface-container-lowest text-emerald-700 border-emerald-600/30 hover:bg-emerald-50 hover:border-emerald-600 cursor-pointer font-semibold'
+                        }`}
+                        title={isWaterReceded ? 'Điểm này đã xác nhận nước rút' : 'Xác nhận nước đã rút hoàn toàn'}
+                      >
+                        <span className="material-symbols-outlined text-[17px]">
+                          {isWaterReceded ? 'check_circle' : 'water_drop'}
+                        </span>
+                        <span className="whitespace-nowrap">
+                          {isWaterReceded ? 'Đã ghi nhận rút' : 'Xác nhận nước rút'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowSpamModal(true)}
+                        className="py-2 px-space-sm rounded-lg bg-surface-container-lowest text-error border border-error/30 hover:bg-red-50 hover:border-error font-label-md text-label-md flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer font-semibold"
+                        title="Bác bỏ tin báo giả mạo hoặc spam"
+                      >
+                        <span className="material-symbols-outlined text-[17px]">flag</span>
+                        <span className="whitespace-nowrap">Bác bỏ tin giả</span>
+                      </button>
+                    </div>
+
+
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <div className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col items-center justify-center text-center border border-surface-container min-h-[400px]">
@@ -1192,25 +1279,25 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
         </div>
       </div>
 
-      {/* MODAL ĐIỀU ĐỘNG GARA LẬP CHỐT VƯỢT NGẬP */}
-      {showDispatchModal && selectedPoint && (
+      {/* MODAL PHÊ DUYỆT & PHÁT CẢNH BÁO KHẨN CẤP */}
+      {showBroadcastModal && selectedPoint && (
         <div
-          onClick={() => setShowDispatchModal(false)}
-          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs cursor-pointer"
+          onClick={() => setShowBroadcastModal(false)}
+          className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-xs cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative max-w-lg w-full bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container overflow-hidden flex flex-col"
+            className="relative max-w-lg w-full bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container overflow-hidden flex flex-col cursor-default animate-in fade-in zoom-in-95 duration-150"
           >
             {/* Header */}
-            <div className="p-space-lg border-b border-surface-container flex items-center justify-between">
+            <div className="p-space-lg border-b border-surface-container flex items-center justify-between bg-surface-container-low">
               <div className="flex items-center gap-space-sm">
-                <div className="w-10 h-10 rounded-xl bg-primary-fixed/40 text-primary-container flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[22px]">hub</span>
+                <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[22px]">campaign</span>
                 </div>
                 <div>
                   <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">
-                    Điều Động Trạm Chốt Vượt Ngập
+                    Phê Duyệt & Phát Cảnh Báo
                   </h3>
                   <span className="text-secondary text-body-sm font-data-mono">
                     #{selectedPoint.id} • {selectedPoint.name}
@@ -1218,7 +1305,8 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
                 </div>
               </div>
               <button
-                onClick={() => setShowDispatchModal(false)}
+                type="button"
+                onClick={() => setShowBroadcastModal(false)}
                 className="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary hover:text-on-surface transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
@@ -1227,153 +1315,381 @@ export const GISFloodMapView: React.FC<GISFloodMapViewProps> = ({ floodPoints, o
 
             {/* Content */}
             <div className="p-space-lg space-y-space-md max-h-[70vh] overflow-y-auto">
-              {/* Snapshot Điểm Ngập */}
-              <div className="p-space-sm rounded-xl bg-surface-container-low flex items-center justify-between text-body-sm">
-                <div>
-                  <span className="font-label-sm text-label-sm text-secondary block">Khu vực & Mực nước</span>
-                  <span className="font-semibold text-on-surface">{selectedPoint.district} — {selectedPoint.waterLevel}</span>
-                </div>
-                <div className="text-right">
-                  <span className="font-label-sm text-label-sm text-secondary block">Tọa độ GPS</span>
-                  <span className="font-data-mono text-[11px] text-tertiary">
-                    {selectedPoint.coords.lat.toFixed(4)}, {selectedPoint.coords.lng.toFixed(4)}
-                  </span>
+              {/* Snapshot vị trí */}
+              <div className="p-space-sm rounded-xl bg-surface-container-low border border-surface-container flex items-start gap-space-sm">
+                <span className="material-symbols-outlined text-primary text-[20px] mt-0.5">location_on</span>
+                <div className="text-body-sm">
+                  <p className="font-semibold text-on-surface">{selectedPoint.address}</p>
+                  <p className="text-secondary text-label-xs font-data-mono mt-0.5">
+                    Quận {selectedPoint.district} • Độ tin cậy: {selectedPoint.confidenceScore}% ({selectedPoint.reportsCount} lượt báo)
+                  </p>
                 </div>
               </div>
 
-              {/* Chọn Gara Phụ Trách */}
+              {/* Lựa chọn cấp độ cảnh báo */}
               <div>
-                <label className="font-label-md text-label-md font-bold text-on-surface block mb-1">
-                  Chọn Gara Liên Minh Phụ Trách:
+                <label className="font-label-md text-label-md font-bold text-on-surface block mb-2">
+                  Chọn Cấp Độ Ngập Cần Phê Duyệt:
                 </label>
-                {isLoadingGarages ? (
-                  <div className="py-6 flex flex-col items-center justify-center text-secondary text-body-sm">
-                    <span className="material-symbols-outlined animate-spin text-[24px] mb-1">sync</span>
-                    <span>Đang tải danh sách gara liên minh...</span>
-                  </div>
-                ) : garagesList.length === 0 ? (
-                  <div className="p-space-md rounded-xl bg-surface-container text-center text-secondary text-body-sm">
-                    Không tìm thấy gara đối tác nào đang hoạt động.
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                    {garagesList.map((g) => (
-                      <div
-                        key={g.id}
-                        onClick={() => setSelectedGarageId(g.id)}
-                        className={`p-space-sm rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                          selectedGarageId === g.id
-                            ? 'border-primary bg-primary/5 shadow-xs ring-1 ring-primary'
-                            : 'border-surface-container hover:bg-surface-container-low'
-                        }`}
-                      >
-                        <div className="flex items-center gap-space-sm">
-                          <input
-                            type="radio"
-                            name="garageSelect"
-                            checked={selectedGarageId === g.id}
-                            onChange={() => setSelectedGarageId(g.id)}
-                            className="text-primary focus:ring-primary"
-                          />
-                          <div>
-                            <span className="font-label-md text-label-md font-bold text-on-surface block">
-                              {g.garageName}
-                            </span>
-                            <span className="text-[11px] text-secondary block truncate max-w-[280px]">
-                              {g.address || 'Khu vực TP. Hồ Chí Minh'} • ĐT: {g.phone}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="font-data-mono text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold shrink-0">
-                          {g.branchCount || 1} trạm
+                <div className="grid grid-cols-1 gap-2">
+                  {/* RED */}
+                  <div
+                    onClick={() => {
+                      setSelectedSeverity('RED');
+                      setBroadcastNote(`Cảnh báo ngập sâu (>60cm) tại ${selectedPoint.name}. Các phương tiện ô tô gầm thấp và xe máy hạn chế đi vào.`);
+                    }}
+                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                      selectedSeverity === 'RED'
+                        ? 'border-red-500 bg-red-50/60 shadow-xs'
+                        : 'border-surface-container bg-surface-container-lowest hover:border-surface-container-high'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="severitySelect"
+                      checked={selectedSeverity === 'RED'}
+                      onChange={() => setSelectedSeverity('RED')}
+                      className="mt-1 text-red-600 focus:ring-red-500 cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-body-sm text-red-700">Mức 3: Cảnh Báo Đỏ (&gt;60cm)</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-700 uppercase">
+                          Ngập sâu / Lút yên xe
                         </span>
                       </div>
-                    ))}
+                      <p className="text-label-xs text-secondary mt-1">
+                        Nguy cơ thủy kích ô tô con và chết máy xe máy rất cao. Tự động phát thông báo khẩn Push Notification bán kính {broadcastRadius}.
+                      </p>
+                    </div>
                   </div>
-                )}
-              </div>
 
-              {/* Loại Phương Tiện Bố Trí */}
-              <div>
-                <label className="font-label-md text-label-md font-bold text-on-surface block mb-1">
-                  Loại Phương Tiện Thiết Lập Chốt:
-                </label>
-                <div className="grid grid-cols-2 gap-space-xs">
-                  <button
-                    type="button"
-                    onClick={() => setVehicleType('XE_SAN_NANG')}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      vehicleType === 'XE_SAN_NANG'
-                        ? 'border-primary bg-primary/10 text-primary font-bold'
-                        : 'border-surface-container bg-surface-container-low text-on-surface hover:bg-surface-container'
+                  {/* ORANGE */}
+                  <div
+                    onClick={() => {
+                      setSelectedSeverity('ORANGE');
+                      setBroadcastNote(`Cảnh báo ngập 40cm (nửa bánh xe) tại ${selectedPoint.name}. Phương tiện gầm thấp cần giảm tốc độ.`);
+                    }}
+                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                      selectedSeverity === 'ORANGE'
+                        ? 'border-amber-500 bg-amber-50/60 shadow-xs'
+                        : 'border-surface-container bg-surface-container-lowest hover:border-surface-container-high'
                     }`}
                   >
-                    <span className="material-symbols-outlined text-[18px] block mb-0.5">rv_hookup</span>
-                    <span className="font-label-sm text-label-sm block">Xe tải sàn nâng</span>
-                    <span className="text-[10px] text-secondary font-normal">Chở 4-6 xe máy qua ngập</span>
-                  </button>
+                    <input
+                      type="radio"
+                      name="severitySelect"
+                      checked={selectedSeverity === 'ORANGE'}
+                      onChange={() => setSelectedSeverity('ORANGE')}
+                      className="mt-1 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-body-sm text-amber-800">Mức 2: Cảnh Báo Cam (40cm)</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">
+                          Ngập nửa bánh xe
+                        </span>
+                      </div>
+                      <p className="text-label-xs text-secondary mt-1">
+                        Xe ô tô gầm thấp khó lưu thông, xe máy di chuyển chậm. Ghim cảnh báo tuyến đường lên bản đồ.
+                      </p>
+                    </div>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setVehicleType('XE_CUU_HO')}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      vehicleType === 'XE_CUU_HO'
-                        ? 'border-primary bg-primary/10 text-primary font-bold'
-                        : 'border-surface-container bg-surface-container-low text-on-surface hover:bg-surface-container'
+                  {/* YELLOW */}
+                  <div
+                    onClick={() => {
+                      setSelectedSeverity('YELLOW');
+                      setBroadcastNote(`Khu vực ${selectedPoint.name} ghi nhận ngập nhẹ 20cm (mắt cá chân). Các phương tiện có thể đi chậm qua.`);
+                    }}
+                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                      selectedSeverity === 'YELLOW'
+                        ? 'border-yellow-500 bg-yellow-50/60 shadow-xs'
+                        : 'border-surface-container bg-surface-container-lowest hover:border-surface-container-high'
                     }`}
                   >
-                    <span className="material-symbols-outlined text-[18px] block mb-0.5">electric_moped</span>
-                    <span className="font-label-sm text-label-sm block">Xe cơ động kéo đẩy</span>
-                    <span className="text-[10px] text-secondary font-normal">Sơ cứu và kéo xe chết máy</span>
-                  </button>
+                    <input
+                      type="radio"
+                      name="severitySelect"
+                      checked={selectedSeverity === 'YELLOW'}
+                      onChange={() => setSelectedSeverity('YELLOW')}
+                      className="mt-1 text-yellow-600 focus:ring-yellow-500 cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-body-sm text-yellow-800">Mức 1: Cảnh Báo Vàng (20cm)</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 uppercase">
+                          Ngập mắt cá chân
+                        </span>
+                      </div>
+                      <p className="text-label-xs text-secondary mt-1">
+                        Ngập nhẹ, phương tiện lưu thông bình thường nhưng chú ý trơn trượt.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Ghi chú điều phối */}
+              {/* Bán kính thông báo (Chỉ khi mức Đỏ) */}
+              {selectedSeverity === 'RED' && (
+                <div>
+                  <label className="font-label-md text-label-md font-bold text-on-surface block mb-1">
+                    Bán Kính Phát Sóng Thông Báo Đẩy:
+                  </label>
+                  <div className="flex gap-2">
+                    {(['500m', '1km', '2km'] as const).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setBroadcastRadius(r)}
+                        className={`flex-1 py-1.5 rounded-lg font-label-md text-label-md border transition-colors cursor-pointer ${
+                          broadcastRadius === r
+                            ? 'bg-red-600 text-white border-red-600 font-bold'
+                            : 'bg-surface-container-lowest text-on-surface border-surface-container hover:bg-surface-container'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Thông điệp cảnh báo */}
               <div>
                 <label className="font-label-md text-label-md font-bold text-on-surface block mb-1">
-                  Ghi Chú Điều Phối / Ca Trực:
+                  Nội Dung Cảnh Báo Điều Phối:
                 </label>
                 <textarea
-                  value={dispatchNote}
-                  onChange={(e) => setDispatchNote(e.target.value)}
                   rows={2}
-                  className="w-full p-2.5 rounded-xl bg-surface-container-low border border-surface-container text-body-sm text-on-surface focus:outline-none focus:border-primary"
-                  placeholder="Nhập ghi chú điều động ca trực hoặc khung giờ cao điểm triều cường..."
+                  value={broadcastNote}
+                  onChange={(e) => setBroadcastNote(e.target.value)}
+                  placeholder="Nhập thông điệp hiển thị cho người dân..."
+                  className="w-full p-space-sm rounded-xl bg-surface-container-lowest border border-surface-container text-body-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
             </div>
 
             {/* Footer */}
-            <div className="p-space-md border-t border-surface-container bg-surface-container-low/50 flex items-center justify-end gap-space-xs">
+            <div className="p-space-md border-t border-surface-container bg-surface-container-low flex items-center justify-end gap-space-sm">
               <button
                 type="button"
-                onClick={() => setShowDispatchModal(false)}
-                className="px-space-md py-2 rounded-xl text-secondary hover:bg-surface-container font-label-md text-label-md transition-colors cursor-pointer"
+                onClick={() => setShowBroadcastModal(false)}
+                className="px-space-md py-2 rounded-lg text-secondary hover:text-on-surface hover:bg-surface-container font-label-md text-label-md transition-colors cursor-pointer"
               >
-                Hủy bỏ
+                Hủy Bỏ
               </button>
               <button
                 type="button"
-                disabled={isDispatchingChot || !selectedGarageId}
-                onClick={handleConfirmDispatchChot}
-                className="px-space-lg py-2 rounded-xl bg-primary text-white font-label-md text-label-md font-bold shadow-md hover:bg-primary-container transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                onClick={handleConfirmBroadcastAlert}
+                disabled={isBroadcasting}
+                className="px-space-md py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-label-md text-label-md font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-75"
               >
-                <span className={`material-symbols-outlined text-[18px] ${isDispatchingChot ? 'animate-spin' : ''}`}>
-                  {isDispatchingChot ? 'sync' : 'send'}
+                <span className={`material-symbols-outlined text-[18px] ${isBroadcasting ? 'animate-spin' : ''}`}>
+                  {isBroadcasting ? 'sync' : 'notification_important'}
                 </span>
-                <span>{isDispatchingChot ? 'Đang điều động...' : 'Xác nhận điều động'}</span>
+                <span>{isBroadcasting ? 'Đang Phát Lệnh...' : 'Xác Nhận Phát Cảnh Báo'}</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* MODAL BÁC BỎ TIN GIẢ MẠO / SPAM */}
+      {showSpamModal && selectedPoint && (
+        <div
+          onClick={() => setShowSpamModal(false)}
+          className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-xs cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-md w-full bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container overflow-hidden flex flex-col cursor-default animate-in fade-in zoom-in-95 duration-150"
+          >
+            {/* Header */}
+            <div className="p-space-lg border-b border-surface-container flex items-center justify-between bg-surface-container-low">
+              <div className="flex items-center gap-space-sm">
+                <div className="w-10 h-10 rounded-xl bg-red-100 text-error flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[22px]">report_problem</span>
+                </div>
+                <div>
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                    Bác Bỏ Tin Báo Giả Mạo
+                  </h3>
+                  <span className="text-secondary text-body-sm font-data-mono">
+                    #{selectedPoint.id} • {selectedPoint.name}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSpamModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary hover:text-on-surface transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-space-lg space-y-space-md max-h-[70vh] overflow-y-auto">
+              <div className="p-space-sm rounded-xl bg-red-50 border border-red-200 text-error text-body-sm flex items-start gap-2">
+                <span className="material-symbols-outlined text-[18px] mt-0.5 shrink-0">warning</span>
+                <p>
+                  Thao tác này sẽ loại bỏ tin báo khỏi bản đồ công cộng và ghi nhật ký kiểm duyệt.
+                </p>
+              </div>
+
+              <div>
+                <label className="font-label-md text-label-md font-bold text-on-surface block mb-1.5">
+                  Lý Do Bác Bỏ:
+                </label>
+                <div className="space-y-1.5">
+                  {[
+                    'Tin giả mạo / Hiện trường không ngập',
+                    'Hình ảnh hiện trường không trùng khớp',
+                    'Nước đã rút từ trước khi gửi báo cáo',
+                    'Tin báo trùng lặp hoặc spam phá hoại'
+                  ].map((reason) => (
+                    <label
+                      key={reason}
+                      onClick={() => setSpamReason(reason)}
+                      className={`flex items-center gap-2.5 p-2 rounded-lg border cursor-pointer text-body-sm transition-colors ${
+                        spamReason === reason
+                          ? 'border-error bg-red-50/50 font-semibold text-on-surface'
+                          : 'border-surface-container bg-surface-container-lowest text-secondary hover:bg-surface-container-low'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="spamReason"
+                        checked={spamReason === reason}
+                        onChange={() => setSpamReason(reason)}
+                        className="text-error focus:ring-error"
+                      />
+                      <span>{reason}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-label-md text-label-md font-bold text-on-surface block mb-1">
+                  Ghi Chú Kiểm Duyệt (Tùy chọn):
+                </label>
+                <input
+                  type="text"
+                  value={spamCustomNote}
+                  onChange={(e) => setSpamCustomNote(e.target.value)}
+                  placeholder="Ghi rõ thêm lý do nếu cần..."
+                  className="w-full p-space-sm rounded-xl bg-surface-container-lowest border border-surface-container text-body-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-error"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-space-md border-t border-surface-container bg-surface-container-low flex items-center justify-end gap-space-sm">
+              <button
+                type="button"
+                onClick={() => setShowSpamModal(false)}
+                className="px-space-md py-2 rounded-lg text-secondary hover:text-on-surface hover:bg-surface-container font-label-md text-label-md transition-colors cursor-pointer"
+              >
+                Hủy Bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReportSpam}
+                disabled={isRejectingSpam}
+                className="px-space-md py-2 rounded-lg bg-error hover:bg-red-700 text-on-error font-label-md text-label-md font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-75"
+              >
+                <span className={`material-symbols-outlined text-[18px] ${isRejectingSpam ? 'animate-spin' : ''}`}>
+                  {isRejectingSpam ? 'sync' : 'delete_forever'}
+                </span>
+                <span>{isRejectingSpam ? 'Đang Loại Bỏ...' : 'Xác Nhận Loại Bỏ (Spam)'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XÁC NHẬN NƯỚC RÚT */}
+      {showClearWaterModal && selectedPoint && (
+        <div
+          onClick={() => setShowClearWaterModal(false)}
+          className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-xs cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-md w-full bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container overflow-hidden flex flex-col cursor-default animate-in fade-in zoom-in-95 duration-150"
+          >
+            {/* Header */}
+            <div className="p-space-lg border-b border-surface-container flex items-center justify-between bg-surface-container-low">
+              <div className="flex items-center gap-space-sm">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-[22px]">water_drop</span>
+                </div>
+                <div>
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                    Xác Nhận Nước Đã Rút
+                  </h3>
+                  <span className="text-secondary text-body-sm font-data-mono">
+                    #{selectedPoint.id} • {selectedPoint.name}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClearWaterModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary hover:text-on-surface transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-space-lg space-y-space-md">
+              <div className="p-space-md rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-body-sm flex items-start gap-3">
+                <span className="material-symbols-outlined text-[22px] text-emerald-700 shrink-0 mt-0.5">check_circle</span>
+                <div>
+                  <p className="font-bold text-on-surface mb-1">
+                    Gỡ bỏ cảnh báo và mở lại lưu thông
+                  </p>
+                  <p className="text-secondary text-body-sm">
+                    Mực nước tại <strong>{selectedPoint.name}</strong> ({selectedPoint.district}) đã rút hoàn toàn (&lt; 15cm). Điểm cảnh báo này sẽ được giải tỏa và <strong>gỡ bỏ ngay lập tức khỏi bản đồ</strong>.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-space-md border-t border-surface-container bg-surface-container-low flex items-center justify-end gap-space-sm">
+              <button
+                type="button"
+                onClick={() => setShowClearWaterModal(false)}
+                className="px-space-md py-2 rounded-lg text-secondary hover:text-on-surface hover:bg-surface-container font-label-md text-label-md transition-colors cursor-pointer"
+              >
+                Hủy Bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearWater}
+                disabled={isResolvingWater}
+                className="px-space-md py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-label-md text-label-md font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-75"
+              >
+                <span className={`material-symbols-outlined text-[18px] ${isResolvingWater ? 'animate-spin' : ''}`}>
+                  {isResolvingWater ? 'sync' : 'water_drop'}
+                </span>
+                <span>{isResolvingWater ? 'Đang Cập Nhật...' : 'Xác Nhận Nước Rút'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
       {/* Photo Preview Modal */}
       {previewPhoto && (
         <div
           onClick={() => setPreviewPhoto(null)}
-          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 cursor-pointer"
+          className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 cursor-pointer"
         >
           <div className="relative max-w-2xl w-full bg-surface-container-lowest p-2 rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <img className="w-full h-auto rounded-lg object-contain max-h-[80vh]" alt="Full Preview" src={previewPhoto} />

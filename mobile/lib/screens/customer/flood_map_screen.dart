@@ -11,7 +11,9 @@ import '../../core/constants/app_colors.dart';
 import '../../core/models/flood_report_model.dart';
 import '../../core/services/location_service.dart';
 import '../../core/widgets/rescue_ui.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/flood_report_provider.dart';
+import '../auth/login_screen.dart';
 import 'community_flood_report_screen.dart';
 import 'my_flood_reports_screen.dart';
 
@@ -863,56 +865,122 @@ class _FloodMapScreenState extends State<FloodMapScreen> {
                   ),
 
                   // Nút báo nước rút
-                  TextButton.icon(
-                    onPressed: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (dCtx) => AlertDialog(
-                          title: const Text('Xác nhận nước đã rút'),
-                          content: Text(
-                            'Bạn xác nhận nước tại "${pt.address}" đã rút và các phương tiện có thể lưu thông an toàn?',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(dCtx, false),
-                              child: const Text('Hủy'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(dCtx, true),
-                              child: const Text('Xác nhận rút nước'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (confirmed == true && context.mounted) {
-                        final ok = await context
-                            .read<FloodReportProvider>()
-                            .reportWaterReceded(pt.id);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(ok
-                                  ? 'Cảm ơn bạn! Điểm ngập đã được cập nhật giải tỏa.'
-                                  : 'Cập nhật thất bại: ${context.read<FloodReportProvider>().errorMessage}'),
-                              backgroundColor: ok ? Colors.green : Colors.red,
+                  Consumer<AuthProvider>(
+                    builder: (context, auth, _) {
+                      final isAuthor = auth.user != null &&
+                          pt.reportedById != null &&
+                          auth.user!.id == pt.reportedById;
+                      final isClustered = pt.clusterCount > 1;
+                      final votes = pt.recededConfirmCount ?? 0;
+
+                      String buttonLabel = 'Báo nước đã rút';
+                      if (isAuthor && !isClustered) {
+                        buttonLabel = 'Báo nước đã rút (Bạn tạo)';
+                      } else if (votes > 0 || (isAuthor && isClustered)) {
+                        buttonLabel = 'Xác nhận nước rút ($votes/2)';
+                      }
+
+                      return TextButton.icon(
+                        onPressed: () async {
+                          if (!auth.isAuthenticated) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('Vui lòng đăng nhập để gửi báo cáo nước rút!'),
+                                backgroundColor: Colors.orange.shade800,
+                                action: SnackBarAction(
+                                  label: 'Đăng nhập',
+                                  textColor: Colors.white,
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                    );
+                                  },
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          String dialogTitle = 'Xác nhận nước đã rút';
+                          String dialogMessage = 'Bạn xác nhận nước tại "${pt.address}" đã rút? Báo cáo sẽ được ghi nhận và cần thêm 1 lượt xác nhận từ cộng đồng để giải tỏa hoàn toàn.';
+                          if (isAuthor && !isClustered) {
+                            dialogTitle = 'Giải tỏa điểm ngập của bạn';
+                            dialogMessage = 'Bạn là người đã báo cáo điểm ngập đơn lẻ này. Bạn xác nhận nước tại "${pt.address}" đã rút và các phương tiện có thể lưu thông bình thường? Điểm ngập sẽ được giải tỏa ngay lập tức.';
+                          } else if (isAuthor && isClustered) {
+                            dialogTitle = 'Xác nhận nước rút (Cụm ngập)';
+                            dialogMessage = 'Điểm ngập tại "${pt.address}" có ${pt.clusterCount} tin báo từ cộng đồng. Xác nhận của bạn được ghi nhận là 1 phiếu và cần thêm 1 lượt xác nhận từ người khác để giải tỏa an toàn.';
+                          } else if (votes > 0) {
+                            dialogTitle = 'Đồng thuận xác nhận nước rút';
+                            dialogMessage = 'Điểm ngập tại "${pt.address}" đã có $votes lượt báo nước rút. Xác nhận của bạn sẽ hoàn tất giải tỏa điểm ngập này khỏi bản đồ.';
+                          }
+
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (dCtx) => AlertDialog(
+                              title: Text(dialogTitle),
+                              content: Text(dialogMessage),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dCtx, false),
+                                  child: const Text('Hủy'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(dCtx, true),
+                                  child: const Text('Xác nhận rút nước'),
+                                ),
+                              ],
                             ),
                           );
-                        }
-                      }
+                          if (confirmed == true && context.mounted) {
+                            final updated = await context
+                                .read<FloodReportProvider>()
+                                .reportWaterReceded(pt.id);
+                            if (context.mounted) {
+                              if (updated != null) {
+                                if (updated.moderationStatus == 'EXPIRED') {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Cảm ơn bạn! Điểm ngập đã được xác nhận rút nước hoàn toàn và giải tỏa.'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Đã ghi nhận phản hồi (${updated.recededConfirmCount ?? 1}/2 lượt xác nhận). Cần thêm 1 lượt xác nhận từ cộng đồng để giải tỏa hoàn toàn.',
+                                      ),
+                                      backgroundColor: Colors.blue.shade700,
+                                    ),
+                                  );
+                                }
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Cập nhật thất bại: ${context.read<FloodReportProvider>().errorMessage ?? "Có lỗi xảy ra"}'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        },
+                        icon: const Icon(
+                          Icons.check_circle_outline,
+                          size: 16,
+                          color: Colors.teal,
+                        ),
+                        label: Text(
+                          buttonLabel,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.teal,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      );
                     },
-                    icon: const Icon(
-                      Icons.check_circle_outline,
-                      size: 16,
-                      color: Colors.teal,
-                    ),
-                    label: const Text(
-                      'Báo nước đã rút',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.teal,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
                   ),
                 ],
               ),
