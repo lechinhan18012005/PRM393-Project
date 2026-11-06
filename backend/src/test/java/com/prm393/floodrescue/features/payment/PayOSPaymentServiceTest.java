@@ -106,7 +106,7 @@ class PayOSPaymentServiceTest {
                 rescueOrderRepository,
                 rescueExecutionService,
                 rescueDispatchService,
-                new com.prm393.floodrescue.features.payment.service.PaymentAttemptService(paymentTransactionRepository, rescueOrderRepository, financeAdminService, payOSConfig),
+                new com.prm393.floodrescue.features.payment.service.PaymentAttemptService(paymentTransactionRepository, rescueOrderRepository, new com.prm393.floodrescue.features.finance.service.CommissionRateService(commissionConfigRepository), payOSConfig),
                 null,
                 new com.prm393.floodrescue.features.payment.service.PaymentSettlementService(paymentTransactionRepository, rescueOrderRepository, garageRepository, walletTransactionRepository, rescueExecutionService, rescueDispatchService)
         );

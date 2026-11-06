@@ -23,6 +23,7 @@ class ApiConstants {
   static String get refreshTokenUrl => '$baseUrl/auth/refresh';
   static String get currentUserUrl => '$baseUrl/auth/me';
   static String get geocodingSearchUrl => '$baseUrl/geocoding/search';
+  static String get geocodingReverseUrl => '$baseUrl/geocoding/reverse';
 
   // Garage & Branch Endpoints (Luồng 2)
   static String get garageRegisterUrl => '$baseUrl/garages/register';
@@ -41,6 +42,8 @@ class ApiConstants {
   static String get myFloodReportsUrl => '$baseUrl/flood-reports/my';
   static String recedeFloodReportUrl(int id) =>
       '$baseUrl/flood-reports/$id/recede';
+
+  static String cancelFloodReportUrl(int id) => '$baseUrl/flood-reports/$id';
 
   // Media Upload (Cloudinary)
   static String get uploadImageUrl => '$baseUrl/upload/image';

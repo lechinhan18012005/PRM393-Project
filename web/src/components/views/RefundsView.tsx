@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // MÀN HÌNH QUYẾT ĐỊNH & THỰC THI HOÀN TIỀN KHIẾU NẠI (REFUNDS VIEW - UC-27)
 // Tác giả & Phụ trách: Nguyễn Hoàng Long - Luồng Quản trị Tài chính & Hệ thống Admin
 // Mục đích (Yêu cầu #7):
@@ -37,8 +37,6 @@ interface RefundsViewProps {
 type RefundStatusTab =
   | 'ALL'
   | 'ESCALATED_TO_ADMIN'
-  | 'OPEN'
-  | 'UNDER_REVIEW'
   | 'RESOLVED_REFUND'
   | 'REJECTED';
 
@@ -126,6 +124,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [decisionError, setDecisionError] = useState('');
   // State phục vụ modal phóng to ảnh bằng chứng hiện trường (Lightbox)
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -206,10 +205,22 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
   /**
    * Lọc danh sách hồ sơ theo Tab trạng thái (`statusTab`) và từ khóa tìm kiếm (`searchQuery`).
    */
+  // Chỉ lọc các hồ sơ thuộc quyền Admin (chờ duyệt, đã hoàn tiền, đã từ chối), loại bỏ hoàn toàn UNDER_REVIEW và OPEN
+  const adminEligibleCases = useMemo(() => {
+    return refundCases.filter((c) => {
+      const f = extractDisputeFields(c);
+      return (
+        f.normalizedStatus === 'ESCALATED_TO_ADMIN' ||
+        f.normalizedStatus === 'RESOLVED_REFUND' ||
+        f.normalizedStatus === 'REJECTED'
+      );
+    });
+  }, [refundCases]);
+
   const filteredCases = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
-    return refundCases.filter((c) => {
+    return adminEligibleCases.filter((c) => {
       const f = extractDisputeFields(c);
 
       if (statusTab !== 'ALL' && f.normalizedStatus !== statusTab) {
@@ -228,23 +239,24 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
         (c.garageName || '').toLowerCase().includes(q)
       );
     });
-  }, [refundCases, statusTab, searchQuery]);
+  }, [adminEligibleCases, statusTab, searchQuery]);
 
   // Hồ sơ đang được chọn để hiển thị ở khung Phán quyết bên phải
   const selectedCase = useMemo(() => {
     return (
       filteredCases.find((c) => c.id === selectedId) ||
-      refundCases.find((c) => c.id === selectedId) ||
+      adminEligibleCases.find((c) => c.id === selectedId) ||
       filteredCases[0] ||
       null
     );
-  }, [filteredCases, refundCases, selectedId]);
+  }, [filteredCases, adminEligibleCases, selectedId]);
 
   /**
    * Đồng bộ giá trị mặc định của form phán quyết khi Admin chọn một hồ sơ khác.
    */
   useEffect(() => {
     if (selectedCase) {
+      setDecisionError('');
       const f = extractDisputeFields(selectedCase);
       setRefundAmountInput(f.requestedRefundAmount);
       setResolutionNotesInput(f.resolutionNotes || '');
@@ -268,10 +280,12 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
    */
   const handleSubmitDecision = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCase) return;
+    if (!selectedCase || isSubmitting) return;
+    setDecisionError('');
 
     const f = extractDisputeFields(selectedCase);
     if (decision === 'APPROVE_REFUND' && (refundAmountInput <= 0 || !Number.isFinite(refundAmountInput))) {
+      setDecisionError('Vui lòng nhập số tiền hoàn trả lớn hơn 0 VNĐ khi duyệt hoàn tiền.');
       onShowToast(
         'Số tiền không hợp lệ',
         'Vui lòng nhập số tiền hoàn trả lớn hơn 0 VNĐ khi duyệt hoàn tiền.',
@@ -309,6 +323,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
         decision === 'APPROVE_REFUND' ? 'success' : 'info'
       );
     } catch (err) {
+      setDecisionError((err as Error).message || 'Không thể lưu quyết định hoàn tiền.');
       onShowToast(
         'Lỗi xử lý hoàn tiền',
         (err as Error).message || 'Không thể lưu quyết định hoàn tiền.',
@@ -326,7 +341,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
   return (
     <div className="flex flex-col w-full space-y-6">
       {/* Header màn hình Hoàn tiền */}
-      <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-surface-container-lowest p-6 rounded-xl shadow-xs border border-surface-container">
         <div>
           <h1 className="text-2xl font-bold text-on-surface">
             Phán Quyết &amp; Thực Thi Hoàn Tiền Khiếu Nại
@@ -335,15 +350,6 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
             Xem xét hồ sơ khiếu nại và biên bản xác minh từ nhân viên Staff, quyết định phê duyệt hoàn tiền (trích từ Ví Gara hoặc Quỹ dự phòng) hoặc từ chối hoàn tiền.
           </p>
         </div>
-
-        <button
-          type="button"
-          disabled={isLoading}
-          onClick={() => void loadRefundsFromDb()}
-          className="self-start lg:self-auto px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-sm font-semibold text-on-surface transition-colors cursor-pointer"
-        >
-          {isLoading ? 'Đang tải...' : 'Làm mới từ Database'}
-        </button>
       </div>
 
       {errorMsg && (
@@ -362,15 +368,12 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
           <div className="text-2xl font-bold font-mono text-amber-600 mt-1.5">
             {kpiStats.pendingCount} hồ sơ
           </div>
-          <div className="text-xs text-secondary mt-1">
-            Bao gồm OPEN, UNDER_REVIEW và ESCALATED_TO_ADMIN
-          </div>
         </div>
 
         {/* KPI 2: Đã duyệt hoàn tiền */}
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            2. Đã duyệt hoàn tiền (RESOLVED_REFUND)
+            2. Đã duyệt hoàn tiền
           </div>
           <div className="text-2xl font-bold font-mono text-emerald-700 mt-1.5">
             {kpiStats.resolvedRefundCount} hồ sơ ({kpiStats.totalRefundedAmount.toLocaleString('vi-VN')} ₫)
@@ -383,7 +386,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
         {/* KPI 3: Đã từ chối hoàn tiền */}
         <div className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs">
           <div className="text-xs font-bold uppercase text-secondary">
-            3. Đã từ chối hoàn tiền (REJECTED)
+            3. Đã từ chối hoàn tiền
           </div>
           <div className="text-2xl font-bold font-mono text-red-600 mt-1.5">
             {kpiStats.rejectedCount} hồ sơ
@@ -399,12 +402,10 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
         <div className="flex flex-wrap items-center gap-1.5 bg-surface-container-low p-1 rounded-lg border border-surface-container">
           {(
             [
-              { id: 'ALL', label: `Tất cả (${refundCases.length})` },
-              { id: 'ESCALATED_TO_ADMIN', label: 'Chờ Admin duyệt (ESCALATED_TO_ADMIN)' },
-              { id: 'OPEN', label: 'Mới mở (OPEN)' },
-              { id: 'UNDER_REVIEW', label: 'Staff đang xem (UNDER_REVIEW)' },
-              { id: 'RESOLVED_REFUND', label: 'Đã hoàn tiền (RESOLVED_REFUND)' },
-              { id: 'REJECTED', label: 'Đã từ chối (REJECTED)' }
+              { id: 'ALL', label: `Tất cả (${adminEligibleCases.length})` },
+              { id: 'ESCALATED_TO_ADMIN', label: 'Chưa xử lý' },
+              { id: 'RESOLVED_REFUND', label: 'Đã hoàn tiền' },
+              { id: 'REJECTED', label: 'Đã từ chối' }
             ] as { id: RefundStatusTab; label: string }[]
           ).map((tab) => (
             <button
@@ -508,7 +509,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-sm text-secondary">
                       {isLoading
-                        ? 'Đang tải danh sách khiếu nại & hoàn tiền từ Database...'
+                        ? 'Đang tải danh sách khiếu nại & hoàn tiền...'
                         : 'Không có hồ sơ khiếu nại nào khớp với bộ lọc hiện tại.'}
                     </td>
                   </tr>
@@ -522,7 +523,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
         <div className="lg:col-span-5 bg-surface-container-lowest p-6 rounded-xl border border-surface-container shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-surface-container pb-3">
             <h2 className="text-base font-bold text-on-surface">
-              Bảng Phán Quyết Hoàn Tiền (Admin)
+              Bảng Phán Quyết Hoàn Tiền
             </h2>
             {selectedCase && (
               <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded bg-primary/10 text-primary">
@@ -542,7 +543,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
                   {/* Chi tiết hồ sơ khiếu nại */}
                   <div className="p-4 rounded-lg bg-surface-container-low space-y-2 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-secondary">Mã khiếu nại (Dispute ID):</span>
+                      <span className="text-secondary">Mã khiếu nại:</span>
                       <strong className="font-mono text-on-surface">
                         #{f.disputeCode} (ID: {selectedCase.id})
                       </strong>
@@ -590,7 +591,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
                     </div>
                     <div className="border-t border-surface-container-high pt-2">
                       <span className="font-bold uppercase text-tertiary block">
-                        Ghi chú xác minh của Staff (staffResolutionNotes):
+                        Ghi chú xác minh của Staff:
                       </span>
                       <p className="text-on-surface mt-0.5 italic">{f.staffResolutionNotes}</p>
                     </div>
@@ -632,10 +633,10 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
                           className="w-full h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-xs font-bold text-on-surface"
                         >
                           <option value="APPROVE_REFUND">
-                            Duyệt hoàn tiền cho khách (APPROVE_REFUND)
+                            Duyệt hoàn tiền cho khách
                           </option>
                           <option value="REJECT_REFUND">
-                            Từ chối yêu cầu hoàn tiền (REJECT_REFUND)
+                            Từ chối yêu cầu hoàn tiền
                           </option>
                         </select>
                       </div>
@@ -657,7 +658,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
 
                           <div>
                             <label className="block text-xs font-bold uppercase text-secondary mb-1">
-                              Nguồn trích hoàn tiền (refundSource)
+                              Nguồn trích hoàn tiền
                             </label>
                             <select
                               aria-label="Nguồn trích hoàn tiền"
@@ -670,10 +671,10 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
                               className="w-full h-9 px-3 rounded-lg border border-surface-container bg-surface-container-low text-xs font-semibold text-on-surface"
                             >
                               <option value="GARAGE_WALLET">
-                                Trích từ Ví số dư của Gara (GARAGE_WALLET)
+                                Trích từ Ví số dư của Gara
                               </option>
                               <option value="PLATFORM_RESERVE">
-                                Trích từ Quỹ dự phòng nền tảng (PLATFORM_RESERVE)
+                                Trích từ Quỹ dự phòng nền tảng
                               </option>
                             </select>
                           </div>
@@ -682,7 +683,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
 
                       <div>
                         <label className="block text-xs font-bold uppercase text-secondary mb-1">
-                          Ghi chú phán quyết của Admin (resolutionNotes)
+                          Ghi chú phán quyết của Admin
                         </label>
                         <textarea
                           rows={2}
@@ -693,6 +694,7 @@ export const RefundsView: React.FC<RefundsViewProps> = ({ onShowToast }) => {
                         />
                       </div>
 
+                      {decisionError && <div role="alert" className="p-3 rounded border border-red-200 bg-red-50 text-red-700 text-sm">{decisionError}</div>}
                       <button
                         type="submit"
                         disabled={isSubmitting}

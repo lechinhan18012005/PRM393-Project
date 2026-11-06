@@ -21,6 +21,7 @@ import com.prm393.floodrescue.features.mechanic.entity.MechanicStaff;
 import com.prm393.floodrescue.features.mechanic.entity.MechanicStatus;
 import com.prm393.floodrescue.features.mechanic.repository.MechanicStaffRepository;
 import com.prm393.floodrescue.features.mechanic.service.MechanicStaffService;
+import com.prm393.floodrescue.features.mechanic.service.MechanicAttendanceService;
 import com.prm393.floodrescue.features.rescue.entity.RescueOrderStatus;
 import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
 
@@ -51,6 +52,7 @@ public class MechanicStaffServiceImpl implements MechanicStaffService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final RescueOrderRepository rescueOrderRepository;
+    private final MechanicAttendanceService attendanceService;
 
     @Override
     @Transactional
@@ -292,6 +294,7 @@ public class MechanicStaffServiceImpl implements MechanicStaffService {
             throw new BadRequestException("Thợ đang có đơn cứu hộ chưa hoàn thành, không thể chuyển trạng thái để thoát đơn!");
         }
 
+        MechanicStatus oldStatus = staff.getWorkingStatus();
         staff.setWorkingStatus(request.getWorkingStatus());
         staff.setLastHeartbeatAt(LocalDateTime.now());
 
@@ -326,6 +329,35 @@ public class MechanicStaffServiceImpl implements MechanicStaffService {
                 "Mechanic user: {} updated status to: {}",
                 mechanicUser.getUsername(),
                 request.getWorkingStatus());
+
+        try {
+            boolean inShift = isWithinShift(staff.getShiftName(), LocalTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+            String eventType;
+            if (staff.getWorkingStatus() == MechanicStatus.OFFLINE) {
+                eventType = "PAUSE";
+            } else if (staff.getWorkingStatus() == MechanicStatus.AVAILABLE) {
+                eventType = (oldStatus == MechanicStatus.OFFLINE && staff.getPausedAt() != null) ? "RESUME" : "ONLINE";
+            } else {
+                eventType = "STATUS_CHANGE";
+            }
+            if (attendanceService != null) {
+                attendanceService.recordStatusChange(
+                        staff,
+                        eventType,
+                        oldStatus,
+                        staff.getWorkingStatus(),
+                        staff.getPauseReason(),
+                        staff.isManualOverride(),
+                        !inShift,
+                        staff.getCurrentLatitude(),
+                        staff.getCurrentLongitude(),
+                        null
+                );
+            }
+        } catch (Exception e) {
+            log.warn("Không thể ghi log chấm công cho thợ {}: {}", staff.getId(), e.getMessage());
+        }
+
         return mapToResponse(staff);
     }
 
@@ -562,10 +594,27 @@ public class MechanicStaffServiceImpl implements MechanicStaffService {
                     staff.getId(), List.of(RescueOrderStatus.DISPATCHED, RescueOrderStatus.ARRIVED, RescueOrderStatus.IN_PROGRESS)
             );
             if (!hasActiveOrder) {
+                MechanicStatus oldStatus = staff.getWorkingStatus();
                 staff.setWorkingStatus(MechanicStatus.OFFLINE);
                 staff.setManualOverride(false);
                 staff.setPauseReason("Tự động ngoại tuyến do mất tín hiệu định vị > 10 phút (BR-MECH-009)");
                 mechanicRepository.save(staff);
+                if (attendanceService != null) {
+                    try {
+                        attendanceService.recordStatusChange(
+                                staff,
+                                "AUTO_REAPED",
+                                oldStatus,
+                                MechanicStatus.OFFLINE,
+                                staff.getPauseReason(),
+                                false,
+                                false,
+                                staff.getCurrentLatitude(),
+                                staff.getCurrentLongitude(),
+                                null
+                        );
+                    } catch (Exception ignored) {}
+                }
                 log.info("Mechanic staffId: {} ({}) auto-reaped to OFFLINE due to stale heartbeat",
                         staff.getId(), staff.getUser().getUsername());
             }

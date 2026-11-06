@@ -2,7 +2,11 @@ package com.prm393.floodrescue.features.finance.service;
 
 import com.prm393.floodrescue.common.exception.BadRequestException;
 import com.prm393.floodrescue.common.exception.ResourceNotFoundException;
+import com.prm393.floodrescue.features.auth.entity.Role;
 import com.prm393.floodrescue.features.auth.entity.User;
+import com.prm393.floodrescue.features.notification.entity.NotificationLevel;
+import com.prm393.floodrescue.features.notification.entity.NotificationType;
+import com.prm393.floodrescue.features.notification.service.NotificationService;
 import com.prm393.floodrescue.features.finance.dto.*;
 import com.prm393.floodrescue.features.finance.entity.*;
 import com.prm393.floodrescue.features.finance.repository.CommissionConfigRepository;
@@ -27,6 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -112,6 +120,9 @@ public class FinanceAdminService {
      */
     @Autowired(required = false)
     private ServiceDisputeRepository serviceDisputeRepository;
+
+    @Autowired(required = false)
+    private NotificationService notificationService;
 
     // =========================================================================
     // UC-24: Configure Platform Commission Rate (Cấu hình Hoa hồng Nền tảng)
@@ -205,7 +216,7 @@ public class FinanceAdminService {
                 // Tự động đánh số phiên bản tiếp theo nếu Admin không nhập versionCode thủ công
                 .versionCode(request.getVersionCode() != null && !request.getVersionCode().isBlank()
                         ? request.getVersionCode()
-                        : "v2." + (existingConfigs.size() + 4))
+                        : (existingConfigs.isEmpty() ? "v1.0" : "v1." + existingConfigs.size()))
                 // Ghi nhận tóm tắt nội dung thay đổi phục vụ tra cứu lịch sử
                 .changeSummary(request.getChangeSummary() != null && !request.getChangeSummary().isBlank()
                         ? request.getChangeSummary()
@@ -416,8 +427,30 @@ public class FinanceAdminService {
                 .map(p -> mapToPayoutResponse(p, finalAvailable))
                 .collect(Collectors.toList());
 
+        YearMonth month = YearMonth.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        List<PaymentTransaction> monthlyPayments = paymentTransactionRepository
+                .findByGarageIdOrderByCreatedAtDesc(garage.getId()).stream()
+                .filter(tx -> tx.getStatus() == PaymentStatus.SUCCESS && tx.getPaidAt() != null)
+                .filter(tx -> YearMonth.from(tx.getPaidAt()).equals(month))
+                .toList();
+        Map<String, BigDecimal> byService = new LinkedHashMap<>();
+        for (PaymentTransaction tx : monthlyPayments) {
+            byService.merge(tx.getOrderType() != null ? tx.getOrderType() : "OTHER",
+                    tx.getNetGarageAmount(), BigDecimal::add);
+        }
+        GarageRevenueDto revenue = GarageRevenueDto.builder()
+                .month(month.toString())
+                .paidOrderCount(monthlyPayments.stream().map(PaymentTransaction::getRescueOrderId).distinct().count())
+                .netRevenue(monthlyPayments.stream().map(PaymentTransaction::getNetGarageAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .platformFee(monthlyPayments.stream().map(PaymentTransaction::getPlatformFee)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .revenueByService(byService)
+                .build();
+
         // Bước 8: Đóng gói và trả về kết quả tổng hợp ví Gara
         return GarageWalletDto.builder()
+                .revenue(revenue)
                 .garageId(garage.getId())
                 .garageName(garage.getGarageName())
                 .walletBalance(walletBalance)
@@ -509,6 +542,21 @@ public class FinanceAdminService {
 
         // Lưu phiếu rút tiền và tính lại số dư khả dụng mới sau khi khoản tiền này được phong tỏa tạm thời
         PayoutRequest saved = payoutRequestRepository.save(payout);
+        if (notificationService != null) {
+            try {
+                notificationService.sendToRole(
+                        Role.ADMIN,
+                        "Yêu cầu rút tiền ví Gara mới #" + saved.getRequestCode(),
+                        "Gara " + (garage.getGarageName() != null ? garage.getGarageName() : "Đối tác") + " đề nghị rút " + saved.getRequestedAmount() + " VND về tài khoản " + saved.getAccountNumber() + " (" + saved.getBankName() + ").",
+                        NotificationType.PAYOUT_REQUEST_NEW,
+                        NotificationLevel.WARNING,
+                        "payouts",
+                        saved.getId()
+                );
+            } catch (Exception e) {
+                // Ignore auxiliary notification failure
+            }
+        }
         BigDecimal newAvailableBalance = availableBalance.subtract(request.getRequestedAmount());
         return mapToPayoutResponse(saved, newAvailableBalance.max(BigDecimal.ZERO));
     }
@@ -629,6 +677,33 @@ public class FinanceAdminService {
 
         // Lưu cập nhật PayoutRequest và trả về kết quả kèm số dư khả dụng mới nhất của Gara
         PayoutRequest saved = payoutRequestRepository.save(payout);
+        if (notificationService != null && garage.getOwner() != null) {
+            try {
+                if (targetStatus == PayoutStatus.TRANSFERRED) {
+                    notificationService.sendToUser(
+                            garage.getOwner().getId(),
+                            "Yêu cầu rút tiền #" + saved.getRequestCode() + " đã được giải ngân",
+                            "Số tiền " + saved.getRequestedAmount() + " VND đã được chuyển khoản tới tài khoản ngân hàng của bạn (" + saved.getBankName() + ").",
+                            NotificationType.PAYOUT_STATUS_CHANGED,
+                            NotificationLevel.INFO,
+                            "owner-dashboard",
+                            saved.getId()
+                    );
+                } else if (targetStatus == PayoutStatus.REJECTED) {
+                    notificationService.sendToUser(
+                            garage.getOwner().getId(),
+                            "Yêu cầu rút tiền #" + saved.getRequestCode() + " bị từ chối",
+                            "Lý do từ chối: " + saved.getAdminNote(),
+                            NotificationType.PAYOUT_STATUS_CHANGED,
+                            NotificationLevel.CRITICAL,
+                            "owner-dashboard",
+                            saved.getId()
+                    );
+                }
+            } catch (Exception e) {
+                // Ignore auxiliary notification failure
+            }
+        }
         return mapToPayoutResponse(saved, calculateAvailableBalance(garage));
     }
 
@@ -807,9 +882,8 @@ public class FinanceAdminService {
      * Ánh xạ thực thể `Garage` cùng danh mục dịch vụ và chi nhánh sang `GarageCommissionDto`.
      */
     private GarageCommissionDto mapToGarageCommissionDto(Garage garage, BigDecimal fallbackGlobalRate) {
-        BigDecimal effectiveRate = garage.getCommissionRate() != null
-                ? garage.getCommissionRate()
-                : (fallbackGlobalRate != null ? fallbackGlobalRate : new BigDecimal("12.50"));
+        boolean isConfigured = garage.getCommissionRate() != null;
+        BigDecimal effectiveRate = garage.getCommissionRate();
 
         List<ServiceItem> rawServices = (serviceItemRepository != null && garage.getId() != null)
                 ? serviceItemRepository.findByGarageIdAndDeletedFalseOrderByCreatedAtAsc(garage.getId())
@@ -844,6 +918,7 @@ public class FinanceAdminService {
                 .status(garage.getStatus() != null ? garage.getStatus().name() : GarageStatus.PENDING.name())
                 .isVerified(garage.getStatus() == GarageStatus.APPROVED)
                 .isOnline(isOnline)
+                .isConfigured(isConfigured)
                 .commissionRate(effectiveRate)
                 .walletBalance(garage.getWalletBalance() != null ? garage.getWalletBalance() : BigDecimal.ZERO)
                 .serviceCount(serviceDtos.size())

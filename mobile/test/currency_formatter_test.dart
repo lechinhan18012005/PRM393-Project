@@ -10,4 +10,16 @@ void main() {
     expect(formatVnd(330000), '330.000 ₫');
     expect(formatVnd(-30000), '-30.000 ₫');
   });
+
+  test('formats and parses editable Vietnamese currency', () {
+    const formatter = VietnameseCurrencyInputFormatter();
+    final value = formatter.formatEditUpdate(
+      TextEditingValue.empty,
+      const TextEditingValue(text: '150000'),
+    );
+
+    expect(value.text, '150.000');
+    expect(parseVnd(value.text), 150000);
+    expect(formatVndInput(30000), '30.000');
+  });
 }

@@ -49,6 +49,7 @@ class MechanicStaffServiceTest {
 
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private RescueOrderRepository rescueOrderRepository;
+    @Mock private com.prm393.floodrescue.features.mechanic.service.MechanicAttendanceService attendanceService;
 
     @InjectMocks private MechanicStaffServiceImpl mechanicService;
 

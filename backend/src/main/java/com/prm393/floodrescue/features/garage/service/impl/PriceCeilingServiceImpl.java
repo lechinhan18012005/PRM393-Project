@@ -9,6 +9,10 @@ import com.prm393.floodrescue.features.garage.entity.PlatformPriceCeiling;
 import com.prm393.floodrescue.features.garage.entity.ServiceType;
 import com.prm393.floodrescue.features.garage.repository.PlatformPriceCeilingRepository;
 import com.prm393.floodrescue.features.garage.service.PriceCeilingService;
+import com.prm393.floodrescue.features.auth.entity.Role;
+import com.prm393.floodrescue.features.notification.entity.NotificationLevel;
+import com.prm393.floodrescue.features.notification.entity.NotificationType;
+import com.prm393.floodrescue.features.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +28,9 @@ import java.util.Optional;
 public class PriceCeilingServiceImpl implements PriceCeilingService {
 
     private final PlatformPriceCeilingRepository ceilingRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private NotificationService notificationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -146,6 +153,22 @@ public class PriceCeilingServiceImpl implements PriceCeilingService {
         Optional<BigDecimal> maxAllowed =
                 findMaxAllowedPrice(serviceType, category, itemCategoryType);
         if (maxAllowed.isPresent() && price.compareTo(maxAllowed.get()) > 0) {
+            if (notificationService != null) {
+                try {
+                    notificationService.sendToRole(
+                            Role.STAFF,
+                            "Cảnh báo vi phạm giá trần dịch vụ",
+                            String.format("Phát hiện thiết lập giá dịch vụ '%s' (%,.0f đ) vượt mức giá trần của sàn (%,.0f đ).",
+                                    serviceName, price, maxAllowed.get()),
+                            NotificationType.PRICE_CEILING_EXCEEDED,
+                            NotificationLevel.WARNING,
+                            "pricing",
+                            null
+                    );
+                } catch (Exception e) {
+                    // Ignore auxiliary notification failure
+                }
+            }
             throw new BadRequestException(
                     String.format(
                             "Đơn giá niêm yết (%,.0f đ) của dịch vụ '%s' vượt quá mức giá trần quy định của sàn (%,.0f đ) cho danh mục %s. Vui lòng tuân thủ quy định giá cứu hộ để bảo vệ người tiêu dùng mùa bão ngập!",

@@ -189,7 +189,7 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({
             Tổng Quan Tài Chính &amp; Dòng Tiền Hệ Thống
           </h1>
           <p className="text-sm text-secondary mt-1">
-            Theo dõi thời gian thực tổng giá trị giao dịch (GMV), doanh thu chiết khấu nền tảng, số dư ví Gara và các tác vụ tài chính chờ phê duyệt từ Database.
+            Theo dõi thời gian thực tổng giá trị giao dịch, doanh thu chiết khấu nền tảng, số dư ví Gara và các tác vụ tài chính cần phê duyệt.
           </p>
         </div>
 
@@ -200,14 +200,6 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({
             className="px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container border border-surface-container text-sm font-semibold text-on-surface transition-colors cursor-pointer"
           >
             Xem báo cáo P&amp;L chi tiết
-          </button>
-          <button
-            type="button"
-            disabled={isLoading}
-            onClick={() => void loadOverviewData(true)}
-            className="px-4 py-2 rounded-lg bg-primary text-on-primary font-bold text-sm hover:bg-primary-container transition-colors cursor-pointer disabled:opacity-60"
-          >
-            {isLoading ? 'Đang đồng bộ...' : 'Làm mới dữ liệu từ DB'}
           </button>
         </div>
       </div>
@@ -226,13 +218,13 @@ export const OverviewGMVView: React.FC<OverviewGMVViewProps> = ({
           className="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-xs cursor-pointer hover:border-primary transition-colors"
         >
           <div className="text-xs font-bold uppercase text-secondary">
-            1. Tổng doanh thu giao dịch (GMV)
+            1. Tổng doanh thu giao dịch
           </div>
           <div className="text-2xl font-bold font-mono text-on-surface mt-1.5">
             {overviewMetrics.totalGmv.toLocaleString('vi-VN')} ₫
           </div>
           <div className="text-xs text-emerald-700 font-semibold mt-1">
-            {overviewMetrics.paidTxCount} giao dịch thành công trong DB
+            {overviewMetrics.paidTxCount} giao dịch thành công
           </div>
         </div>
 

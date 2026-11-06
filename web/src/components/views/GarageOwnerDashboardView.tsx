@@ -56,6 +56,10 @@ export function GarageOwnerDashboardView({ onSelectScreen }: Props) {
   }
   useEffect(() => {
     void load();
+    const interval = setInterval(() => {
+      void load();
+    }, 15000);
+    return () => clearInterval(interval);
   }, []);
   const mechanics = data?.mechanics ?? [];
   const branches = data?.branches ?? [];
@@ -191,7 +195,7 @@ export function GarageOwnerDashboardView({ onSelectScreen }: Props) {
               },
               {
                 title: 'Đội thợ cứu hộ',
-                desc: mechanics.length ? `${mechanics.length} thợ đã kích hoạt` : 'Mời thợ và phân ca làm việc',
+                desc: mechanics.length ? `${mechanics.length} thợ sẵn sàng` : 'Thêm thợ và phân ca làm việc',
                 done: mechanics.length > 0,
                 screen: 'garage-team'
               },
@@ -231,14 +235,28 @@ export function GarageOwnerDashboardView({ onSelectScreen }: Props) {
                   <small>{m.branchName || 'Chưa phân chi nhánh'}</small>
                   <small>{m.shiftName || 'Chưa phân ca'}</small>
                 </div>
-                <GarageBadge tone={m.active && m.workingStatus === 'AVAILABLE' ? 'green' : 'neutral'}>
+                <GarageBadge
+                  tone={
+                    !m.active
+                      ? 'neutral'
+                      : m.workingStatus === 'AVAILABLE'
+                        ? 'green'
+                        : m.workingStatus === 'BUSY'
+                          ? 'red'
+                          : m.isManualOverride || m.pauseReason
+                            ? 'amber'
+                            : 'neutral'
+                  }
+                >
                   {!m.active
                     ? 'Đã khóa'
                     : m.workingStatus === 'AVAILABLE'
                       ? 'Online'
                       : m.workingStatus === 'BUSY'
                         ? 'Đang bận'
-                        : 'Offline'}
+                        : m.isManualOverride || m.pauseReason
+                          ? `Tạm nghỉ: ${m.pauseReason || 'Nghỉ giữa ca'}`
+                          : 'Offline'}
                 </GarageBadge>
               </div>
             ))}
@@ -246,9 +264,9 @@ export function GarageOwnerDashboardView({ onSelectScreen }: Props) {
         ) : (
           <div className="garage-inline-empty">
             <Users size={24} />
-            <p>Đội thợ của bạn sẽ xuất hiện tại đây sau khi kích hoạt lời mời.</p>
+            <p>Đội thợ của bạn sẽ xuất hiện tại đây sau khi thêm thành viên mới.</p>
             <button className="garage-text-button" onClick={() => onSelectScreen('garage-team')}>
-              Mời thợ đầu tiên
+              Thêm thợ đầu tiên
               <ArrowRight size={14} />
             </button>
           </div>

@@ -30,4 +30,16 @@ void main() {
     expect(result?.latitude, 10.801234);
     expect(result?.longitude, 106.712345);
   });
+
+  test('reverse queries coordinates and parses address', () async {
+    final client = _FakeClient();
+    final service = GeocodingService(client: client);
+
+    final result = await service.reverse(10.849298, 106.812682);
+
+    expect(client.requestedUri?.path, contains('/geocoding/reverse'));
+    expect(client.requestedUri?.queryParameters['lat'], '10.849298');
+    expect(client.requestedUri?.queryParameters['lon'], '106.812682');
+    expect(result?.displayName, '142 Nguyễn Gia Trí, Bình Thạnh, Việt Nam');
+  });
 }

@@ -9,6 +9,8 @@ import 'package:provider/provider.dart';
 import 'package:mobile/core/models/user_model.dart';
 import 'package:mobile/core/models/mechanic_staff_model.dart';
 import 'package:mobile/core/theme/app_theme.dart';
+import 'package:mobile/features/quotation/quotation_api.dart';
+import 'package:mobile/features/quotation/quotation_models.dart';
 import 'package:mobile/providers/auth_provider.dart';
 import 'package:mobile/providers/mechanic_provider.dart';
 import 'package:mobile/screens/home/mechanic_home_screen.dart';
@@ -68,6 +70,44 @@ class _Mechanic extends MechanicProvider {
     }
     return !fail;
   }
+}
+
+class _RevisionQuotationApi extends QuotationApi {
+  @override
+  Future<List<QuotationCatalogItem>> catalog(int orderId) async => const [
+    QuotationCatalogItem(
+      serviceId: 5,
+      name: 'Sấy bugi',
+      price: 80000,
+      type: 'REPAIR_ONSITE',
+    ),
+  ];
+
+  @override
+  Future<List<QuotationModel>> history(int orderId) async => const [
+    QuotationModel(
+      id: 10,
+      orderId: 20,
+      version: 1,
+      status: 'REVISION_REQUESTED',
+      diagnosis: 'Nước vào buồng đốt',
+      bookingFee: 30000,
+      subtotal: 80000,
+      discount: 10000,
+      total: 100000,
+      latest: true,
+      customerNote: 'Vui lòng bỏ hạng mục không cần thiết',
+      items: [
+        QuotationLine(
+          serviceId: 5,
+          name: 'Sấy bugi',
+          quantity: 1,
+          unitPrice: 80000,
+          subtotal: 80000,
+        ),
+      ],
+    ),
+  ];
 }
 
 const _capture = bool.fromEnvironment('CAPTURE_UI');
@@ -185,9 +225,25 @@ void main() {
     await tester.ensureVisible(find.byType(Switch));
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
+    expect(find.text('Xác nhận nghỉ'), findsOneWidget);
+    await tester.tap(find.text('Xác nhận nghỉ'));
+    await tester.pumpAndSettle();
     expect(p.status, 'OFFLINE');
     expect(p.calls, 1);
     expect(find.text('Đã chuyển sang trạng thái tạm nghỉ.'), findsOneWidget);
+  });
+
+  testWidgets('Cancelling pause dialog retains online status and skips server call', (tester) async {
+    final p = _Mechanic();
+    await _show(tester, mechanic: p);
+    await tester.ensureVisible(find.byType(Switch));
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(find.text('Vui lòng chọn lý do tạm nghỉ trong ca trực:'), findsOneWidget);
+    await tester.tap(find.text('Hủy'));
+    await tester.pumpAndSettle();
+    expect(p.status, 'AVAILABLE');
+    expect(p.calls, 0);
   });
   testWidgets('Mechanic tools expose real rescue order history', (
     tester,
@@ -216,6 +272,9 @@ void main() {
     await _show(tester, mechanic: p);
     await tester.ensureVisible(find.byType(Switch));
     await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(find.text('Xác nhận nghỉ'), findsOneWidget);
+    await tester.tap(find.text('Xác nhận nghỉ'));
     await tester.pumpAndSettle();
     expect(p.status, 'AVAILABLE');
     expect(p.calls, 1);
@@ -246,6 +305,36 @@ void main() {
       200,
     );
     expect(find.text('220.000 ₫'), findsOneWidget);
+  });
+  testWidgets('Revision request is restored for mechanic and resent as V2', (
+    tester,
+  ) async {
+    await _show(
+      tester,
+      screen: QuotationBuilderScreen(
+        orderId: 20,
+        quotationApi: _RevisionQuotationApi(),
+      ),
+    );
+
+    expect(find.text('Khách yêu cầu chỉnh sửa báo giá V1'), findsOneWidget);
+    expect(find.text('Vui lòng bỏ hạng mục không cần thiết'), findsOneWidget);
+    expect(find.text('Nước vào buồng đốt'), findsOneWidget);
+    expect(
+      tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+      isTrue,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Gửi lại báo giá V2'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Gửi lại báo giá V2'), findsOneWidget);
+
+    final discountField = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .last;
+    expect(discountField.controller?.text, '10.000');
   });
   testWidgets('Repair requires completing checklist before handover', (
     tester,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -22,6 +24,7 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
   bool _loading = true;
   bool _submitting = false;
   String? _error;
+  Timer? _revisionPollTimer;
 
   @override
   void initState() {
@@ -29,11 +32,13 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
     if (widget.orderId != null) _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final history = await _api.history(widget.orderId!);
       if (!mounted) return;
@@ -42,6 +47,7 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
         _quotation = latest.isEmpty ? null : latest.first;
         _loading = false;
       });
+      _syncRevisionPolling();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -49,6 +55,24 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
+  }
+
+  void _syncRevisionPolling() {
+    if (_quotation?.status == 'REVISION_REQUESTED') {
+      _revisionPollTimer ??= Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _load(silent: true),
+      );
+    } else {
+      _revisionPollTimer?.cancel();
+      _revisionPollTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _revisionPollTimer?.cancel();
+    super.dispose();
   }
 
   Future<String?> _noteDialog(String title) async {
@@ -99,9 +123,14 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
       };
       if (!mounted) return;
       setState(() => _quotation = updated);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Đã cập nhật: ${updated.status}')));
+      _syncRevisionPolling();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã cập nhật: ${_quotationStatusLabel(updated.status)}',
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -160,7 +189,8 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
                         if (i < quotation.items.length - 1) const Divider(),
                       ],
                       const Divider(thickness: 1.5),
-                      _moneyRow('Phí đặt xe', quotation.bookingFee),
+                      if (quotation.bookingFee > 0)
+                        _moneyRow('Phí đặt xe (đơn cũ)', quotation.bookingFee),
                       _moneyRow('Dịch vụ', quotation.subtotal),
                       _moneyRow('Giảm giá', -quotation.discount),
                       _moneyRow(
@@ -171,8 +201,6 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                _warrantyNotice(),
                 const SizedBox(height: 24),
                 if (quotation.status == 'PENDING_APPROVAL') _connectedActions(),
               ],
@@ -258,8 +286,6 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          _warrantyNotice(),
           const SizedBox(height: 24),
           Row(
             children: [
@@ -372,27 +398,6 @@ class _ReviewQuotationScreenState extends State<ReviewQuotationScreen> {
         ],
       ),
     ],
-  );
-
-  Widget _warrantyNotice() => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Colors.green.shade50,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: Colors.green.shade200),
-    ),
-    child: const Row(
-      children: [
-        Icon(Icons.verified_user, color: Colors.green, size: 24),
-        SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            'Bảo hành 30 ngày cho các chi tiết xử lý ngập nước tại tất cả chi nhánh Gara Toàn Thắng.',
-            style: TextStyle(fontSize: 11, color: Colors.green),
-          ),
-        ),
-      ],
-    ),
   );
 
   Widget _buildQuoteItem(String name, String desc, String price) => Padding(

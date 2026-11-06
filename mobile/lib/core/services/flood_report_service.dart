@@ -86,6 +86,20 @@ class FloodReportService {
     throw Exception(data['message'] ?? 'Báo cáo nước rút thất bại');
   }
 
+  // UC-20: Tác giả rút lại / hủy báo cáo khi đang chờ duyệt PENDING
+  Future<FloodReportModel> cancelPendingReport(int id) async {
+    final headers = await _getHeaders();
+    final response = await _client.delete(
+      Uri.parse(ApiConstants.cancelFloodReportUrl(id)),
+      headers: headers,
+    );
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
+    if (response.statusCode == 200 && data['success'] == true) {
+      return FloodReportModel.fromJson(data['data']);
+    }
+    throw Exception(data['message'] ?? 'Rút lại báo cáo thất bại');
+  }
+
   Future<String> uploadImageBytes(List<int> bytes, String fileName, {String folder = 'flood_reports'}) async {
     try {
       final token = await _authService.getToken();

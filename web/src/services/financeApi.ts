@@ -90,7 +90,8 @@ export interface GarageCommissionDto {
   // Cờ trạng thái Gara đang mở cửa trực tuyến nhận đơn cứu hộ
   isOnline: boolean;
   // Tỷ lệ phí chiết khấu nền tảng áp dụng riêng cho Gara này (ví dụ: 12.5 tương ứng 12.5%)
-  commissionRate: number;
+  isConfigured?: boolean;
+  commissionRate?: number | null;
   // Số dư hiện tại trong ví điện tử của Gara trên hệ thống (VNĐ)
   walletBalance: number;
   // Tổng số dịch vụ mà Gara này đã đăng ký cung cấp
@@ -257,6 +258,48 @@ export interface ServiceRatingBackendResponse {
   createdAt: string;
 }
 
+export interface GarageWalletBackend {
+  garageId: number;
+  garageName: string;
+  walletBalance: number;
+  pendingPayoutAmount: number;
+  availableBalance: number;
+  totalWithdrawnAmount: number;
+  recentTransactions: {
+    id: number;
+    amount: number;
+    balanceAfter: number;
+    transactionType: string;
+    referenceCode?: string;
+    description?: string;
+    createdAt: string;
+  }[];
+  payoutRequests: PayoutRequestBackend[];
+  revenue?: {
+    month: string;
+    paidOrderCount: number;
+    netRevenue: number;
+    platformFee: number;
+    revenueByService: Record<string, number>;
+  } | null;
+}
+
+export interface CreateGaragePayoutRequest {
+  requestedAmount: number;
+  bankCode: string;
+  bankName?: string;
+  accountNumber: string;
+  accountHolderName: string;
+}
+
+async function readWalletResponse<T>(response: Response): Promise<T> {
+  const json = await response.json().catch(() => null);
+  if (!response.ok || !json?.success) {
+    throw new Error(json?.message || 'Không thể kết nối ví gara. Vui lòng thử lại.');
+  }
+  return json.data;
+}
+
 /**
  * Giao diện thống kê tổng quan doanh thu, dòng tiền và nghĩa vụ tài chính toàn nền tảng (`PlatformRevenueStats`).
  * Bao gồm đầy đủ các trường từ `PlatformRevenueStatsDto` của Backend và các trường mở rộng theo Yêu cầu #2.
@@ -320,6 +363,17 @@ export interface ProcessRefundPayload {
  * Đối tượng `financeApi` cung cấp toàn bộ các phương thức giao tiếp với phân hệ Tài chính ở Backend.
  */
 export const financeApi = {
+  getGarageWallet: async (signal?: AbortSignal): Promise<GarageWalletBackend> => {
+    const response = await fetch(`${API_BASE_URL}/garages/wallet`, { headers: getAuthHeaders(), signal });
+    return readWalletResponse<GarageWalletBackend>(response);
+  },
+
+  createGaragePayout: async (payload: CreateGaragePayoutRequest): Promise<PayoutRequestBackend> => {
+    const response = await fetch(`${API_BASE_URL}/garages/wallet/payouts`, {
+      method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload)
+    });
+    return readWalletResponse<PayoutRequestBackend>(response);
+  },
   // ==========================================================================
   // 1. THỐNG KÊ TỔNG QUAN DOANH THU & DÒNG TIỀN NỀN TẢNG (UC-25)
   // ==========================================================================

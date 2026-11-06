@@ -248,7 +248,7 @@ export function GarageServicesPricingView(_props: Props) {
       [2, 3, 4, 5, 6].map((count) => [
         `groupPrice${count}Vehicles`,
         String(data.serviceType) === 'CROSSING'
-          ? Number(data[`groupPrice${count}Vehicles`] || 0)
+          ? parseFormattedNumber(String(data[`groupPrice${count}Vehicles`] || ''))
           : null
       ])
     ) as Record<string, number | null>;
@@ -886,11 +886,14 @@ export function GarageServicesPricingView(_props: Props) {
                       <span className="text-xs font-medium">{count} xe (đ)</span>
                       <input
                         name={`groupPrice${count}Vehicles`}
-                        type="number"
-                        min="1000"
-                        step="1000"
-                        defaultValue={editing?.[`groupPrice${count}Vehicles` as keyof ServiceItemBackend] as number | undefined}
-                        onChange={() => clearFieldError('groupPrices')}
+                        type="text"
+                        inputMode="numeric"
+                        defaultValue={formatNumberWithDots(editing?.[`groupPrice${count}Vehicles` as keyof ServiceItemBackend] as number | undefined)}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\D/g, '');
+                          e.target.value = raw.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                          clearFieldError('groupPrices');
+                        }}
                         className="w-full border border-gray-300 rounded p-2 mt-1"
                         placeholder="0"
                       />

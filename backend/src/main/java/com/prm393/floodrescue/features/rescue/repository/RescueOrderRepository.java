@@ -78,4 +78,10 @@ public interface RescueOrderRepository extends JpaRepository<RescueOrder, Long> 
           )
     """)
     boolean isOrderActiveForTracking(@Param("orderId") Long orderId);
+
+    long countByMechanicStaffIdAndStatusAndServiceCompletedAtBetween(
+            Long mechanicStaffId,
+            RescueOrderStatus status,
+            LocalDateTime start,
+            LocalDateTime end);
 }

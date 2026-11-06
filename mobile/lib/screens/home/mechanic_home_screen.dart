@@ -73,6 +73,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   Timer? _offerPollingTimer;
   Timer? _offerCountdownTimer;
   Timer? _idleGpsTimer;
+  Timer? _activeOrderPollingTimer;
+  bool _isLoadingActiveOrder = false;
 
   bool get _hasActiveOrder =>
       _activeOrder != null &&
@@ -162,8 +164,20 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
     final profile = provider?.myProfile;
     final isOnline = profile?.isOnline == true;
 
+    if (_hasActiveOrder) {
+      _stopOfferTimers();
+      _activeOrderPollingTimer ??= Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _loadActiveOrder(),
+      );
+      return;
+    }
+
+    _activeOrderPollingTimer?.cancel();
+    _activeOrderPollingTimer = null;
+
     // Chỉ poll offer và gửi GPS khi thợ AVAILABLE và chưa có cuốc active
-    if (isOnline && !_hasActiveOrder) {
+    if (isOnline) {
       if (_offerPollingTimer == null || !_offerPollingTimer!.isActive) {
         _offerPollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
           _pollOffersOnce();
@@ -176,17 +190,23 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
         });
       }
     } else {
-      _stopAllTimers();
+      _stopOfferTimers();
     }
   }
 
-  void _stopAllTimers() {
+  void _stopOfferTimers() {
     _offerPollingTimer?.cancel();
     _offerPollingTimer = null;
     _idleGpsTimer?.cancel();
     _idleGpsTimer = null;
     _offerCountdownTimer?.cancel();
     _offerCountdownTimer = null;
+  }
+
+  void _stopAllTimers() {
+    _stopOfferTimers();
+    _activeOrderPollingTimer?.cancel();
+    _activeOrderPollingTimer = null;
   }
 
   int _calculateRemainingSeconds(RescueOfferModel offer) {
@@ -338,6 +358,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
   }
 
   Future<void> _loadActiveOrder() async {
+    if (_isLoadingActiveOrder) return;
+    _isLoadingActiveOrder = true;
     try {
       final order = await _rescueService.getActiveOrder();
       String? quotationStatus;
@@ -359,11 +381,24 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
           _syncTimers();
         }
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _isLoadingActiveOrder = false;
+    }
   }
 
   Future<void> _toggleAvailability() async {
-    await changeMechanicAvailability(context);
+    final profile = _mechanicProviderSafe?.myProfile;
+    final isOnline = profile?.isOnline ?? false;
+    String? pauseReason;
+    if (isOnline) {
+      pauseReason = await showPauseReasonDialog(context);
+      if (pauseReason == null || !mounted) {
+        // Tho bam Huy hoac dong popup, giu nguyen trang thai truc tuyen
+        return;
+      }
+    }
+    await changeMechanicAvailability(context, pauseReason: pauseReason);
     if (mounted && _isAppForeground) {
       _syncTimers();
       _pollOffersOnce();
@@ -654,7 +689,7 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
                         ? 'Đang bận'
                         : profile.isOnline
                         ? 'Đang nhận yêu cầu'
-                        : 'Tạm nghỉ',
+                        : (profile.isPaused ? 'Đang tạm nghỉ' : 'Tạm nghỉ'),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -666,7 +701,9 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
                         ? (_gpsUnavailable
                               ? 'GPS không khả dụng · Cần bật vị trí để nhận cuốc'
                               : 'Đang trực tuyến · Tọa độ GPS đã đồng bộ')
-                        : 'Trạng thái đồng bộ với gara',
+                        : (profile?.isPaused == true && profile?.pauseReason != null
+                              ? 'Lý do: ${profile!.pauseReason}'
+                              : 'Trạng thái đồng bộ với gara'),
                     style: TextStyle(
                       fontSize: 11,
                       color: _gpsUnavailable && profile?.isOnline == true
@@ -828,6 +865,8 @@ class _MechanicHomeScreenState extends State<MechanicHomeScreen>
             label: Text(
               _latestQuotationStatus == 'PENDING_APPROVAL'
                   ? 'Đang chờ khách hàng duyệt báo giá'
+                  : _latestQuotationStatus == 'REVISION_REQUESTED'
+                  ? 'Khách yêu cầu chỉnh sửa báo giá'
                   : order.status == 'DISPATCHED'
                   ? 'Tiếp tục di chuyển đến điểm đón'
                   : order.orderType == 'ONSITE_REPAIR' ||

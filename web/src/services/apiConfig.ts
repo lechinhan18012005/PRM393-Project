@@ -10,7 +10,7 @@ export const API_BASE_URL = rawUrl.endsWith('/api/v1') ? rawUrl : `${rawUrl}/api
 export const getAuthHeaders = (): HeadersInit => {
   const token = authStorage.getToken();
   return {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json; charset=utf-8',
     ...(token ? { Authorization: `Bearer ${token}` } : {})
   };
 };

@@ -41,6 +41,9 @@ export interface RescueOrderWebResponse {
   customerNotes?: string;
   serviceBasePrice: number;
   bookingFee: number;
+  commissionRate?: number;
+  groupCommissionRate?: number;
+  platformFee?: number;
   totalAmount: number;
   currency?: string;
   completionPhotoUrl: string | null;

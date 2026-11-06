@@ -476,7 +476,18 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
         ? '$groupNote. Ghi chú thêm: $customNote'
         : groupNote;
 
-    final targetVehicleId = _selectedVehicle?.id ?? widget.vehicleId ?? 1;
+    final targetVehicleId = _selectedVehicle?.id ?? widget.vehicleId;
+    if (targetVehicleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Vui lòng chọn hoặc thêm phương tiện của bạn trước khi gửi yêu cầu cứu hộ!',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
     final rescueProvider = Provider.of<RescueProvider?>(context, listen: false);
     setState(() => _isSubmitting = true);
@@ -579,6 +590,14 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            RescueIntro(
+              eyebrow: 'BẮT ĐẦU YÊU CẦU',
+              title: _introTitle,
+              description: _selectedService == 0
+                  ? 'Xác nhận điểm đón, chọn chuyến riêng hoặc khởi tạo chuyến gom và số lượng từ 2 đến 6 xe.'
+                  : 'Xác nhận điểm xe đang gặp nạn, chọn gara khả dụng; thợ sẽ đến kiểm tra và gửi báo giá để bạn duyệt.',
+            ),
+            const SizedBox(height: 16),
             Text(
               'Bạn cần hỗ trợ gì?',
               style: Theme.of(context).textTheme.titleLarge,
@@ -589,15 +608,6 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
               const SizedBox(height: 8),
             ],
             const SizedBox(height: 4),
-
-            RescueIntro(
-              eyebrow: 'BẮT ĐẦU YÊU CẦU',
-              title: _introTitle,
-              description: _selectedService == 0
-                  ? 'Xác nhận điểm đón, chọn chuyến riêng hoặc khởi tạo chuyến gom và số lượng từ 2 đến 6 xe.'
-                  : 'Xác nhận điểm xe đang gặp nạn, chọn gara khả dụng; thợ sẽ đến kiểm tra và gửi báo giá để bạn duyệt.',
-            ),
-            const SizedBox(height: 12),
 
             // Thông tin xe & địa điểm
             RescuePanel(
@@ -875,9 +885,13 @@ class _ServiceSelectionScreenState extends State<ServiceSelectionScreen> {
                         ),
                         const SizedBox(height: 4),
                         _priceRow(
-                          'Phí đặt xe (nền tảng)',
-                          _formatPrice(_selectedOption!.bookingFee),
+                          'Phí chiết khấu của nền tảng (${_isGroupTrip ? _selectedOption!.groupCommissionRate : _selectedOption!.commissionRate}%)',
+                          _formatPrice(
+                            ((_isGroupTrip ? _selectedOption!.groupPrices[_groupVehicleCount] : _selectedOption!.serviceBasePrice) ?? 0) *
+                            (_isGroupTrip ? _selectedOption!.groupCommissionRate : _selectedOption!.commissionRate) / 100,
+                          ),
                         ),
+                        const Text('Đã nằm trong giá dịch vụ, khấu trừ từ doanh thu gara.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                         const Divider(height: 16),
                         _priceRow(
                           'Tổng thanh toán dự kiến',

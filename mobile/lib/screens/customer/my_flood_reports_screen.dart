@@ -249,6 +249,71 @@ class _MyFloodReportsScreenState extends State<MyFloodReportsScreen> {
                                   ),
                                 ),
                               ],
+                              if (pt.moderationStatus == 'PENDING') ...[
+                                const SizedBox(height: 8),
+                                const Divider(height: 1),
+                                const SizedBox(height: 6),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final confirmed = await showDialog<bool>(
+                                        context: context,
+                                        builder: (dCtx) => AlertDialog(
+                                          title: const Text('Rút lại tin báo ngập'),
+                                          content: Text(
+                                            'Bạn có chắc chắn muốn hủy và rút lại báo cáo tại "${pt.address}" không?\n\nBáo cáo sẽ được gỡ khỏi hàng đợi duyệt và không xuất hiện trên bản đồ cảnh báo.',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(dCtx, false),
+                                              child: const Text('Đóng'),
+                                            ),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.red,
+                                                foregroundColor: Colors.white,
+                                              ),
+                                              onPressed: () => Navigator.pop(dCtx, true),
+                                              child: const Text('Xác nhận hủy'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirmed == true && context.mounted) {
+                                        final ok = await context
+                                            .read<FloodReportProvider>()
+                                            .cancelPendingReport(pt.id);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(ok
+                                                  ? 'Đã rút lại báo cáo điểm ngập thành công.'
+                                                  : 'Hủy thất bại: ${context.read<FloodReportProvider>().errorMessage ?? "Có lỗi xảy ra"}'),
+                                              backgroundColor: ok ? Colors.green : Colors.red,
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                    icon: const Icon(Icons.cancel_outlined, size: 14, color: Colors.red),
+                                    label: const Text(
+                                      'Rút lại tin báo',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.red,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(color: Colors.red.shade300),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         );

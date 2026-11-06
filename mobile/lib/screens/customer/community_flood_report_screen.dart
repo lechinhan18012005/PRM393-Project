@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/services/location_service.dart';
+import '../../core/services/geocoding_service.dart';
 import '../../core/services/media_service.dart';
 import '../../core/widgets/rescue_ui.dart';
 import '../../features/batch_transport/map_location_picker_screen.dart';
@@ -159,7 +160,9 @@ const List<HcmcLocationRef> _hcmcLocations = [
 ];
 
 class CommunityFloodReportScreen extends StatefulWidget {
-  const CommunityFloodReportScreen({super.key});
+  const CommunityFloodReportScreen({super.key, this.geocodingService});
+
+  final GeocodingService? geocodingService;
 
   @override
   State<CommunityFloodReportScreen> createState() =>
@@ -175,6 +178,9 @@ class _CommunityFloodReportScreenState
   double? _longitude;
   bool _isLocating = false;
   bool _isUploadingPhoto = false;
+  bool _isResolvingAddress = false;
+  int _latestReverseRequestId = 0;
+  late final GeocodingService _geocodingService;
 
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
@@ -205,6 +211,7 @@ class _CommunityFloodReportScreenState
   @override
   void initState() {
     super.initState();
+    _geocodingService = widget.geocodingService ?? GeocodingService();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _detectCurrentLocation(silent: true);
     });
@@ -251,6 +258,7 @@ class _CommunityFloodReportScreenState
           loc.longitude,
           syncAddress: true,
         );
+        _reverseGeocodeLocation(loc.latitude, loc.longitude);
 
         if (!silent) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -312,8 +320,30 @@ class _CommunityFloodReportScreenState
     } catch (_) {}
   }
 
+  Future<void> _reverseGeocodeLocation(double lat, double lng) async {
+    if (_isTestEnvironment && widget.geocodingService == null) return;
+    final requestId = ++_latestReverseRequestId;
+    setState(() => _isResolvingAddress = true);
+    try {
+      final result = await _geocodingService.reverse(lat, lng);
+      if (!mounted || requestId != _latestReverseRequestId) return;
+      if (result != null && result.displayName.trim().isNotEmpty) {
+        setState(() {
+          _addressController.text = result.displayName.trim();
+        });
+      }
+    } catch (_) {
+      // Ignored: address remains editable manually
+    } finally {
+      if (mounted && requestId == _latestReverseRequestId) {
+        setState(() => _isResolvingAddress = false);
+      }
+    }
+  }
+
   void _onMapPinTapped(double lat, double lng) {
     _updateLocationCoordinates(lat, lng, syncAddress: true);
+    _reverseGeocodeLocation(lat, lng);
   }
 
   void _onCoordinateInputChanged() {
@@ -375,6 +405,7 @@ class _CommunityFloodReportScreenState
         picked.longitude,
         syncAddress: true,
       );
+      _reverseGeocodeLocation(picked.latitude, picked.longitude);
     }
   }
 
@@ -592,6 +623,7 @@ class _CommunityFloodReportScreenState
                         style: const TextStyle(fontSize: 12),
                       ),
                       onTap: () {
+                        _latestReverseRequestId++;
                         setState(() {
                           _addressController.text = h.address;
                         });
@@ -931,16 +963,25 @@ class _CommunityFloodReportScreenState
                   Icons.edit_location_alt,
                   color: AppColors.primaryOrange,
                 ),
-                suffixIcon: _addressController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          setState(() {
-                            _addressController.clear();
-                          });
-                        },
+                suffixIcon: _isResolvingAddress
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       )
-                    : null,
+                    : (_addressController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              setState(() {
+                                _addressController.clear();
+                              });
+                            },
+                          )
+                        : null),
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(

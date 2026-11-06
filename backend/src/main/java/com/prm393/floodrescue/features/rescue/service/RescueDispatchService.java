@@ -29,6 +29,9 @@ import com.prm393.floodrescue.features.rescue.entity.TransportStage;
 import com.prm393.floodrescue.features.rescue.repository.RescueOfferRepository;
 import com.prm393.floodrescue.features.rescue.repository.RescueOrderAuditRepository;
 import com.prm393.floodrescue.features.rescue.repository.RescueOrderRepository;
+import com.prm393.floodrescue.features.notification.entity.NotificationLevel;
+import com.prm393.floodrescue.features.notification.entity.NotificationType;
+import com.prm393.floodrescue.features.notification.service.NotificationService;
 import com.prm393.floodrescue.features.vehicle.dto.VehicleDto;
 import com.prm393.floodrescue.features.vehicle.service.VehicleLookupService;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +66,11 @@ public class RescueDispatchService {
     private final SimpMessagingTemplate messagingTemplate;
     private final com.prm393.floodrescue.features.auth.repository.UserRepository userRepository;
     private final MechanicEligibilityChecker eligibilityChecker;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RescueOrderAuditService orderAuditService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private NotificationService notificationService;
 
     @Value("${app.rescue.offer-timeout-seconds:120}")
     private int offerTimeoutSeconds;
@@ -272,6 +280,20 @@ public class RescueDispatchService {
         order = rescueOrderRepository.save(order);
         recordAudit(order.getId(), null, RescueOrderStatus.REQUESTED, customer.getId(), customer.getUsername(), "Khách hàng gửi yêu cầu SOS");
 
+        try {
+            notificationService.sendToRole(
+                    Role.STAFF,
+                    "Đơn cứu hộ SOS mới #" + order.getOrderCode(),
+                    "Yêu cầu cứu hộ tại " + order.getPickupAddress() + " (" + order.getVehicleModel() + " - " + order.getVehiclePlate() + ").",
+                    NotificationType.SOS_NEW_ORDER,
+                    NotificationLevel.CRITICAL,
+                    "dashboard",
+                    order.getId()
+            );
+        } catch (Exception e) {
+            log.warn("Không thể gửi thông báo đơn SOS mới tới Staff: {}", e.getMessage());
+        }
+
         // Luồng mới do user khởi tạo được điều phối ngay; endpoint ghép chuyến cũ sẽ tự gán thợ/chuyến.
         if (userInitiatedGroup || orderType != OrderType.BATCH_CROSSING) {
             dispatchNextCandidate(order);
@@ -333,6 +355,19 @@ public class RescueDispatchService {
             order.setCancelReason("Không tìm thấy thợ khả dụng thuộc gara trong bán kính phục vụ (tối đa " + (int) maxRadiusKm + " km).");
             rescueOrderRepository.save(order);
             recordAudit(order.getId(), RescueOrderStatus.REQUESTED, RescueOrderStatus.DISPATCH_FAILED, null, "SYSTEM", "Hết ứng viên điều phối");
+            try {
+                notificationService.sendToRole(
+                        Role.STAFF,
+                        "Cảnh báo điều phối thất bại #" + order.getOrderCode(),
+                        "Không tìm thấy thợ khả dụng thuộc gara trong bán kính phục vụ. Cần nhân viên can thiệp thủ công!",
+                        NotificationType.DISPATCH_FAILED,
+                        NotificationLevel.CRITICAL,
+                        "dashboard",
+                        order.getId()
+                );
+            } catch (Exception e) {
+                log.warn("Không thể gửi cảnh báo DISPATCH_FAILED: {}", e.getMessage());
+            }
             broadcastOrderUpdate(order);
             return;
         }
@@ -460,6 +495,22 @@ public class RescueDispatchService {
         mechanicRepository.save(staff);
 
         recordAudit(order.getId(), RescueOrderStatus.REQUESTED, RescueOrderStatus.DISPATCHED, mechanicUser.getId(), mechanicUser.getUsername(), "Thợ chấp nhận cuốc cứu hộ");
+
+        try {
+            if (order.getGarage() != null && order.getGarage().getOwner() != null) {
+                notificationService.sendToUser(
+                        order.getGarage().getOwner().getId(),
+                        "Đơn cứu hộ #" + order.getOrderCode() + " đã có thợ tiếp nhận",
+                        "Thợ " + (staff.getUser() != null ? staff.getUser().getFullName() : "KTV-" + staff.getId()) + " đã nhận cứu hộ tại " + order.getPickupAddress(),
+                        NotificationType.ORDER_ASSIGNED,
+                        NotificationLevel.INFO,
+                        "owner-dashboard",
+                        order.getId()
+                );
+            }
+        } catch (Exception e) {
+            log.warn("Không thể gửi thông báo đơn thợ nhận tới chủ Gara: {}", e.getMessage());
+        }
 
         log.info("Mechanic {} accepted order {}", mechanicUser.getUsername(), order.getOrderCode());
         broadcastOrderUpdate(order);
@@ -820,6 +871,22 @@ public class RescueDispatchService {
         recordAudit(order.getId(), oldStatus, RescueOrderStatus.DISPATCHED, staffUser.getId(), staffUser.getUsername(),
                 "Staff điều phối thủ công KTV: " + mechName + " (" + mechPhone + ")");
 
+        try {
+            if (order.getGarage() != null && order.getGarage().getOwner() != null) {
+                notificationService.sendToUser(
+                        order.getGarage().getOwner().getId(),
+                        "Đơn cứu hộ #" + order.getOrderCode() + " đã được điều phối",
+                        "Staff đã điều phối thợ " + mechName + " xử lý đơn tại " + order.getPickupAddress(),
+                        NotificationType.ORDER_ASSIGNED,
+                        NotificationLevel.INFO,
+                        "owner-dashboard",
+                        order.getId()
+                );
+            }
+        } catch (Exception e) {
+            log.warn("Không thể gửi thông báo gán thợ tới chủ Gara: {}", e.getMessage());
+        }
+
         broadcastOrderUpdate(order);
         log.info("Staff {} manually assigned mechanic {} to order {}", staffUser.getUsername(), mechName, order.getOrderCode());
         return mapToResponse(order);
@@ -906,6 +973,28 @@ public class RescueDispatchService {
                 .actionNote(note)
                 .build();
         auditRepository.save(audit);
+
+        if (orderAuditService != null) {
+            try {
+                rescueOrderRepository.findById(orderId).ifPresent(order -> {
+                User actor = (userId != null) ? userRepository.findById(userId).orElse(null) : null;
+                orderAuditService.recordOrderEvent(
+                        order,
+                        note != null ? note : ("Chuyển trạng thái sang " + to),
+                        from,
+                        to,
+                        actor,
+                        actor != null && actor.getRole() != null ? actor.getRole().name() : "SYSTEM",
+                        note,
+                        order.getFinalMechanicLatitude(),
+                        order.getFinalMechanicLongitude(),
+                        order.getCompletionPhotoUrl()
+                );
+            });
+        } catch (Exception e) {
+            log.warn("Lỗi ghi nhận audit log chi tiết cho đơn {}: {}", orderId, e.getMessage());
+            }
+        }
     }
 
     public void broadcastOrderUpdate(RescueOrder order) {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Branch, Mechanic, Invitation, managementApi, request } from '../../services/managementApi';
+import { Branch, Mechanic, managementApi, request } from '../../services/managementApi';
+import { rescueApi, RescueOrderWebResponse } from '../../services/rescueApi';
 import {
   Building2,
   Users,
@@ -27,9 +28,56 @@ import {
   Key,
   Trash2,
   UserPlus,
-  Clock
+  Clock,
+  Eye,
+  FileText,
+  Award,
+  ArrowRight,
+  User,
+  Hash,
+  Calendar,
+  DollarSign,
+  Activity,
+  CheckCircle,
+  HelpCircle
 } from 'lucide-react';
 import { GarageHeading, GarageStat, GaragePanel, GarageDrawer, GarageModal, GarageError } from '../garage/GarageUI';
+
+const money = (value: number) =>
+  new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+
+const formatDateTime = (isoStr?: string | null) => {
+  if (!isoStr) return '—';
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    return `${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ${d.toLocaleDateString('vi-VN')}`;
+  } catch {
+    return isoStr;
+  }
+};
+
+const getOrderStatusBadge = (status: string) => {
+  switch (status) {
+    case 'COMPLETED':
+      return { label: 'Hoàn thành', bg: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+    case 'PAYMENT_PENDING':
+      return { label: 'Chờ thanh toán', bg: 'bg-amber-100 text-amber-900 border-amber-300' };
+    case 'IN_PROGRESS':
+      return { label: 'Đang thực hiện', bg: 'bg-blue-100 text-blue-800 border-blue-300' };
+    case 'ARRIVED':
+      return { label: 'Đã đến điểm hẹn', bg: 'bg-cyan-100 text-cyan-800 border-cyan-300' };
+    case 'DISPATCHED':
+      return { label: 'Đang di chuyển', bg: 'bg-indigo-100 text-indigo-800 border-indigo-300' };
+    case 'ASSIGNED':
+    case 'ACCEPTED':
+      return { label: 'Đã tiếp nhận', bg: 'bg-purple-100 text-purple-800 border-purple-300' };
+    case 'CANCELLED':
+      return { label: 'Đã hủy', bg: 'bg-rose-100 text-rose-800 border-rose-300' };
+    default:
+      return { label: status, bg: 'bg-slate-100 text-slate-700 border-slate-300' };
+  }
+};
 
 interface GarageManagementViewProps {
   onShowToast?: (title: string, msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
@@ -216,23 +264,39 @@ export function getMechanicShiftState(mechanic: Mechanic): {
   workingStatus: 'AVAILABLE' | 'BUSY' | 'OFFLINE';
   isInShift: boolean;
   statusLabel: string;
+  isPaused: boolean;
+  pauseReason?: string | null;
 } {
+  const inShift = isShiftCurrentlyActive(mechanic.shiftName);
   if (!mechanic.active) {
-    return { workingStatus: 'OFFLINE', isInShift: false, statusLabel: 'ĐÃ KHÓA' };
+    return { workingStatus: 'OFFLINE', isInShift: false, statusLabel: 'ĐÃ KHÓA', isPaused: false };
   }
   if (mechanic.workingStatus === 'BUSY') {
-    return { workingStatus: 'BUSY', isInShift: true, statusLabel: 'ĐANG ĐI CA' };
+    return { workingStatus: 'BUSY', isInShift: true, statusLabel: 'ĐANG ĐI CA', isPaused: false };
   }
-  const inShift = isShiftCurrentlyActive(mechanic.shiftName);
+  if (mechanic.workingStatus === 'AVAILABLE') {
+    return {
+      workingStatus: 'AVAILABLE',
+      isInShift: inShift,
+      statusLabel: inShift ? 'SẴN SÀNG' : 'TĂNG CA (SẴN SÀNG)',
+      isPaused: false,
+    };
+  }
+  // Thợ đang OFFLINE: phân biệt tạm nghỉ thủ công vs hết ca trực
+  const isPaused = Boolean(
+    mechanic.isManualOverride || (mechanic.pauseReason && mechanic.pauseReason.trim() !== '')
+  );
   return {
-    workingStatus: inShift ? 'AVAILABLE' : 'OFFLINE',
+    workingStatus: 'OFFLINE',
     isInShift: inShift,
-    statusLabel: inShift ? 'SẴN SÀNG' : 'NGHỈ TRỰC',
+    statusLabel: isPaused ? 'TẠM NGHỈ' : 'NGHỈ TRỰC',
+    isPaused,
+    pauseReason: mechanic.pauseReason || null,
   };
 }
 
 export function GarageManagementView({ onShowToast }: GarageManagementViewProps) {
-  const [drawer, setDrawer] = useState<'branch' | 'invite' | 'createMechanic' | 'editMechanic' | null>(null);
+  const [drawer, setDrawer] = useState<'branch' | 'createMechanic' | 'editMechanic' | null>(null);
   const [selectedMechanic, setSelectedMechanic] = useState<Mechanic | null>(null);
   const [createShiftOption, setCreateShiftOption] = useState<string>('Ca 2: Chiều tối (14:00 - 22:00)');
   const [createCustomShift, setCreateCustomShift] = useState<string>('');
@@ -242,6 +306,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     isOpen: boolean;
     title: string;
     username: string;
+    email: string;
     fullName: string;
     password: string;
   } | null>(null);
@@ -249,14 +314,51 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
   const [tab, setTab] = useState<'branches' | 'team'>('branches');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
-  const [teamStatusFilter, setTeamStatusFilter] = useState<'all' | 'available' | 'busy' | 'offline' | 'disabled'>('all');
+  const [teamStatusFilter, setTeamStatusFilter] = useState<'all' | 'available' | 'busy' | 'paused' | 'offline' | 'disabled'>('all');
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [mechanics, setMechanics] = useState<Mechanic[]>([]);
+  const [garageOrders, setGarageOrders] = useState<RescueOrderWebResponse[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [invitation, setInvitation] = useState<Invitation | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Xem chi tiết Chi nhánh & Thợ cứu hộ
+  const [selectedBranchForDetail, setSelectedBranchForDetail] = useState<Branch | null>(null);
+  const [branchDetailTab, setBranchDetailTab] = useState<'info' | 'mechanics' | 'orders'>('info');
+  const [selectedMechanicForDetail, setSelectedMechanicForDetail] = useState<Mechanic | null>(null);
+  const [mechanicDetailTab, setMechanicDetailTab] = useState<'profile' | 'orders'>('profile');
+
+  // Giữ dữ liệu Modal Chi tiết luôn đồng bộ với danh sách mới nhất
+  const activeBranchDetail = useMemo(() => {
+    if (!selectedBranchForDetail) return null;
+    return branches.find((b) => b.id === selectedBranchForDetail.id) || selectedBranchForDetail;
+  }, [branches, selectedBranchForDetail]);
+
+  const activeMechanicDetail = useMemo(() => {
+    if (!selectedMechanicForDetail) return null;
+    return mechanics.find((m) => m.id === selectedMechanicForDetail.id) || selectedMechanicForDetail;
+  }, [mechanics, selectedMechanicForDetail]);
+
+  const branchMechanics = useMemo(() => {
+    if (!activeBranchDetail) return [];
+    return mechanics.filter((m) => m.branchId === activeBranchDetail.id);
+  }, [mechanics, activeBranchDetail]);
+
+  const branchOrders = useMemo(() => {
+    if (!activeBranchDetail) return [];
+    return garageOrders.filter((o) => o.branchId === activeBranchDetail.id);
+  }, [garageOrders, activeBranchDetail]);
+
+  const mechanicOrders = useMemo(() => {
+    if (!activeMechanicDetail) return [];
+    return garageOrders.filter(
+      (o) =>
+        o.mechanicStaffId === activeMechanicDetail.id ||
+        (activeMechanicDetail.userId && o.mechanicUserId === activeMechanicDetail.userId)
+    );
+  }, [garageOrders, activeMechanicDetail]);
+
+
   const [editing, setEditing] = useState<Branch | null>(null);
 
   // Form thêm / sửa chi nhánh
@@ -300,9 +402,14 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
   async function load() {
     setError('');
     try {
-      const [b, m] = await Promise.all([managementApi.branches(), managementApi.mechanics()]);
+      const [b, m, orders] = await Promise.all([
+        managementApi.branches(),
+        managementApi.mechanics(),
+        rescueApi.getGarageOrders().catch(() => [])
+      ]);
       setBranches(b || []);
       setMechanics(m || []);
+      setGarageOrders(orders || []);
     } catch (e) {
       const msg = (e as Error).message || 'Không thể tải dữ liệu chi nhánh và đội thợ';
       setError(msg);
@@ -312,6 +419,20 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
 
   useEffect(() => {
     void load();
+  }, []);
+
+  // Tự động làm mới danh sách đội thợ và đơn hàng mỗi 10 giây để đồng bộ realtime với mobile
+  useEffect(() => {
+    const interval = setInterval(() => {
+      managementApi.mechanics().then((m) => {
+        if (m) setMechanics(m);
+      }).catch(() => {});
+
+      rescueApi.getGarageOrders().then((ord) => {
+        if (ord) setGarageOrders(ord);
+      }).catch(() => {});
+    }, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   async function mutate(path: string, method: string, body: unknown, successMsg?: string) {
@@ -539,50 +660,6 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     });
   };
 
-  // Mời thợ cứu hộ mới
-  async function handleInviteSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    const email = String(data.get('email') || '').trim();
-    const branchId = Number(data.get('branchId'));
-
-    if (!email || !branchId) {
-      notify('Thiếu thông tin', 'Vui lòng nhập email và chọn chi nhánh cho thợ.', 'warning');
-      return;
-    }
-
-    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      notify('Email không hợp lệ', 'Vui lòng nhập địa chỉ email hợp lệ (tối đa 254 ký tự).', 'warning');
-      return;
-    }
-
-    setBusy(true);
-    setError('');
-    setInvitation(null);
-    setCopiedCode(false);
-
-    try {
-      const inv = await managementApi.invite(false, email, branchId);
-      setInvitation(inv);
-      notify('Đã tạo mã mời', `Mã kích hoạt cho thợ ${email} đã sẵn sàng.`, 'success');
-    } catch (e) {
-      const msg = (e as Error).message || 'Không thể tạo mã mời thợ';
-      setError(msg);
-      notify('Lỗi tạo lời mời', msg, 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // Sao chép mã mời vào Clipboard
-  const handleCopyCode = (code: string) => {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopiedCode(true);
-      notify('Đã sao chép mã', `Mã ${code} đã được lưu vào bộ nhớ tạm.`, 'info');
-      setTimeout(() => setCopiedCode(false), 3000);
-    });
-  };
-
   // Lưu phân bổ chi nhánh & ca làm cho thợ (UC-05)
   async function handleAllocateMechanic(mechanic: Mechanic, branchId: number, shiftName: string) {
     if (!branchId) {
@@ -618,6 +695,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
             isOpen: true,
             title: `Cấp lại mật khẩu thành công: ${mechanic.fullName}`,
             username: mechanic.username || mechanic.email,
+            email: mechanic.email,
             fullName: mechanic.fullName,
             password: tempPass
           });
@@ -711,7 +789,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
     }
 
     try {
-      await managementApi.createMechanic({
+      const createdMechanic = await managementApi.createMechanic({
         username,
         fullName,
         phone,
@@ -728,6 +806,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
         isOpen: true,
         title: 'Thêm thợ cứu hộ mới thành công!',
         username,
+        email: createdMechanic.email || email,
         fullName,
         password
       });
@@ -844,7 +923,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
       const shiftState = getMechanicShiftState(m);
       if (teamStatusFilter === 'available' && (!m.active || shiftState.workingStatus !== 'AVAILABLE')) return false;
       if (teamStatusFilter === 'busy' && (!m.active || shiftState.workingStatus !== 'BUSY')) return false;
-      if (teamStatusFilter === 'offline' && (!m.active || shiftState.workingStatus !== 'OFFLINE')) return false;
+      if (teamStatusFilter === 'paused' && (!m.active || !shiftState.isPaused)) return false;
+      if (teamStatusFilter === 'offline' && (!m.active || shiftState.workingStatus !== 'OFFLINE' || shiftState.isPaused)) return false;
       if (teamStatusFilter === 'disabled' && m.active) return false;
 
       if (query.trim()) {
@@ -899,7 +979,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
       {/* Header Điều hành */}
       <GarageHeading
         title="Chi nhánh & Đội ngũ cứu hộ"
-        description="Quản lý các cơ sở trực chiến thực địa, mời thợ cứu hộ chuyên môn và phân ca trực bão ngập lụt."
+        description="Quản lý các cơ sở trực chiến thực địa, bổ sung thợ cứu hộ chuyên môn và phân ca trực bão ngập lụt."
         action={
           <div className="flex items-center gap-2 flex-wrap">
             <button
@@ -920,19 +1000,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <UserPlus size={16} />
               <span>Thêm thợ mới</span>
             </button>
-            <button
-              className="garage-button px-3 py-2 rounded-lg border border-surface-container bg-white hover:bg-surface-container-low text-on-surface font-label-md flex items-center gap-1.5 transition cursor-pointer shadow-xs disabled:opacity-50"
-              onClick={() => {
-                setInvitation(null);
-                setDrawer('invite');
-              }}
-              disabled={!branches.length}
-              title={!branches.length ? 'Hãy thêm ít nhất một chi nhánh trước khi mời thợ' : 'Tạo mã mời cho thợ'}
-            >
-              <Users size={16} className="text-primary" />
-              <span>Mời qua mã</span>
-            </button>
-            <button
+                        <button
               style={{
                 backgroundColor: '#d65322',
                 color: '#ffffff',
@@ -1064,7 +1132,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <option value="all">Tất cả ({mechanics.length})</option>
               <option value="available">Sẵn sàng ({availableMechanicsCount})</option>
               <option value="busy">Đang bận ({mechanics.filter((m) => m.active && getMechanicShiftState(m).workingStatus === 'BUSY').length})</option>
-              <option value="offline">Nghỉ trực ({mechanics.filter((m) => m.active && getMechanicShiftState(m).workingStatus === 'OFFLINE').length})</option>
+              <option value="paused">Tạm nghỉ ({mechanics.filter((m) => m.active && getMechanicShiftState(m).isPaused).length})</option>
+              <option value="offline">Nghỉ trực ({mechanics.filter((m) => m.active && getMechanicShiftState(m).workingStatus === 'OFFLINE' && !getMechanicShiftState(m).isPaused).length})</option>
               <option value="disabled">Đã khóa ({mechanics.filter((m) => !m.active).length})</option>
             </select>
           )}
@@ -1160,6 +1229,19 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
 
                       <div className="flex items-center gap-2">
                         <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBranchForDetail(branch);
+                            setBranchDetailTab('info');
+                          }}
+                          className="px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                          title="Xem chi tiết hoạt động, danh sách thợ và đơn cứu hộ tại chi nhánh"
+                        >
+                          <Eye size={14} />
+                          <span>Chi tiết</span>
+                        </button>
+
+                        <button
                           disabled={busy}
                           onClick={() => {
                             setEditing(branch);
@@ -1200,7 +1282,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <p className="text-sm mt-1 max-w-md mx-auto">
                 {query
                   ? 'Thử xóa bộ lọc tìm kiếm hoặc tìm với tên/địa chỉ khác.'
-                  : 'Hãy bấm nút "Thêm chi nhánh" ở góc trên để tạo điểm phục vụ đầu tiên trước khi mời đội thợ.'}
+                  : 'Hãy bấm nút "Thêm chi nhánh" ở góc trên để tạo điểm phục vụ đầu tiên trước khi thêm đội thợ.'}
               </p>
               {query && (
                 <button
@@ -1252,7 +1334,9 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                   : isBusy
                                     ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                                    : 'bg-slate-100 text-slate-700 border border-slate-300'
+                                    : shiftState.isPaused
+                                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                      : 'bg-slate-100 text-slate-700 border border-slate-300'
                             }`}
                           >
                             <span
@@ -1263,12 +1347,44 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                                     ? 'bg-emerald-600 animate-pulse'
                                     : isBusy
                                       ? 'bg-rose-600 animate-ping'
-                                      : 'bg-slate-500'
+                                      : shiftState.isPaused
+                                        ? 'bg-amber-600'
+                                        : 'bg-slate-500'
                               }`}
                             ></span>
                             {shiftState.statusLabel}
                           </span>
                         </div>
+
+                        {/* Hiển thị lý do tạm nghỉ và thời gian bắt đầu tạm nghỉ */}
+                        {shiftState.isPaused && (
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap text-xs text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md w-fit font-medium">
+                            <Clock size={11} className="text-amber-600 shrink-0" />
+                            <span>Lý do tạm nghỉ: <strong>{shiftState.pauseReason || 'Tạm nghỉ giữa ca'}</strong></span>
+                            {mechanic.pausedAt && (
+                              <span className="text-[11px] text-amber-700 ml-1">
+                                (từ {new Date(mechanic.pausedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })})
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Hiển thị thời gian trực tuyến / tín hiệu sống gần nhất khi thợ đang hoạt động */}
+                        {isAvailable && (mechanic.lastGpsUpdatedAt || mechanic.lastHeartbeatAt) && (
+                          <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>
+                              Tín hiệu trực tuyến gần nhất:{' '}
+                              <strong>
+                                {new Date(mechanic.lastGpsUpdatedAt || mechanic.lastHeartbeatAt!).toLocaleTimeString('vi-VN', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  second: '2-digit'
+                                })}
+                              </strong>
+                            </span>
+                          </div>
+                        )}
 
                         {/* Email & Phone từ API */}
                         <p className="text-xs text-secondary mt-1 flex items-center gap-3 flex-wrap">
@@ -1326,6 +1442,25 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
 
                     {/* Action Buttons: Các thao tác quản trị */}
                     <div className="flex items-center gap-2 flex-wrap lg:justify-end shrink-0 self-start lg:self-center">
+                      {/* Nút Xem chi tiết hồ sơ & lịch sử đơn của thợ */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMechanicForDetail(mechanic);
+                          setMechanicDetailTab('profile');
+                        }}
+                        style={{
+                          backgroundColor: '#eff6ff',
+                          color: '#1d4ed8',
+                          borderColor: '#bfdbfe'
+                        }}
+                        className="h-9 px-3 rounded-lg font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer text-xs border hover:opacity-90 shadow-2xs"
+                        title="Xem hồ sơ chi tiết, đánh giá và lịch sử cứu hộ của thợ"
+                      >
+                        <Eye size={14} />
+                        <span>Chi tiết</span>
+                      </button>
+
                       {/* Nút Chỉnh sửa thông tin thợ (đã tích hợp sửa ca trực, chi nhánh, chuyên môn, SĐT, v.v.) */}
                       <button
                         type="button"
@@ -1420,7 +1555,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
               <p className="text-sm mt-1 max-w-md mx-auto">
                 {query
                   ? 'Thử thay đổi từ khóa tìm kiếm hoặc lọc theo trạng thái khác.'
-                  : 'Hãy bấm nút "Mời thợ cứu hộ" ở trên để gửi mã kích hoạt tài khoản cho nhân viên thợ.'}
+                  : 'Hãy bấm nút "Thêm thợ mới" ở trên để tạo tài khoản cho nhân viên thợ.'}
               </p>
               {query && (
                 <button
@@ -1737,109 +1872,7 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
         </GarageModal>
       )}
 
-      {/* DRAWER 2: MỜI THỢ CỨU HỘ VÀO ĐỘI NGŨ */}
-      {drawer === 'invite' && (
-        <GarageModal
-          maxWidth="max-w-lg"
-          title="Mời thợ cứu hộ mới"
-          description="Gửi mã kích hoạt riêng biệt để thợ kích hoạt tài khoản trên ứng dụng Mobile Cứu Hộ."
-          onClose={() => {
-            if (!busy) setDrawer(null);
-          }}
-        >
-          <GarageError message={error} />
-          <form onSubmit={handleInviteSubmit} className="space-y-4 p-4">
-            <div>
-              <label className="block text-xs font-bold text-on-surface mb-1">
-                Email tài khoản của thợ: <span className="text-error">*</span>
-              </label>
-              <input
-                name="email"
-                type="email"
-                required
-                maxLength={254}
-                placeholder="VD: thocuuho.nguyenvana@gmail.com"
-                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-              <span className="text-[11px] text-secondary mt-1 block">
-                Thợ sẽ dùng email này kết hợp mã mời để kích hoạt tài khoản.
-              </span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-on-surface mb-1">
-                Phân bổ chi nhánh trực thuộc: <span className="text-error">*</span>
-              </label>
-              <select
-                required
-                name="branchId"
-                className="w-full h-10 px-3 text-sm bg-surface-container-low border border-surface-container rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
-              >
-                <option value="">-- Chọn chi nhánh làm việc --</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.branchName} ({b.operatingStatus === 'OPEN' ? 'Đang mở' : 'Bảo trì'})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              disabled={busy || !branches.length}
-              style={{
-                backgroundColor: '#d65322',
-                color: '#ffffff',
-                borderColor: '#d65322'
-              }}
-              className="w-full py-2.5 rounded-lg font-label-md font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs hover:opacity-90 disabled:opacity-50"
-            >
-              {busy ? <RefreshCw size={16} className="animate-spin" /> : <Users size={16} />}
-              <span>Tạo mã kích hoạt cho thợ</span>
-            </button>
-          </form>
-
-          {/* Hộp thoại hiển thị mã kích hoạt sau khi tạo */}
-          {invitation && (
-            <div className="m-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-3 animate-fade-in shadow-xs">
-              <div className="flex items-center gap-2 text-emerald-800 font-bold">
-                <CheckCircle2 size={18} />
-                <span>Mã kích hoạt đã sẵn sàng</span>
-              </div>
-
-              <p className="text-xs text-emerald-900 leading-relaxed">
-                Gửi mã này cho thợ <strong>{invitation.email}</strong>. Mã có hiệu lực trong 48 giờ (hết hạn vào {new Date(invitation.expiresAt).toLocaleString('vi-VN')}).
-              </p>
-
-              {/* Code display with 1-click Copy */}
-              <div className="flex items-center gap-2 bg-white p-2.5 rounded-lg border border-emerald-300">
-                <code className="flex-1 font-mono font-bold text-base text-primary select-all tracking-wider">
-                  {invitation.code}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => handleCopyCode(invitation.code)}
-                  style={{
-                    backgroundColor: '#d65322',
-                    color: '#ffffff',
-                    borderColor: '#d65322'
-                  }}
-                  className="px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 cursor-pointer transition shadow-xs hover:opacity-90"
-                >
-                  {copiedCode ? <Check size={14} /> : <Copy size={14} />}
-                  <span>{copiedCode ? 'Đã sao chép' : 'Sao chép'}</span>
-                </button>
-              </div>
-
-              <p className="text-[11px] text-emerald-800">
-                Thợ mở ứng dụng Mobile hoặc vào trang <code>/activate</code> trên Web, nhập mã trên để hoàn tất đăng ký mật khẩu.
-              </p>
-            </div>
-          )}
-        </GarageModal>
-      )}
-
-      {/* DRAWER 3: THÊM THỢ CỨU HỘ TRỰC TIẾP */}
+      {/* DRAWER 2: THÊM THỢ CỨU HỘ TRỰC TIẾP */}
       {drawer === 'createMechanic' && (
         <GarageModal
           maxWidth="max-w-2xl"
@@ -2249,6 +2282,751 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
         </GarageModal>
       )}
 
+      {/* MODAL XEM CHI TIẾT CHI NHÁNH */}
+      {activeBranchDetail && (
+        <GarageModal
+          maxWidth="max-w-4xl"
+          title={`Chi nhánh: ${activeBranchDetail.branchName}`}
+          description={`Mã trạm: BR-${activeBranchDetail.id} • ${activeBranchDetail.address}`}
+          onClose={() => setSelectedBranchForDetail(null)}
+        >
+          <div className="p-5 space-y-5">
+            {/* Thanh điều hướng Sub-tab */}
+            <div className="flex items-center gap-2 border-b border-surface-container pb-3 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setBranchDetailTab('info')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                  branchDetailTab === 'info'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'bg-surface-container-low text-secondary hover:text-on-surface'
+                }`}
+              >
+                <Building2 size={14} />
+                <span>Thông tin & Cơ sở vật chất</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBranchDetailTab('mechanics')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                  branchDetailTab === 'mechanics'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'bg-surface-container-low text-secondary hover:text-on-surface'
+                }`}
+              >
+                <Users size={14} />
+                <span>Đội thợ trực thuộc (${branchMechanics.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBranchDetailTab('orders')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                  branchDetailTab === 'orders'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'bg-surface-container-low text-secondary hover:text-on-surface'
+                }`}
+              >
+                <Truck size={14} />
+                <span>Lịch sử cứu hộ (${branchOrders.length})</span>
+              </button>
+            </div>
+
+            {/* TAB 1: THÔNG TIN & CƠ SỞ VẬT CHẤT */}
+            {branchDetailTab === 'info' && (
+              <div className="space-y-4">
+                {/* 4 Thẻ KPI tóm tắt */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
+                    <span className="text-xs text-secondary font-medium">Trạng thái trạm</span>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          activeBranchDetail.operatingStatus === 'OPEN'
+                            ? 'bg-emerald-600 animate-pulse'
+                            : 'bg-amber-600'
+                        }`}
+                      />
+                      <span className="text-xs font-bold font-data-mono text-on-surface">
+                        {activeBranchDetail.operatingStatus === 'OPEN' ? 'ĐANG MỞ CỬA' : 'TẠM ĐÓNG'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
+                    <span className="text-xs text-secondary font-medium">Đội ngũ thợ</span>
+                    <p className="font-headline-sm font-bold text-on-surface mt-1 text-base">
+                      {branchMechanics.length} thợ
+                    </p>
+                    <span className="text-[11px] text-emerald-700 font-medium">
+                      {branchMechanics.filter((m) => m.active && m.workingStatus === 'AVAILABLE').length} sẵn sàng
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
+                    <span className="text-xs text-secondary font-medium">Đơn cứu hộ</span>
+                    <p className="font-headline-sm font-bold text-on-surface mt-1 text-base">
+                      {branchOrders.length} đơn
+                    </p>
+                    <span className="text-[11px] text-secondary">
+                      {branchOrders.filter((o) => o.status === 'COMPLETED').length} hoàn thành
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
+                    <span className="text-xs text-secondary font-medium">Doanh thu trạm</span>
+                    <p className="font-headline-sm font-bold text-primary mt-1 text-sm font-mono">
+                      {money(
+                        branchOrders
+                          .filter((o) => ['COMPLETED', 'PAYMENT_PENDING'].includes(o.status))
+                          .reduce((sum, o) => sum + Number(o.serviceBasePrice || 0), 0)
+                      )}
+                    </p>
+                    <span className="text-[11px] text-secondary">Theo cước niêm yết</span>
+                  </div>
+                </div>
+
+                {/* Khối chi tiết địa điểm & hotline */}
+                <div className="p-4 rounded-xl border border-surface-container bg-white space-y-3">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-secondary flex items-center gap-1.5">
+                    <MapPin size={14} className="text-primary" />
+                    Địa chỉ & Tọa độ GPS
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-secondary block">Địa chỉ đầy đủ:</span>
+                      <strong className="text-on-surface text-sm mt-0.5 block leading-relaxed">
+                        {activeBranchDetail.address}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-secondary block">Hotline liên hệ chi nhánh:</span>
+                      <strong className="text-primary font-mono text-sm mt-0.5 block">
+                        {activeBranchDetail.phoneNumber || 'Chưa cập nhật số hotline'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-secondary block">Tọa độ địa lý:</span>
+                      <span className="font-mono text-on-surface mt-0.5 block">
+                        Vĩ độ: {activeBranchDetail.latitude?.toFixed(5)} • Kinh độ: {activeBranchDetail.longitude?.toFixed(5)}
+                      </span>
+                    </div>
+                    <div className="flex items-end">
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${activeBranchDetail.latitude},${activeBranchDetail.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-surface-container text-primary font-bold text-xs transition"
+                      >
+                        <ExternalLink size={13} />
+                        Mở vị trí trên Google Maps
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Khối phương tiện & năng lực */}
+                <div className="p-4 rounded-xl border border-surface-container bg-white space-y-3">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-secondary flex items-center gap-1.5">
+                    <Truck size={14} className="text-primary" />
+                    Phương tiện & Năng lực cứu hộ
+                  </h4>
+                  <div className="p-3 rounded-lg bg-primary/5 border border-primary/15 text-xs text-primary flex items-start gap-2">
+                    <Truck size={16} className="shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block text-sm">Trang bị phương tiện tại trạm:</span>
+                      <p className="mt-0.5 text-on-surface font-medium leading-relaxed">
+                        {activeBranchDetail.rescueVehicles || 'Chưa cấu hình thông tin phương tiện chuyên dụng'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: ĐỘI THỢ TRỰC THUỘC */}
+            {branchDetailTab === 'mechanics' && (
+              <div className="space-y-3">
+                {branchMechanics.length === 0 ? (
+                  <div className="p-8 text-center text-secondary border border-dashed border-surface-container rounded-xl">
+                    <Users size={36} className="mx-auto text-secondary/40 mb-2" />
+                    <p className="font-bold text-on-surface">Chưa có thợ nào được phân bổ vào chi nhánh này</p>
+                    <p className="text-xs mt-1">
+                      Bạn có thể chuyển sang tab Đội thợ để thêm mới hoặc điều chuyển thợ về cơ sở này.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[380px] overflow-y-auto pr-1">
+                    {branchMechanics.map((m) => {
+                      const mShift = getMechanicShiftState(m);
+                      return (
+                        <div
+                          key={m.id}
+                          className="p-3 rounded-xl border border-surface-container bg-white hover:bg-surface-container-lowest transition flex items-start justify-between gap-3 shadow-2xs"
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <div className="w-9 h-9 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-sm shrink-0">
+                              {m.fullName?.charAt(0) || 'T'}
+                            </div>
+                            <div className="min-w-0">
+                              <h5 className="font-bold text-on-surface text-xs truncate">{m.fullName}</h5>
+                              <p className="text-[11px] text-secondary font-mono">{m.phone || m.email}</p>
+                              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    !m.active
+                                      ? 'bg-red-100 text-red-800'
+                                      : mShift.workingStatus === 'AVAILABLE'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : mShift.workingStatus === 'BUSY'
+                                          ? 'bg-rose-100 text-rose-800'
+                                          : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {mShift.statusLabel}
+                                </span>
+                                <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-0.5">
+                                  <Star size={10} className="fill-amber-500 text-amber-500" />
+                                  {m.ratingAvg ? m.ratingAvg.toFixed(1) : '5.0'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedMechanicForDetail(m);
+                              setMechanicDetailTab('profile');
+                              setSelectedBranchForDetail(null);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-surface-container-high hover:bg-surface-container text-primary font-bold text-xs shrink-0 transition flex items-center gap-1 cursor-pointer"
+                            title="Xem chi tiết hồ sơ kỹ thuật viên này"
+                          >
+                            <Eye size={12} />
+                            <span>Xem hồ sơ</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: LỊCH SỬ ĐƠN CỨU HỘ */}
+            {branchDetailTab === 'orders' && (
+              <div className="space-y-3">
+                {branchOrders.length === 0 ? (
+                  <div className="p-8 text-center text-secondary border border-dashed border-surface-container rounded-xl">
+                    <Truck size={36} className="mx-auto text-secondary/40 mb-2" />
+                    <p className="font-bold text-on-surface">Chưa phát sinh đơn cứu hộ nào tại chi nhánh này</p>
+                    <p className="text-xs mt-1">
+                      Các chuyến chở xe vượt ngập hoặc sửa chữa cứu hộ được điều phối từ trạm này sẽ hiển thị tại đây.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="max-h-[380px] overflow-y-auto border border-surface-container rounded-xl">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead className="bg-surface-container-low text-secondary font-bold sticky top-0 border-b border-surface-container">
+                        <tr>
+                          <th className="p-2.5">Mã đơn</th>
+                          <th className="p-2.5">Khách hàng</th>
+                          <th className="p-2.5">Phương tiện</th>
+                          <th className="p-2.5">Thợ phụ trách</th>
+                          <th className="p-2.5">Trạng thái</th>
+                          <th className="p-2.5 text-right">Cước dịch vụ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-surface-container/60 bg-white">
+                        {branchOrders.map((ord) => {
+                          const badge = getOrderStatusBadge(ord.status);
+                          return (
+                            <tr key={ord.id} className="hover:bg-surface-container-lowest/50">
+                              <td className="p-2.5 font-mono font-bold text-primary">
+                                #{ord.orderCode}
+                                <span className="block text-[10px] text-secondary font-normal">
+                                  {formatDateTime(ord.requestedAt)}
+                                </span>
+                              </td>
+                              <td className="p-2.5">
+                                <span className="font-medium text-on-surface block">{ord.customerName}</span>
+                                <span className="text-[11px] text-secondary font-mono">{ord.customerPhone}</span>
+                              </td>
+                              <td className="p-2.5">
+                                <span className="font-medium text-on-surface block">{ord.vehicleModel}</span>
+                                <span className="text-[11px] text-secondary font-mono">{ord.vehiclePlate}</span>
+                              </td>
+                              <td className="p-2.5 font-medium text-on-surface">
+                                {ord.mechanicName || <span className="text-secondary italic">Đang phân phối</span>}
+                              </td>
+                              <td className="p-2.5">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badge.bg}`}>
+                                  {badge.label}
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-right font-mono font-bold text-on-surface">
+                                {money(Number(ord.serviceBasePrice || ord.totalAmount || 0))}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Nút hành động Footer */}
+            <div className="pt-3 border-t border-surface-container flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleToggleBranchStatusConfirm(activeBranchDetail);
+                  }}
+                  style={{
+                    backgroundColor: activeBranchDetail.operatingStatus === 'OPEN' ? '#fef3c7' : '#059669',
+                    color: activeBranchDetail.operatingStatus === 'OPEN' ? '#92400e' : '#ffffff',
+                    borderColor: activeBranchDetail.operatingStatus === 'OPEN' ? '#fcd34d' : '#059669'
+                  }}
+                  className="px-3.5 py-2 rounded-lg font-label-md font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs hover:opacity-90"
+                >
+                  <Power size={14} />
+                  <span>{activeBranchDetail.operatingStatus === 'OPEN' ? 'Tạm đóng cửa' : 'Mở cửa hoạt động'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(activeBranchDetail);
+                    setDrawer('branch');
+                    setSelectedBranchForDetail(null);
+                  }}
+                  className="px-3.5 py-2 rounded-lg border border-surface-container hover:bg-surface-container-low text-on-surface font-label-md font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Edit3 size={14} />
+                  <span>Chỉnh sửa chi nhánh</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedBranchForDetail(null)}
+                className="px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container text-on-surface font-bold text-xs transition cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </GarageModal>
+      )}
+
+      {/* MODAL XEM CHI TIẾT THỢ CỨU HỘ */}
+      {activeMechanicDetail && (
+        <GarageModal
+          maxWidth="max-w-4xl"
+          title={`Hồ sơ kỹ thuật viên: ${activeMechanicDetail.fullName}`}
+          description={`Tài khoản: ${activeMechanicDetail.username || activeMechanicDetail.email} • Mã nhân sự: #MEC-${activeMechanicDetail.id}`}
+          onClose={() => setSelectedMechanicForDetail(null)}
+        >
+          {(() => {
+            const shiftState = getMechanicShiftState(activeMechanicDetail);
+            const completedCount = mechanicOrders.filter((o) => o.status === 'COMPLETED').length;
+            const inProgressCount = mechanicOrders.filter((o) => ['DISPATCHED', 'ARRIVED', 'IN_PROGRESS'].includes(o.status)).length;
+            const revenue = mechanicOrders
+              .filter((o) => ['COMPLETED', 'PAYMENT_PENDING'].includes(o.status))
+              .reduce((sum, o) => sum + Number(o.serviceBasePrice || 0), 0);
+
+            return (
+              <div className="p-5 space-y-5">
+                {/* Header Profile Card */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-surface-container-lowest to-surface-container-low border border-surface-container flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-14 h-14 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-xl shadow-xs">
+                      {activeMechanicDetail.fullName?.charAt(0) || 'T'}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-headline-sm font-bold text-on-surface text-lg">
+                          {activeMechanicDetail.fullName}
+                        </h3>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-bold font-data-mono flex items-center gap-1.5 ${
+                            !activeMechanicDetail.active
+                              ? 'bg-red-100 text-red-800 border border-red-300'
+                              : shiftState.workingStatus === 'AVAILABLE'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : shiftState.workingStatus === 'BUSY'
+                                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                  : shiftState.isPaused
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                    : 'bg-slate-100 text-slate-700 border border-slate-300'
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              !activeMechanicDetail.active
+                                ? 'bg-red-600'
+                                : shiftState.workingStatus === 'AVAILABLE'
+                                  ? 'bg-emerald-600 animate-pulse'
+                                  : shiftState.workingStatus === 'BUSY'
+                                    ? 'bg-rose-600 animate-ping'
+                                    : 'bg-amber-600'
+                            }`}
+                          />
+                          {shiftState.statusLabel}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-secondary mt-1 flex items-center gap-3 flex-wrap">
+                        <span className="font-mono text-primary font-bold">
+                          {activeMechanicDetail.phone || 'Chưa cập nhật SĐT'}
+                        </span>
+                        <span>•</span>
+                        <span>{activeMechanicDetail.email}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {shiftState.isPaused && (
+                    <div className="text-xs bg-amber-50 text-amber-900 border border-amber-200 px-3 py-1.5 rounded-xl font-medium flex items-center gap-1.5">
+                      <Clock size={14} className="text-amber-600 shrink-0" />
+                      <span>Lý do tạm nghỉ: <strong>{shiftState.pauseReason || 'Nghỉ giữa ca'}</strong></span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sub-tab Navigation */}
+                <div className="flex items-center gap-2 border-b border-surface-container pb-3 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setMechanicDetailTab('profile')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                      mechanicDetailTab === 'profile'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-surface-container-low text-secondary hover:text-on-surface'
+                    }`}
+                  >
+                    <User size={14} />
+                    <span>Hồ sơ cá nhân & Trực chiến</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMechanicDetailTab('orders')}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                      mechanicDetailTab === 'orders'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-surface-container-low text-secondary hover:text-on-surface'
+                    }`}
+                  >
+                    <Clock size={14} />
+                    <span>Lịch sử nhận đơn cứu hộ (${mechanicOrders.length})</span>
+                  </button>
+                </div>
+
+                {/* TAB 1: HỒ SƠ & NĂNG LỰC */}
+                {mechanicDetailTab === 'profile' && (
+                  <div className="space-y-4">
+                    {/* 4 Thẻ KPI */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
+                        <span className="text-xs text-secondary font-medium">Đánh giá khách hàng</span>
+                        <div className="mt-1 flex items-center gap-1 text-amber-700 font-bold text-base">
+                          <Star size={16} className="fill-amber-500 text-amber-500" />
+                          <span>{activeMechanicDetail.ratingAvg ? activeMechanicDetail.ratingAvg.toFixed(1) : '5.0'}</span>
+                          <span className="text-xs text-secondary font-normal">/ 5.0</span>
+                        </div>
+                        <span className="text-[11px] text-secondary">Điểm tín nhiệm cứu hộ</span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
+                        <span className="text-xs text-secondary font-medium">Tổng đơn tiếp nhận</span>
+                        <p className="font-headline-sm font-bold text-on-surface mt-1 text-base">
+                          {mechanicOrders.length} đơn
+                        </p>
+                        <span className="text-[11px] text-secondary">Toàn thời gian</span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
+                        <span className="text-xs text-secondary font-medium">Đã hoàn thành</span>
+                        <p className="font-headline-sm font-bold text-emerald-700 mt-1 text-base">
+                          {completedCount} đơn
+                        </p>
+                        <span className="text-[11px] text-secondary">
+                          {inProgressCount > 0 ? `${inProgressCount} đơn đang xử lý` : 'Không có cuốc chờ'}
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container">
+                        <span className="text-xs text-secondary font-medium">Doanh thu tạo ra</span>
+                        <p className="font-headline-sm font-bold text-primary mt-1 text-sm font-mono">
+                          {money(revenue)}
+                        </p>
+                        <span className="text-[11px] text-secondary">Cước niêm yết tích lũy</span>
+                      </div>
+                    </div>
+
+                    {/* Lưới thông tin chi tiết */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Box 1: Bố trí công tác & Ca trực */}
+                      <div className="p-4 rounded-xl border border-surface-container bg-white space-y-3">
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary flex items-center gap-1.5">
+                          <Building2 size={14} className="text-primary" />
+                          Bố trí công tác & Ca trực
+                        </h4>
+
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <span className="text-secondary block">Chi nhánh đóng quân:</span>
+                            <div className="mt-0.5 flex items-center gap-2">
+                              <strong className="text-on-surface font-semibold text-sm">
+                                {activeMechanicDetail.branchName || 'Chưa phân bổ chi nhánh'}
+                              </strong>
+                              {activeMechanicDetail.branchId && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const b = branches.find((item) => item.id === activeMechanicDetail.branchId);
+                                    if (b) {
+                                      setSelectedBranchForDetail(b);
+                                      setBranchDetailTab('info');
+                                      setSelectedMechanicForDetail(null);
+                                    }
+                                  }}
+                                  className="text-primary hover:underline text-xs font-bold inline-flex items-center gap-0.5 cursor-pointer"
+                                >
+                                  <Eye size={12} />
+                                  Xem trạm
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-surface-container/60">
+                            <span className="text-secondary block">Ca làm việc phân công:</span>
+                            <div className="mt-1 flex items-center gap-2 flex-wrap">
+                              <strong className="text-on-surface font-semibold">
+                                {activeMechanicDetail.shiftName || 'Chưa thiết lập ca trực'}
+                              </strong>
+                              {activeMechanicDetail.shiftName && (
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    shiftState.isInShift
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-300'
+                                  }`}
+                                >
+                                  {shiftState.isInShift ? '🟢 Đang trong ca' : '⚪ Ngoài ca trực'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-surface-container/60">
+                            <span className="text-secondary block">Trạng thái tài khoản:</span>
+                            <span
+                              className={`mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold ${
+                                activeMechanicDetail.active
+                                  ? 'bg-emerald-50 text-emerald-800'
+                                  : 'bg-red-50 text-red-800'
+                              }`}
+                            >
+                              {activeMechanicDetail.active ? 'Đang kích hoạt hoạt động' : 'Tài khoản đã bị khóa quyền'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Box 2: Chuyên môn kỹ thuật & Hiện trường */}
+                      <div className="p-4 rounded-xl border border-surface-container bg-white space-y-3">
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary flex items-center gap-1.5">
+                          <Shield size={14} className="text-primary" />
+                          Chuyên môn & Giám sát hiện trường
+                        </h4>
+
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <span className="text-secondary block">Chuyên môn cứu hộ:</span>
+                            <div className="mt-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-semibold">
+                              <Shield size={13} />
+                              <span>{activeMechanicDetail.speciality || 'Cứu hộ thủy kích & sấy bugi'}</span>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-surface-container/60">
+                            <span className="text-secondary block">Năng lực chở xe / lội nước sâu:</span>
+                            <div className="mt-1">
+                              {activeMechanicDetail.hasCrossingCapability ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 font-semibold">
+                                  <Waves size={13} />
+                                  <span>Có phương tiện & năng lực vượt ngập sâu</span>
+                                </span>
+                              ) : (
+                                <span className="text-secondary italic">Tiêu chuẩn (sửa chữa tại chỗ vùng ngập nông)</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-surface-container/60 grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-secondary block">Tọa độ GPS gần nhất:</span>
+                              <span className="font-mono text-on-surface mt-0.5 block">
+                                {formatDateTime(activeMechanicDetail.lastGpsUpdatedAt)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-secondary block">Nhịp tim App gần nhất:</span>
+                              <span className="font-mono text-on-surface mt-0.5 block">
+                                {formatDateTime(activeMechanicDetail.lastHeartbeatAt)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: LỊCH SỬ TIẾP NHẬN ĐƠN */}
+                {mechanicDetailTab === 'orders' && (
+                  <div className="space-y-3">
+                    {mechanicOrders.length === 0 ? (
+                      <div className="p-8 text-center text-secondary border border-dashed border-surface-container rounded-xl">
+                        <Clock size={36} className="mx-auto text-secondary/40 mb-2" />
+                        <p className="font-bold text-on-surface">Thợ chưa tiếp nhận đơn cứu hộ nào</p>
+                        <p className="text-xs mt-1">
+                          Khi thợ được phân công hoặc nhận cuốc cứu hộ từ hệ thống, dữ liệu đơn sẽ xuất hiện chi tiết tại đây.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="max-h-[380px] overflow-y-auto border border-surface-container rounded-xl">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead className="bg-surface-container-low text-secondary font-bold sticky top-0 border-b border-surface-container">
+                            <tr>
+                              <th className="p-2.5">Mã đơn</th>
+                              <th className="p-2.5">Khách hàng</th>
+                              <th className="p-2.5">Phương tiện</th>
+                              <th className="p-2.5">Dịch vụ</th>
+                              <th className="p-2.5">Trạng thái</th>
+                              <th className="p-2.5 text-right">Doanh thu</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-surface-container/60 bg-white">
+                            {mechanicOrders.map((ord) => {
+                              const badge = getOrderStatusBadge(ord.status);
+                              return (
+                                <tr key={ord.id} className="hover:bg-surface-container-lowest/50">
+                                  <td className="p-2.5 font-mono font-bold text-primary">
+                                    #{ord.orderCode}
+                                    <span className="block text-[10px] text-secondary font-normal">
+                                      {formatDateTime(ord.requestedAt)}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5">
+                                    <span className="font-medium text-on-surface block">{ord.customerName}</span>
+                                    <span className="text-[11px] text-secondary font-mono">{ord.customerPhone}</span>
+                                  </td>
+                                  <td className="p-2.5">
+                                    <span className="font-medium text-on-surface block">{ord.vehicleModel}</span>
+                                    <span className="text-[11px] text-secondary font-mono">{ord.vehiclePlate}</span>
+                                  </td>
+                                  <td className="p-2.5">
+                                    <span className="font-medium text-on-surface block">{ord.serviceName || 'Cứu hộ xe ngập nước'}</span>
+                                    {ord.waterLevel && (
+                                      <span className="text-[10px] text-blue-700 block">Mức ngập: {ord.waterLevel}</span>
+                                    )}
+                                  </td>
+                                  <td className="p-2.5">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badge.bg}`}>
+                                      {badge.label}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5 text-right font-mono font-bold text-on-surface">
+                                    {money(Number(ord.serviceBasePrice || ord.totalAmount || 0))}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Footer Action Buttons */}
+                <div className="pt-3 border-t border-surface-container flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMechanic(activeMechanicDetail);
+                        const matchingShift = STANDARD_RESCUE_SHIFTS.find((s) => s.name === activeMechanicDetail.shiftName);
+                        if (matchingShift) {
+                          setEditShiftOption(matchingShift.name);
+                          setEditCustomShift('');
+                        } else if (activeMechanicDetail.shiftName) {
+                          setEditShiftOption('__custom__');
+                          setEditCustomShift(activeMechanicDetail.shiftName);
+                        } else {
+                          setEditShiftOption('Ca 2: Chiều tối (14:00 - 22:00)');
+                          setEditCustomShift('');
+                        }
+                        setDrawer('editMechanic');
+                        setSelectedMechanicForDetail(null);
+                      }}
+                      className="px-3.5 py-2 rounded-lg border border-surface-container hover:bg-surface-container-low text-on-surface font-label-md font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Edit3 size={14} />
+                      <span>Chỉnh sửa hồ sơ</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleResetPasswordConfirm(activeMechanicDetail);
+                      }}
+                      className="px-3.5 py-2 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 font-label-md font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Key size={14} />
+                      <span>Cấp lại mật khẩu</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleToggleMechanicActiveConfirm(activeMechanicDetail);
+                      }}
+                      style={{
+                        backgroundColor: activeMechanicDetail.active ? '#fef2f2' : '#ecfdf5',
+                        color: activeMechanicDetail.active ? '#b91c1c' : '#047857',
+                        borderColor: activeMechanicDetail.active ? '#fecaca' : '#a7f3d0'
+                      }}
+                      className="px-3.5 py-2 rounded-lg font-label-md font-bold text-xs border flex items-center gap-1.5 transition cursor-pointer shadow-xs hover:opacity-90"
+                    >
+                      {activeMechanicDetail.active ? <Power size={14} /> : <CheckCircle2 size={14} />}
+                      <span>{activeMechanicDetail.active ? 'Khóa quyền làm việc' : 'Mở lại quyền'}</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMechanicForDetail(null)}
+                    className="px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container text-on-surface font-bold text-xs transition cursor-pointer"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </GarageModal>
+      )}
+
       {/* POPUP HIỂN THỊ MẬT KHẨU TẠM THỜI BÀN GIAO CHO THỢ */}
       {tempPasswordModal?.isOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
@@ -2273,8 +3051,8 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
                 <strong className="text-on-surface">{tempPasswordModal.fullName}</strong>
               </div>
               <div>
-                <span className="text-secondary font-sans font-bold">Tài khoản:</span>{' '}
-                <strong className="text-primary">{tempPasswordModal.username}</strong>
+                <span className="text-secondary font-sans font-bold">Email:</span>{' '}
+                <strong className="text-primary">{tempPasswordModal.email || 'Chưa có email'}</strong>
               </div>
               <div>
                 <span className="text-secondary font-sans font-bold">Mật khẩu tạm thời:</span>{' '}
@@ -2287,14 +3065,19 @@ export function GarageManagementView({ onShowToast }: GarageManagementViewProps)
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const textToCopy = `Thông tin tài khoản thợ cứu hộ:
-Tài khoản: ${tempPasswordModal.username}
+Email: ${tempPasswordModal.email || 'Chưa có email'}
 Mật khẩu: ${tempPasswordModal.password}
 Vui lòng đăng nhập và đổi mật khẩu trên ứng dụng Mobile Cứu Hộ.`;
-                  navigator.clipboard.writeText(textToCopy);
+                  try {
+                    await navigator.clipboard.writeText(textToCopy);
+                  } catch {
+                    notify('Không thể sao chép', 'Vui lòng cho phép truy cập bộ nhớ tạm hoặc sao chép thông tin thủ công.', 'error');
+                    return;
+                  }
                   setCopiedTempPassword(true);
-                  notify('Đã sao chép', 'Đã sao chép thông tin tài khoản và mật khẩu.', 'info');
+                  notify('Đã sao chép', 'Đã sao chép email và mật khẩu.', 'info');
                   setTimeout(() => setCopiedTempPassword(false), 3000);
                 }}
                 className="px-4 py-2 rounded-lg border border-surface-container bg-surface-container-high hover:bg-surface-container text-on-surface font-label-md font-bold flex items-center gap-1.5 transition cursor-pointer"
